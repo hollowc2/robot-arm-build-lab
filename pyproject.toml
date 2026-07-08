@@ -1,0 +1,22 @@
+[project]
+name = "robo-cad"
+version = "0.1.0"
+description = "Local build123d workspace for generating CAD models."
+readme = "README.md"
+requires-python = ">=3.11,<3.13"
+dependencies = [
+    "bd-warehouse>=0.2.0",
+    "build123d",
+]
+
+[dependency-groups]
+dev = [
+    "pytest>=8.0",
+    "ruff>=0.6",
+]
+
+[tool.uv]
+package = false
+
+[tool.pytest.ini_options]
+pythonpath = ["."]

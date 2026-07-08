@@ -1,0 +1,89 @@
+name: Deploy Robot Arm Site
+
+on:
+  workflow_dispatch:
+    inputs:
+      dry_run:
+        description: "Run rsync in dry-run mode"
+        type: boolean
+        default: true
+  push:
+    branches: [main]
+
+concurrency:
+  group: robot-arm-production
+  cancel-in-progress: false
+
+jobs:
+  build:
+    name: Build Deployable Site
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Install uv
+        uses: astral-sh/setup-uv@v5
+
+      - name: Set up Python
+        run: uv python install 3.11
+
+      - name: Install CAD dependencies
+        run: uv sync
+
+      - name: Generate public metadata
+        run: |
+          uv run python scripts/generate_catalog.py
+          uv run python scripts/generate_progress_feed.py
+
+      - name: Set up Node
+        uses: actions/setup-node@v4
+        with:
+          node-version: 22
+
+      - name: Install site dependencies
+        working-directory: site
+        run: npm install
+
+      - name: Build static site
+        working-directory: site
+        run: npm run build
+
+      - name: Upload deploy bundle
+        uses: actions/upload-artifact@v4
+        with:
+          name: robot-arm-site-dist
+          path: site/dist/
+          if-no-files-found: error
+
+  deploy:
+    name: Deploy to Helios
+    runs-on: ubuntu-latest
+    needs: build
+    environment: production
+    steps:
+      - name: Download deploy bundle
+        uses: actions/download-artifact@v4
+        with:
+          name: robot-arm-site-dist
+          path: site-dist/
+
+      - name: Configure SSH
+        run: |
+          install -m 700 -d ~/.ssh
+          printf '%s\n' "$HELIOS_SSH_KEY" > ~/.ssh/helios
+          chmod 600 ~/.ssh/helios
+          ssh-keyscan -H "$HELIOS_HOST" >> ~/.ssh/known_hosts
+        env:
+          HELIOS_HOST: ${{ secrets.HELIOS_HOST }}
+          HELIOS_SSH_KEY: ${{ secrets.HELIOS_SSH_KEY }}
+
+      - name: Sync static files
+        run: |
+          RSYNC_FLAGS="-avz --delete"
+          if [ "${{ github.event.inputs.dry_run }}" = "true" ]; then
+            RSYNC_FLAGS="$RSYNC_FLAGS --dry-run"
+          fi
+          rsync $RSYNC_FLAGS -e "ssh -i ~/.ssh/helios" site-dist/ "$HELIOS_USER@$HELIOS_HOST:/var/www/billybitcoin.cloud/html/robot-arm/"
+        env:
+          HELIOS_HOST: ${{ secrets.HELIOS_HOST }}
+          HELIOS_USER: ${{ secrets.HELIOS_USER }}
