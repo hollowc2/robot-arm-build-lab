@@ -82,6 +82,16 @@ jobs:
             printf 'Add them to the production GitHub Environment before rerunning deploy.\n' >&2
             exit 1
           fi
+
+          if printf '%s' "$HELIOS_HOST" | grep -q '[[:space:]]'; then
+            printf 'HELIOS_HOST must be a single Tailscale IP or MagicDNS hostname.\n' >&2
+            exit 1
+          fi
+
+          if printf '%s' "$HELIOS_USER" | grep -q '[[:space:]@:]'; then
+            printf 'HELIOS_USER must be only the SSH username, for example: billy\n' >&2
+            exit 1
+          fi
         env:
           HELIOS_HOST: ${{ secrets.HELIOS_HOST }}
           HELIOS_USER: ${{ secrets.HELIOS_USER }}

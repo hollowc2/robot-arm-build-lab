@@ -44,7 +44,7 @@ The `deploy.yml` workflow builds on `main` and includes an explicit `production`
 Required `production` environment secrets:
 
 - `HELIOS_HOST`: Helios hostname or IP address.
-- `HELIOS_USER`: SSH user with write access to the site directory.
+- `HELIOS_USER`: SSH username only, for example `billy`.
 - `HELIOS_SSH_KEY`: Private SSH key for that user.
 - `TS_AUTHKEY`: Ephemeral reusable Tailscale auth key that lets GitHub Actions join the tailnet.
 
@@ -57,6 +57,6 @@ gh secret set HELIOS_SSH_KEY --repo hollowc2/robot-arm-build-lab --env productio
 gh secret set TS_AUTHKEY --repo hollowc2/robot-arm-build-lab --env production
 ```
 
-`HELIOS_HOST` should be the Helios Tailscale IP or MagicDNS name. Create `TS_AUTHKEY` in the Tailscale admin console as an ephemeral reusable auth key.
+`HELIOS_HOST` should be the Helios Tailscale IP or MagicDNS name. `HELIOS_USER` should not include a host, `@`, `:`, whitespace, or key contents. Create `TS_AUTHKEY` in the Tailscale admin console as an ephemeral reusable auth key.
 
 First production deployment should be approved manually after checking a dry run or staging output.
