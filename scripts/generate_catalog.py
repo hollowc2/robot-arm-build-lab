@@ -132,6 +132,7 @@ def build_catalog() -> dict[str, Any]:
                 "printReady": entry.print_ready,
                 "volumeMm3": volume,
                 "bbox": bbox,
+                "webModel": f"generated/models/{entry.name}.stl",
             }
         )
 

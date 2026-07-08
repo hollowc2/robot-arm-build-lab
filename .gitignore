@@ -20,5 +20,6 @@ site/public/generated/*.glb
 site/public/generated/*.gltf
 site/public/generated/*.obj
 site/public/generated/*.png
+site/public/generated/models/
 
 .DS_Store

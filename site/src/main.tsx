@@ -1,6 +1,8 @@
 import React, { useEffect, useMemo, useRef, useState } from "react";
 import { createRoot } from "react-dom/client";
 import * as THREE from "three";
+import { OrbitControls } from "three/examples/jsm/controls/OrbitControls.js";
+import { STLLoader } from "three/examples/jsm/loaders/STLLoader.js";
 import "./styles.css";
 
 type BoundingBox = {
@@ -19,6 +21,7 @@ type CatalogPart = {
   printReady: boolean;
   volumeMm3: number;
   bbox: BoundingBox;
+  webModel: string;
 };
 
 type Catalog = {
@@ -48,6 +51,16 @@ type ProgressFeed = {
   note: string;
 };
 
+type ViewerTarget = {
+  id: string;
+  title: string;
+  subtitle: string;
+  url: string | null;
+  bbox: BoundingBox | null;
+};
+
+type ViewerState = "loading" | "stl" | "fallback" | "error";
+
 const generatedBase = `${import.meta.env.BASE_URL}generated`;
 
 const buildLogModules = import.meta.glob("../../content/build-log/*.md", {
@@ -67,13 +80,6 @@ function parseNote(raw: unknown, path: string) {
   const title = text.match(/^#\s+(.+)$/m)?.[1] ?? path.split("/").pop() ?? "Note";
   const body = text.replace(/^#\s+.+$/m, "").trim();
   return { title, body, path };
-}
-
-function statusColor(name: string) {
-  const palette = ["#d76f45", "#4f8f86", "#c5a84f", "#6f86c8", "#8f6d58", "#5f9f68"];
-  let hash = 0;
-  for (const char of name) hash = (hash + char.charCodeAt(0)) % palette.length;
-  return palette[hash];
 }
 
 function useJson<T>(path: string) {
@@ -97,61 +103,177 @@ function useJson<T>(path: string) {
   return { data, error };
 }
 
-function ModelViewer({ model }: { model: ViewerModel | null }) {
+function modelUrl(path: string | null) {
+  if (!path) return null;
+  return `${import.meta.env.BASE_URL}${path}`;
+}
+
+function formatName(name: string) {
+  return name.replaceAll("_", " ");
+}
+
+function createFallbackAssembly(model: ViewerModel) {
+  const group = new THREE.Group();
+  model.parts.forEach((part, index) => {
+    const geometry = new THREE.BoxGeometry(
+      Math.max(part.bbox.size[0], 0.5),
+      Math.max(part.bbox.size[1], 0.5),
+      Math.max(part.bbox.size[2], 0.5),
+    );
+    const material = new THREE.MeshStandardMaterial({
+      color: new THREE.Color().setHSL((index * 0.11) % 1, 0.42, part.status === "active" ? 0.52 : 0.67),
+      roughness: 0.7,
+      metalness: 0.05,
+      transparent: part.status !== "active",
+      opacity: part.status === "active" ? 0.9 : 0.42,
+    });
+    const mesh = new THREE.Mesh(geometry, material);
+    mesh.position.set(
+      (part.bbox.min[0] + part.bbox.max[0]) / 2,
+      (part.bbox.min[1] + part.bbox.max[1]) / 2,
+      (part.bbox.min[2] + part.bbox.max[2]) / 2,
+    );
+    group.add(mesh);
+  });
+  return group;
+}
+
+function createFallbackBox(target: ViewerTarget) {
+  const size = target.bbox?.size ?? [80, 80, 80];
+  const group = new THREE.Group();
+  const geometry = new THREE.BoxGeometry(Math.max(size[0], 1), Math.max(size[1], 1), Math.max(size[2], 1));
+  const material = new THREE.MeshStandardMaterial({
+    color: "#587b8f",
+    roughness: 0.72,
+    metalness: 0.04,
+    transparent: true,
+    opacity: 0.68,
+  });
+  group.add(new THREE.Mesh(geometry, material));
+  return group;
+}
+
+function disposeObject(object: THREE.Object3D) {
+  object.traverse((child) => {
+    if (child instanceof THREE.Mesh) {
+      child.geometry.dispose();
+      const materials = Array.isArray(child.material) ? child.material : [child.material];
+      materials.forEach((material) => material.dispose());
+    }
+  });
+}
+
+function ModelViewer({
+  target,
+  assembly,
+  wireframe,
+  onState,
+}: {
+  target: ViewerTarget | null;
+  assembly: ViewerModel | null;
+  wireframe: boolean;
+  onState: (state: ViewerState) => void;
+}) {
   const mountRef = useRef<HTMLDivElement | null>(null);
 
   useEffect(() => {
-    if (!mountRef.current || !model) return undefined;
+    if (!mountRef.current || !target) return undefined;
 
+    let cancelled = false;
+    let activeObject: THREE.Object3D | null = null;
+    let frame = 0;
     const mount = mountRef.current;
     const scene = new THREE.Scene();
-    scene.background = new THREE.Color("#f7f4ee");
+    scene.background = new THREE.Color("#101418");
 
-    const camera = new THREE.PerspectiveCamera(35, mount.clientWidth / mount.clientHeight, 1, 2000);
-    camera.position.set(250, -340, 240);
+    const camera = new THREE.PerspectiveCamera(38, mount.clientWidth / mount.clientHeight, 0.1, 5000);
+    camera.position.set(210, -320, 190);
 
-    const renderer = new THREE.WebGLRenderer({ antialias: true });
+    const renderer = new THREE.WebGLRenderer({ antialias: true, preserveDrawingBuffer: true });
     renderer.setPixelRatio(Math.min(window.devicePixelRatio, 2));
     renderer.setSize(mount.clientWidth, mount.clientHeight);
+    renderer.outputColorSpace = THREE.SRGBColorSpace;
     mount.appendChild(renderer.domElement);
 
-    const group = new THREE.Group();
-    const materialByName = new Map<string, THREE.MeshStandardMaterial>();
-    model.parts.forEach((part) => {
-      const [width, depth, height] = part.bbox.size;
-      const geometry = new THREE.BoxGeometry(Math.max(width, 0.5), Math.max(depth, 0.5), Math.max(height, 0.5));
-      const material = new THREE.MeshStandardMaterial({
-        color: statusColor(part.name),
-        roughness: 0.66,
-        metalness: 0.08,
-        transparent: part.status !== "active",
-        opacity: part.status === "active" ? 0.88 : 0.46,
+    const controls = new OrbitControls(camera, renderer.domElement);
+    controls.enableDamping = true;
+    controls.dampingFactor = 0.08;
+    controls.target.set(0, 0, 0);
+
+    const grid = new THREE.GridHelper(360, 18, "#52616f", "#2b333b");
+    grid.rotation.x = Math.PI / 2;
+    scene.add(grid);
+    scene.add(new THREE.AxesHelper(70));
+    scene.add(new THREE.HemisphereLight("#ffffff", "#44515e", 2.4));
+    const key = new THREE.DirectionalLight("#ffffff", 2.8);
+    key.position.set(220, -260, 340);
+    scene.add(key);
+
+    const frameObject = (object: THREE.Object3D) => {
+      const box = new THREE.Box3().setFromObject(object);
+      const center = box.getCenter(new THREE.Vector3());
+      const size = box.getSize(new THREE.Vector3());
+      object.position.sub(center);
+      const maxAxis = Math.max(size.x, size.y, size.z, 20);
+      camera.position.set(maxAxis * 1.25, -maxAxis * 1.75, maxAxis * 1.15);
+      camera.near = Math.max(maxAxis / 800, 0.1);
+      camera.far = maxAxis * 12;
+      camera.updateProjectionMatrix();
+      controls.target.set(0, 0, 0);
+      controls.update();
+    };
+
+    const applyWireframe = (object: THREE.Object3D) => {
+      object.traverse((child) => {
+        if (child instanceof THREE.Mesh) {
+          const materials = Array.isArray(child.material) ? child.material : [child.material];
+          materials.forEach((material) => {
+            if ("wireframe" in material) material.wireframe = wireframe;
+          });
+        }
       });
-      materialByName.set(part.name, material);
-      const mesh = new THREE.Mesh(geometry, material);
-      mesh.position.set(
-        (part.bbox.min[0] + part.bbox.max[0]) / 2,
-        (part.bbox.min[1] + part.bbox.max[1]) / 2,
-        (part.bbox.min[2] + part.bbox.max[2]) / 2,
+    };
+
+    const showObject = (object: THREE.Object3D, state: ViewerState) => {
+      if (cancelled) {
+        disposeObject(object);
+        return;
+      }
+      activeObject = object;
+      applyWireframe(activeObject);
+      frameObject(activeObject);
+      scene.add(activeObject);
+      onState(state);
+    };
+
+    onState("loading");
+    const url = modelUrl(target.url);
+    if (url) {
+      new STLLoader().load(
+        url,
+        (geometry) => {
+          geometry.computeVertexNormals();
+          const material = new THREE.MeshStandardMaterial({
+            color: target.id === "assembly" ? "#d47a4c" : "#60a5a1",
+            roughness: 0.62,
+            metalness: 0.12,
+          });
+          showObject(new THREE.Mesh(geometry, material), "stl");
+        },
+        undefined,
+        () => {
+          const fallback = target.id === "assembly" && assembly ? createFallbackAssembly(assembly) : createFallbackBox(target);
+          showObject(fallback, "fallback");
+        },
       );
-      group.add(mesh);
-    });
+    } else {
+      const fallback = target.id === "assembly" && assembly ? createFallbackAssembly(assembly) : createFallbackBox(target);
+      showObject(fallback, "fallback");
+    }
 
-    const box = new THREE.Box3().setFromObject(group);
-    const center = box.getCenter(new THREE.Vector3());
-    group.position.sub(center);
-    scene.add(group);
-
-    const ambient = new THREE.HemisphereLight("#ffffff", "#b9aa93", 2.1);
-    const key = new THREE.DirectionalLight("#ffffff", 2.5);
-    key.position.set(150, -220, 360);
-    scene.add(ambient, key);
-    scene.add(new THREE.GridHelper(360, 12, "#b9aa93", "#ddd4c7"));
-
-    let frame = 0;
     const render = () => {
       frame = window.requestAnimationFrame(render);
-      group.rotation.z += 0.003;
+      controls.update();
       renderer.render(scene, camera);
     };
     render();
@@ -166,25 +288,26 @@ function ModelViewer({ model }: { model: ViewerModel | null }) {
     window.addEventListener("resize", resize);
 
     return () => {
+      cancelled = true;
       window.cancelAnimationFrame(frame);
       window.removeEventListener("resize", resize);
+      controls.dispose();
+      if (activeObject) disposeObject(activeObject);
       renderer.dispose();
       mount.removeChild(renderer.domElement);
-      materialByName.forEach((material) => material.dispose());
-      group.traverse((object) => {
-        if (object instanceof THREE.Mesh) object.geometry.dispose();
-      });
     };
-  }, [model]);
+  }, [assembly, onState, target, wireframe]);
 
-  return <div className="viewer" ref={mountRef} aria-label="Current robot assembly viewer" />;
+  return <div className="viewer" ref={mountRef} aria-label="STL model viewer" />;
 }
 
 function App() {
   const { data: catalog, error: catalogError } = useJson<Catalog>(`${generatedBase}/catalog.json`);
   const { data: viewerModel, error: viewerError } = useJson<ViewerModel>(`${generatedBase}/viewer-model.json`);
   const { data: progress } = useJson<ProgressFeed>(`${generatedBase}/progress.json`);
-  const [hiddenParts, setHiddenParts] = useState<Set<string>>(new Set());
+  const [selectedId, setSelectedId] = useState("assembly");
+  const [wireframe, setWireframe] = useState(false);
+  const [viewerState, setViewerState] = useState<ViewerState>("loading");
 
   const buildNotes = useMemo(
     () => Object.entries(buildLogModules).map(([path, raw]) => parseNote(raw, path)).sort((a, b) => b.path.localeCompare(a.path)),
@@ -195,74 +318,132 @@ function App() {
     [],
   );
 
-  const visibleViewerModel = useMemo(() => {
-    if (!viewerModel) return null;
-    return { ...viewerModel, parts: viewerModel.parts.filter((part) => !hiddenParts.has(part.name)) };
-  }, [hiddenParts, viewerModel]);
+  const assemblyTarget = useMemo<ViewerTarget | null>(() => {
+    const assemblyPart = catalog?.parts.find((part) => part.name === "robot_arm_master_assembly");
+    return {
+      id: "assembly",
+      title: "Robot Arm Master Assembly",
+      subtitle: "Full exported STL",
+      url: assemblyPart?.webModel ?? "generated/models/robot_arm_master_assembly.stl",
+      bbox: assemblyPart?.bbox ?? null,
+    };
+  }, [catalog]);
+
+  const selectedPart = catalog?.parts.find((part) => part.name === selectedId) ?? null;
+  const selectedTarget = selectedId === "assembly"
+    ? assemblyTarget
+    : selectedPart && {
+        id: selectedPart.name,
+        title: selectedPart.title,
+        subtitle: `${selectedPart.status} / ${selectedPart.category}`,
+        url: selectedPart.webModel,
+        bbox: selectedPart.bbox,
+      };
 
   const printableCount = catalog?.parts.filter((part) => part.printReady).length ?? 0;
   const generatedAt = catalog ? new Date(catalog.generatedAt).toLocaleString() : "pending";
+  const statusText = viewerState === "stl" ? "STL loaded" : viewerState === "fallback" ? "STL missing, showing generated bounds" : "Loading model";
 
   return (
     <main>
-      <section className="hero">
-        <div className="hero-copy">
-          <p className="eyebrow">Public workshop dashboard</p>
-          <h1>Billy Bitcoin's Robot Arm Build Lab</h1>
-          <div className="status-grid" aria-label="Current build status">
+      <section className="workbench">
+        <aside className="sidebar">
+          <div className="brand-block">
+            <p className="eyebrow">Robot Arm Build Lab</p>
+            <h1>Billy Bitcoin's Robot Arm</h1>
+          </div>
+
+          <div className="metric-grid" aria-label="Current build status">
             <div>
-              <span>Build status</span>
+              <span>Status</span>
               <strong>Active CAD prototype</strong>
             </div>
             <div>
-              <span>Latest milestone</span>
-              <strong>Dashboard monorepo scaffold</strong>
+              <span>Models</span>
+              <strong>{catalog?.parts.length ?? 0}</strong>
+            </div>
+            <div>
+              <span>Print candidates</span>
+              <strong>{printableCount}</strong>
             </div>
             <div>
               <span>Generated</span>
               <strong>{generatedAt}</strong>
             </div>
           </div>
-          <div className="questions">
-            <span>Active design questions</span>
-            <ul>
-              <li>Shoulder stack belt and bearing spacing after first print.</li>
-              <li>Wire service loop clearance through base rotation.</li>
-              <li>Wrist motor mass and end-effector stiffness.</li>
-            </ul>
+
+          <div className="panel">
+            <div className="panel-heading">
+              <h2>Model Files</h2>
+              <span>{statusText}</span>
+            </div>
+            <div className="model-list">
+              <button
+                className={selectedId === "assembly" ? "model-row is-active" : "model-row"}
+                type="button"
+                onClick={() => setSelectedId("assembly")}
+              >
+                <strong>Full assembly</strong>
+                <span>generated/models/robot_arm_master_assembly.stl</span>
+              </button>
+              {catalog?.parts
+                .filter((part) => part.name !== "robot_arm_master_assembly")
+                .map((part) => (
+                  <button
+                    className={selectedId === part.name ? "model-row is-active" : "model-row"}
+                    key={part.name}
+                    type="button"
+                    onClick={() => setSelectedId(part.name)}
+                  >
+                    <strong>{part.title}</strong>
+                    <span>{part.webModel}</span>
+                  </button>
+                ))}
+            </div>
           </div>
-        </div>
-        <ModelViewer model={visibleViewerModel} />
-        {(catalogError || viewerError) && <p className="data-warning">Generated metadata is missing: {catalogError || viewerError}</p>}
+        </aside>
+
+        <section className="viewer-column">
+          <header className="viewer-toolbar">
+            <div>
+              <p className="eyebrow">STL Viewer</p>
+              <h2>{selectedTarget?.title ?? "Loading model"}</h2>
+              <span>{selectedTarget?.subtitle ?? "Generated CAD asset"}</span>
+            </div>
+            <div className="viewer-actions">
+              <label>
+                <input type="checkbox" checked={wireframe} onChange={(event) => setWireframe(event.target.checked)} />
+                Wireframe
+              </label>
+              {selectedTarget?.url && (
+                <a href={modelUrl(selectedTarget.url) ?? "#"} download>
+                  Download STL
+                </a>
+              )}
+            </div>
+          </header>
+
+          <ModelViewer target={selectedTarget} assembly={viewerModel} wireframe={wireframe} onState={setViewerState} />
+          {(catalogError || viewerError) && <p className="data-warning">Generated metadata is missing: {catalogError || viewerError}</p>}
+
+          <div className="inspection-strip">
+            <article>
+              <span>Size</span>
+              <strong>{selectedTarget?.bbox?.size.map((value) => value.toFixed(1)).join(" x ") ?? "unknown"} mm</strong>
+            </article>
+            <article>
+              <span>Source</span>
+              <strong>{selectedPart?.source ?? "models/master_assembly.py"}</strong>
+            </article>
+            <article>
+              <span>Artifact</span>
+              <strong>{selectedTarget?.url ?? "pending"}</strong>
+            </article>
+          </div>
+        </section>
       </section>
 
-      <section className="section two-column">
-        <div>
-          <div className="section-heading">
-            <p className="eyebrow">Current Model</p>
-            <h2>Assembly Layers</h2>
-          </div>
-          <div className="toggle-grid">
-            {viewerModel?.parts.slice(0, 18).map((part) => (
-              <button
-                className={hiddenParts.has(part.name) ? "part-toggle is-muted" : "part-toggle"}
-                key={part.name}
-                type="button"
-                onClick={() =>
-                  setHiddenParts((current) => {
-                    const next = new Set(current);
-                    if (next.has(part.name)) next.delete(part.name);
-                    else next.add(part.name);
-                    return next;
-                  })
-                }
-              >
-                <span style={{ backgroundColor: statusColor(part.name) }} />
-                {part.name.replaceAll("_", " ")}
-              </button>
-            ))}
-          </div>
-        </div>
+      <section className="section split">
         <div>
           <div className="section-heading">
             <p className="eyebrow">Design Pipeline</p>
@@ -272,9 +453,20 @@ function App() {
             <li>Voice or design note</li>
             <li>LLM-assisted prompt and code branch</li>
             <li>Python build123d source</li>
-            <li>CI-rendered preview and printable artifact</li>
-            <li>Human review, merge, print, and fit test</li>
+            <li>CI-rendered STL/STEP artifacts</li>
+            <li>Review, merge, print, fit test</li>
           </ol>
+        </div>
+        <div>
+          <div className="section-heading">
+            <p className="eyebrow">Active Questions</p>
+            <h2>Fit Checks</h2>
+          </div>
+          <ul className="question-list">
+            <li>Shoulder stack belt and bearing spacing after first print.</li>
+            <li>Wire service loop clearance through base rotation.</li>
+            <li>Wrist motor mass and end-effector stiffness.</li>
+          </ul>
         </div>
       </section>
 
@@ -283,25 +475,25 @@ function App() {
           <p className="eyebrow">Parts Board</p>
           <h2>{catalog?.parts.length ?? 0} source models, {printableCount} print-ready candidates</h2>
         </div>
-        <div className="parts-board">
+        <div className="parts-table" role="table" aria-label="Generated part catalog">
+          <div className="parts-header" role="row">
+            <span>Name</span>
+            <span>Status</span>
+            <span>Size</span>
+            <span>STL</span>
+          </div>
           {catalog?.parts.map((part) => (
-            <article className="part-card" key={part.name}>
-              <div>
-                <h3>{part.title}</h3>
-                <p>{part.source}</p>
-              </div>
-              <dl>
-                <div><dt>Status</dt><dd>{part.status}</dd></div>
-                <div><dt>Category</dt><dd>{part.category}</dd></div>
-                <div><dt>Size</dt><dd>{part.bbox.size.map((value) => `${value.toFixed(1)}`).join(" x ")} mm</dd></div>
-                <div><dt>Print</dt><dd>{part.printReady ? "ready for review" : "reference"}</dd></div>
-              </dl>
-            </article>
+            <button className="parts-row" key={part.name} role="row" type="button" onClick={() => setSelectedId(part.name)}>
+              <span>{part.title}</span>
+              <span>{part.status}</span>
+              <span>{part.bbox.size.map((value) => value.toFixed(1)).join(" x ")}</span>
+              <span>{part.webModel.split("/").pop()}</span>
+            </button>
           ))}
         </div>
       </section>
 
-      <section className="section two-column">
+      <section className="section split">
         <div>
           <div className="section-heading">
             <p className="eyebrow">Build Log</p>

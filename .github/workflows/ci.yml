@@ -30,7 +30,9 @@ jobs:
           uv run python scripts/generate_progress_feed.py
 
       - name: Export CAD artifacts
-        run: uv run python scripts/export_models.py
+        run: |
+          uv run python scripts/export_models.py
+          uv run python scripts/publish_web_models.py
 
       - name: Upload CAD exports
         uses: actions/upload-artifact@v4
@@ -39,10 +41,10 @@ jobs:
           path: models/out/
           if-no-files-found: error
 
-      - name: Upload generated web metadata
+      - name: Upload generated web assets
         uses: actions/upload-artifact@v4
         with:
-          name: robot-arm-generated-web-metadata
+          name: robot-arm-generated-web-assets
           path: site/public/generated/
           if-no-files-found: error
 
@@ -53,10 +55,10 @@ jobs:
     steps:
       - uses: actions/checkout@v4
 
-      - name: Download generated metadata
+      - name: Download generated web assets
         uses: actions/download-artifact@v4
         with:
-          name: robot-arm-generated-web-metadata
+          name: robot-arm-generated-web-assets
           path: site/public/generated/
 
       - name: Set up Node
