@@ -41,4 +41,18 @@ The `deploy.yml` workflow builds on `main` and includes an explicit `production`
 
 `/var/www/billybitcoin.cloud/html/robot-arm/`
 
+Required `production` environment secrets:
+
+- `HELIOS_HOST`: Helios hostname or IP address.
+- `HELIOS_USER`: SSH user with write access to the site directory.
+- `HELIOS_SSH_KEY`: Private SSH key for that user.
+
+Set them with:
+
+```bash
+gh secret set HELIOS_HOST --repo hollowc2/robot-arm-build-lab --env production
+gh secret set HELIOS_USER --repo hollowc2/robot-arm-build-lab --env production
+gh secret set HELIOS_SSH_KEY --repo hollowc2/robot-arm-build-lab --env production < /path/to/private-key
+```
+
 First production deployment should be approved manually after checking a dry run or staging output.

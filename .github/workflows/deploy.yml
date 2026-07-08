@@ -69,6 +69,23 @@ jobs:
           name: robot-arm-site-dist
           path: site-dist/
 
+      - name: Validate deployment secrets
+        run: |
+          missing=()
+          [ -n "$HELIOS_HOST" ] || missing+=("HELIOS_HOST")
+          [ -n "$HELIOS_USER" ] || missing+=("HELIOS_USER")
+          [ -n "$HELIOS_SSH_KEY" ] || missing+=("HELIOS_SSH_KEY")
+
+          if [ "${#missing[@]}" -gt 0 ]; then
+            printf 'Missing required production secret(s): %s\n' "${missing[*]}" >&2
+            printf 'Add them to the production GitHub Environment before rerunning deploy.\n' >&2
+            exit 1
+          fi
+        env:
+          HELIOS_HOST: ${{ secrets.HELIOS_HOST }}
+          HELIOS_USER: ${{ secrets.HELIOS_USER }}
+          HELIOS_SSH_KEY: ${{ secrets.HELIOS_SSH_KEY }}
+
       - name: Configure SSH
         run: |
           install -m 700 -d ~/.ssh
