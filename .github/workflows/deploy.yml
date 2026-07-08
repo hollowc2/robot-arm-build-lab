@@ -75,6 +75,7 @@ jobs:
           [ -n "$HELIOS_HOST" ] || missing+=("HELIOS_HOST")
           [ -n "$HELIOS_USER" ] || missing+=("HELIOS_USER")
           [ -n "$HELIOS_SSH_KEY" ] || missing+=("HELIOS_SSH_KEY")
+          [ -n "$TS_AUTHKEY" ] || missing+=("TS_AUTHKEY")
 
           if [ "${#missing[@]}" -gt 0 ]; then
             printf 'Missing required production secret(s): %s\n' "${missing[*]}" >&2
@@ -85,6 +86,13 @@ jobs:
           HELIOS_HOST: ${{ secrets.HELIOS_HOST }}
           HELIOS_USER: ${{ secrets.HELIOS_USER }}
           HELIOS_SSH_KEY: ${{ secrets.HELIOS_SSH_KEY }}
+          TS_AUTHKEY: ${{ secrets.TS_AUTHKEY }}
+
+      - name: Connect to Tailscale
+        uses: tailscale/github-action@v4
+        with:
+          authkey: ${{ secrets.TS_AUTHKEY }}
+          ping: ${{ secrets.HELIOS_HOST }}
 
       - name: Configure SSH
         run: |
