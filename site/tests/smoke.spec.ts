@@ -1,4 +1,4 @@
-import { expect, test } from "@playwright/test";
+import { expect, type Locator, test } from "@playwright/test";
 
 test("dashboard loads a non-empty viewer", async ({ page }) => {
   await page.goto("/");
@@ -6,8 +6,19 @@ test("dashboard loads a non-empty viewer", async ({ page }) => {
   await expect(page.getByRole("heading", { name: "Robot Arm Master Assembly" })).toBeVisible();
   const canvas = page.locator("canvas").first();
   await expect(canvas).toBeVisible();
+  await expect(page.getByText("STL loaded").first()).toBeVisible();
 
-  const renderedPixels = await canvas.evaluate((node) => {
+  const renderedPixels = await countRenderedPixels(canvas);
+  expect(renderedPixels).toBeGreaterThan(0);
+
+  await page.getByRole("button", { name: /Geared Base Stator/ }).first().click();
+  await expect(page.getByRole("heading", { name: "Geared Base Stator" })).toBeVisible();
+  await expect(page.getByText("STL loaded").first()).toBeVisible();
+  await expect.poll(() => countRenderedPixels(canvas)).toBeGreaterThan(0);
+});
+
+async function countRenderedPixels(canvas: Locator) {
+  return canvas.evaluate((node) => {
     const canvasNode = node as HTMLCanvasElement;
     const context = canvasNode.getContext("webgl2") || canvasNode.getContext("webgl");
     if (!context) return 0;
@@ -31,5 +42,4 @@ test("dashboard loads a non-empty viewer", async ({ page }) => {
     }
     return nonBlack;
   });
-  expect(renderedPixels).toBeGreaterThan(0);
-});
+}

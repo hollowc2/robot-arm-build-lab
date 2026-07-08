@@ -329,16 +329,21 @@ function App() {
     };
   }, [catalog]);
 
-  const selectedPart = catalog?.parts.find((part) => part.name === selectedId) ?? null;
-  const selectedTarget = selectedId === "assembly"
-    ? assemblyTarget
-    : selectedPart && {
-        id: selectedPart.name,
-        title: selectedPart.title,
-        subtitle: `${selectedPart.status} / ${selectedPart.category}`,
-        url: selectedPart.webModel,
-        bbox: selectedPart.bbox,
-      };
+  const selectedPart = useMemo(
+    () => catalog?.parts.find((part) => part.name === selectedId) ?? null,
+    [catalog, selectedId],
+  );
+  const selectedTarget = useMemo<ViewerTarget | null>(() => {
+    if (selectedId === "assembly") return assemblyTarget;
+    if (!selectedPart) return null;
+    return {
+      id: selectedPart.name,
+      title: selectedPart.title,
+      subtitle: `${selectedPart.status} / ${selectedPart.category}`,
+      url: selectedPart.webModel,
+      bbox: selectedPart.bbox,
+    };
+  }, [assemblyTarget, selectedId, selectedPart]);
 
   const printableCount = catalog?.parts.filter((part) => part.printReady).length ?? 0;
   const generatedAt = catalog ? new Date(catalog.generatedAt).toLocaleString() : "pending";
