@@ -47,6 +47,7 @@ def build_model() -> Compound:
             build_shoulder_pulley,
             build_wrist_driver_pulley,
             build_wrist_htd_belt,
+            build_wrist_keyed_shaft_adapter,
             build_wrist_pulley,
         )
         from models.wire_management import (
@@ -92,6 +93,7 @@ def build_model() -> Compound:
             build_shoulder_pulley,
             build_wrist_driver_pulley,
             build_wrist_htd_belt,
+            build_wrist_keyed_shaft_adapter,
             build_wrist_pulley,
         )
         from wire_management import (
@@ -240,6 +242,14 @@ def build_model() -> Compound:
         )
         * Rot(0, 90, 0)
     )
+    wrist_shaft_adapter = build_wrist_keyed_shaft_adapter().moved(
+        Pos(
+            wrist_pulley_x,
+            0,
+            elbow_pivot_z + forearm_model.MOTOR_SHAFT_Z,
+        )
+        * Rot(0, 90, 0)
+    )
     shoulder_belt = build_shoulder_htd_belt().moved(
         Pos(
             shoulder_pulley_x,
@@ -368,6 +378,7 @@ def build_model() -> Compound:
             wrist_motor,
             wrist_driver_tray,
             wrist_loop_anchor,
+            wrist_shaft_adapter,
             wrist_driver_pulley,
             wrist_belt,
             wrist_shaft,

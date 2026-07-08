@@ -80,6 +80,10 @@ HTD_BELT_VISUAL_TOOTH_HEIGHT = 0.45
 HTD_BELT_VISUAL_TOOTH_WIDTH = 1.0
 WRIST_DRIVER_TEETH = 20
 WRIST_DRIVEN_TEETH = 48
+WRIST_KEYED_ADAPTER_OD = 14.0
+WRIST_KEYED_ADAPTER_LENGTH = 18.0
+WRIST_KEYED_ADAPTER_FLANGE_OD = 18.0
+WRIST_KEYED_ADAPTER_FLANGE_THICKNESS = 3.0
 
 D_SHAFT_DIAMETER = NEMA17_SHAFT
 D_SHAFT_FLAT_TO_ROUND = 4.5
@@ -488,6 +492,41 @@ def build_wrist_driver_pulley() -> Part:
     )
 
 
+def build_wrist_keyed_shaft_adapter() -> Part:
+    """Build a printed keyed extension for the short 28BYJ wrist motor shaft."""
+    with BuildPart() as adapter:
+        Cylinder(
+            radius=WRIST_KEYED_ADAPTER_OD / 2,
+            height=WRIST_KEYED_ADAPTER_LENGTH,
+        )
+        with Locations(
+            Location(
+                (
+                    0,
+                    0,
+                    WRIST_KEYED_ADAPTER_LENGTH / 2
+                    - WRIST_KEYED_ADAPTER_FLANGE_THICKNESS / 2,
+                )
+            )
+        ):
+            Cylinder(
+                radius=WRIST_KEYED_ADAPTER_FLANGE_OD / 2,
+                height=WRIST_KEYED_ADAPTER_FLANGE_THICKNESS,
+            )
+
+        _add_d_shaft_hole(WRIST_KEYED_ADAPTER_LENGTH)
+
+        for z_offset in (-4.0, 4.0):
+            with Locations(Location((0, 0, z_offset), (90, 0, 0))):
+                Cylinder(
+                    radius=M3_TAP_HOLE / 2,
+                    height=WRIST_KEYED_ADAPTER_OD + 2.0,
+                    mode=Mode.SUBTRACT,
+                )
+
+    return _finalize(adapter.part, "wrist_keyed_28byj_shaft_to_pulley_adapter")
+
+
 def build_shoulder_pulley() -> Part:
     return _build_pulley(
         teeth=80,
@@ -873,6 +912,7 @@ def build_model() -> Compound:
         _display_place(build_shoulder_driver_pulley(), (31.0, 86.0)),
         _display_place(build_elbow_driver_pulley(), (31.0, 110.0)),
         _display_place(build_wrist_driver_pulley(), (-104.0, -104.0)),
+        _display_place(build_wrist_keyed_shaft_adapter(), (-104.0, -80.0)),
         _display_place(build_shoulder_pulley(), (88.0, 88.6)),
         _display_place(build_elbow_pulley(), (29.3, 15.0)),
         _display_place(build_wrist_pulley(), (93.0, 15.0)),
@@ -891,6 +931,7 @@ def main() -> None:
         "shoulder_driver_16T_htd3m_pulley": build_shoulder_driver_pulley(),
         "elbow_driver_16T_htd3m_pulley": build_elbow_driver_pulley(),
         "wrist_driver_20T_htd3m_pulley": build_wrist_driver_pulley(),
+        "wrist_keyed_28byj_shaft_to_pulley_adapter": build_wrist_keyed_shaft_adapter(),
         "shoulder_80T_htd3m_pulley": build_shoulder_pulley(),
         "elbow_60T_htd3m_pulley": build_elbow_pulley(),
         "wrist_48T_htd3m_pulley": build_wrist_pulley(),

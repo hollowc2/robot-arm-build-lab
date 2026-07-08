@@ -49,6 +49,7 @@ VIEWER_PARTS = (
     ("wrist_28byj_uln2003_board_tray", [32, -48, 226], [70, -18, 234], "draft"),
     ("wrist_service_loop_anchor", [24, 10, 218], [54, 36, 236], "draft"),
     ("wrist_driver_20T_HTD3M_5mm_D_shaft", [-24, -14, 228], [-8, 14, 244], "active"),
+    ("wrist_keyed_28byj_shaft_to_pulley_adapter", [-25, -9, 227], [-7, 9, 245], "active"),
     ("wrist_20T_to_48T_HTD3M_open_belt_visual", [-30, -44, 228], [-2, 44, 244], "active"),
     ("wrist_pivot_5mm_shaft", [4, -3, 246], [54, 3, 252], "active"),
     ("sg90_gripper_base", [14, -18, 246], [50, 18, 286], "active"),

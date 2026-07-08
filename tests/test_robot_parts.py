@@ -16,6 +16,7 @@ PART_MODULES = [
     "models.byj48_stepper_motor",
     "models.nema17_stepper_motor",
     "models.transmission_components",
+    "models.wrist_keyed_shaft_adapter",
     "models.master_assembly",
 ]
 
@@ -32,7 +33,7 @@ def test_master_assembly_has_all_major_children() -> None:
 
     assembly = build_model()
 
-    assert len(assembly.children) == 37
+    assert len(assembly.children) == 38
     assert assembly.volume > 0
 
 
@@ -50,6 +51,7 @@ def test_master_assembly_arm_pulley_planes_match_motor_layout() -> None:
     elbow_driven = children_by_label["elbow_60T_HTD3M_16p15_4xM3_25BC"]
     elbow_belt = children_by_label["elbow_16T_to_60T_HTD3M_open_belt_visual"]
     wrist_driver = children_by_label["wrist_driver_20T_HTD3M_5mm_D_shaft"]
+    wrist_adapter = children_by_label["wrist_keyed_28byj_shaft_to_pulley_adapter"]
     wrist_driven = children_by_label["wrist_48T_HTD3M_16p15_4xM3_20BC"]
     wrist_belt = children_by_label["wrist_20T_to_48T_HTD3M_open_belt_visual"]
     elbow_motor = children_by_label["elbow_nema17_stepper_motor"]
@@ -70,6 +72,7 @@ def test_master_assembly_arm_pulley_planes_match_motor_layout() -> None:
     assert elbow_motor.bounding_box().min.X < elbow_x < elbow_motor.bounding_box().max.X
     assert elbow_motor.bounding_box().max.X > 0
     assert center_x(wrist_driver) == pytest.approx(center_x(wrist_driven))
+    assert center_x(wrist_adapter) == pytest.approx(center_x(wrist_driver))
     assert center_x(wrist_belt) == pytest.approx(center_x(wrist_driven))
     assert shoulder_driver.label.endswith("D_shaft")
     assert elbow_driver.label.endswith("round_shaft")
@@ -199,6 +202,20 @@ def test_master_assembly_includes_single_wrist_motor() -> None:
     )
 
     assert wrist_center_x < forearm_x - forearm_link.LINK_THICKNESS_X / 2
+
+
+def test_forearm_has_single_pulley_side_wrist_motor_mount() -> None:
+    from models import forearm_link
+
+    model = forearm_link.build_model()
+    bbox = model.bounding_box()
+    mount_face_center_x = forearm_link.WRIST_MOTOR_SIDE_SIGN * (
+        forearm_link.LINK_THICKNESS_X / 2 + forearm_link.MOTOR_FACE_THICKNESS_X / 2
+    )
+
+    assert forearm_link.WRIST_MOTOR_SIDE_SIGN == -1
+    assert mount_face_center_x < -forearm_link.LINK_THICKNESS_X / 2
+    assert bbox.size.Y == pytest.approx(forearm_link.MOTOR_FACE_WIDTH_Y)
 
 
 def test_master_assembly_includes_electronics_and_wire_guides() -> None:

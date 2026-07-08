@@ -54,6 +54,7 @@ MOTOR_FACE_HEIGHT_Z = 46.0
 MOTOR_BODY_POCKET_DEPTH = 2.8
 MOTOR_BODY_POCKET_CLEARANCE = 0.35
 MOTOR_SHAFT_CLEARANCE = 8.0
+WRIST_MOTOR_SIDE_SIGN = -1
 
 CLEVIS_GAP_X = 18.0
 CLEVIS_EAR_THICKNESS_X = 6.0
@@ -113,27 +114,29 @@ def build_model():
                     align=(Align.CENTER, Align.CENTER, Align.CENTER),
                 )
 
-        # # Opposed 28BYJ-48 motor mounting faces with a shared shaft centerline.
-        # face_x = (LINK_THICKNESS_X + MOTOR_FACE_THICKNESS_X) / 2
-        # for sign in (-1, 1):
-        #     with Locations((sign * face_x, 0, MOTOR_SHAFT_Z)):
-        #         Box(
-        #             MOTOR_FACE_THICKNESS_X,
-        #             MOTOR_FACE_WIDTH_Y,
-        #             MOTOR_FACE_HEIGHT_Z,
-        #             align=(Align.CENTER, Align.CENTER, Align.CENTER),
-        #         )
-        #
-        #     pocket_center_x = sign * (face_x + MOTOR_FACE_THICKNESS_X / 2 - MOTOR_BODY_POCKET_DEPTH / 2)
-        #     with Locations((pocket_center_x, 0, MOTOR_SHAFT_Z)):
-        #         _x_cylinder((BYJ48_BODY + MOTOR_BODY_POCKET_CLEARANCE) / 2, MOTOR_BODY_POCKET_DEPTH, Mode.SUBTRACT)
-        #
-        # with Locations((0, 0, MOTOR_SHAFT_Z)):
-        #     _x_cylinder(MOTOR_SHAFT_CLEARANCE / 2, LINK_THICKNESS_X + 2 * MOTOR_FACE_THICKNESS_X + 2.0, Mode.SUBTRACT)
-        #
-        # for y in (-BYJ48_EAR_SPACING / 2, BYJ48_EAR_SPACING / 2):
-        #     with Locations((0, y, MOTOR_SHAFT_Z)):
-        #         _x_cylinder(M3_CLEARANCE / 2, LINK_THICKNESS_X + 2 * MOTOR_FACE_THICKNESS_X + 2.0, Mode.SUBTRACT)
+        # Single wrist motor mount on the pulley side of the forearm.
+        face_x = WRIST_MOTOR_SIDE_SIGN * (LINK_THICKNESS_X / 2 + MOTOR_FACE_THICKNESS_X / 2)
+        with Locations((face_x, 0, MOTOR_SHAFT_Z)):
+            Box(
+                MOTOR_FACE_THICKNESS_X,
+                MOTOR_FACE_WIDTH_Y,
+                MOTOR_FACE_HEIGHT_Z,
+                align=(Align.CENTER, Align.CENTER, Align.CENTER),
+            )
+
+        pocket_center_x = WRIST_MOTOR_SIDE_SIGN * (
+            LINK_THICKNESS_X / 2 + MOTOR_FACE_THICKNESS_X - MOTOR_BODY_POCKET_DEPTH / 2
+        )
+        with Locations((pocket_center_x, 0, MOTOR_SHAFT_Z)):
+            _x_cylinder((BYJ48_BODY + MOTOR_BODY_POCKET_CLEARANCE) / 2, MOTOR_BODY_POCKET_DEPTH, Mode.SUBTRACT)
+
+        motor_mount_through_x = LINK_THICKNESS_X + MOTOR_FACE_THICKNESS_X + 2.0
+        with Locations((face_x, 0, MOTOR_SHAFT_Z)):
+            _x_cylinder(MOTOR_SHAFT_CLEARANCE / 2, motor_mount_through_x, Mode.SUBTRACT)
+
+        for y in (-BYJ48_EAR_SPACING / 2, BYJ48_EAR_SPACING / 2):
+            with Locations((face_x, y, MOTOR_SHAFT_Z)):
+                _x_cylinder(M3_CLEARANCE / 2, motor_mount_through_x, Mode.SUBTRACT)
 
         # Top wrist clevis: two X-axis ears with 625z bearing pockets.
         ear_x = CLEVIS_GAP_X / 2 + CLEVIS_EAR_THICKNESS_X / 2
