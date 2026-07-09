@@ -50,10 +50,10 @@ VIEWER_PARTS = (
     ("wrist_service_loop_anchor", [24, 10, 218], [54, 36, 236], "draft"),
     ("wrist_driver_20T_HTD3M_5mm_D_shaft", [-24, -14, 228], [-8, 14, 244], "active"),
     ("wrist_keyed_28byj_shaft_to_pulley_adapter", [-25, -9, 227], [-7, 9, 245], "active"),
-    ("wrist_20T_to_48T_HTD3M_open_belt_visual", [-30, -44, 228], [-2, 44, 244], "active"),
+    ("wrist_20T_to_32T_HTD3M_open_belt_visual", [-30, -36, 228], [-2, 36, 244], "active"),
     ("wrist_pivot_5mm_shaft", [4, -3, 246], [54, 3, 252], "active"),
     ("sg90_gripper_base", [14, -18, 246], [50, 18, 286], "active"),
-    ("wrist_48T_HTD3M_16p15_4xM3_20BC", [-20, -26, 246], [-6, 26, 260], "active"),
+    ("wrist_32T_HTD3M_16p15_4xM3_20BC", [-20, -19, 246], [-6, 19, 260], "active"),
 )
 
 

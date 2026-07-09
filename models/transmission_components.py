@@ -35,6 +35,8 @@ try:
         SHOULDER_PULLEY_BOLT_CIRCLE,
         ELBOW_BELT_CENTER_DISTANCE,
         WRIST_PULLEY_BOLT_CIRCLE,
+        WRIST_DRIVER_TEETH,
+        WRIST_DRIVEN_TEETH,
         SHOULDER_BELT_CENTER_DISTANCE,
         WRIST_BELT_CENTER_DISTANCE,
         assert_printable_extent,
@@ -52,6 +54,8 @@ except ModuleNotFoundError:
         SHOULDER_PULLEY_BOLT_CIRCLE,
         ELBOW_BELT_CENTER_DISTANCE,
         WRIST_PULLEY_BOLT_CIRCLE,
+        WRIST_DRIVER_TEETH,
+        WRIST_DRIVEN_TEETH,
         SHOULDER_BELT_CENTER_DISTANCE,
         WRIST_BELT_CENTER_DISTANCE,
         assert_printable_extent,
@@ -80,8 +84,6 @@ HTD_PROFILE_SAMPLES_PER_TOOTH = 12
 HTD_BELT_VISUAL_THICKNESS = 1.8
 HTD_BELT_VISUAL_TOOTH_HEIGHT = 0.45
 HTD_BELT_VISUAL_TOOTH_WIDTH = 1.0
-WRIST_DRIVER_TEETH = 20
-WRIST_DRIVEN_TEETH = 48
 WRIST_KEYED_ADAPTER_OD = 14.0
 WRIST_KEYED_ADAPTER_LENGTH = 18.0
 WRIST_KEYED_ADAPTER_FLANGE_OD = 18.0
@@ -516,7 +518,7 @@ def build_elbow_driver_pulley() -> Part:
 def build_wrist_driver_pulley() -> Part:
     return _build_motor_pulley(
         teeth=WRIST_DRIVER_TEETH,
-        label="wrist_driver_20T_HTD3M_5mm_D_shaft",
+        label=f"wrist_driver_{WRIST_DRIVER_TEETH}T_HTD3M_5mm_D_shaft",
         keyed=True,
     )
 
@@ -581,7 +583,7 @@ def build_wrist_pulley() -> Part:
         teeth=WRIST_DRIVEN_TEETH,
         center_hole=BEARING_625_OD,
         bolt_circle=WRIST_PULLEY_BOLT_CIRCLE,
-        label="wrist_48T_HTD3M_16p15_4xM3_20BC",
+        label=f"wrist_{WRIST_DRIVEN_TEETH}T_HTD3M_16p15_4xM3_20BC",
     )
 
 
@@ -919,7 +921,7 @@ def build_wrist_htd_belt() -> Compound:
         driver_teeth=WRIST_DRIVER_TEETH,
         driven_teeth=WRIST_DRIVEN_TEETH,
         center_distance=WRIST_BELT_CENTER_DISTANCE,
-        label="wrist_20T_to_48T_HTD3M_open_belt_visual",
+        label=f"wrist_{WRIST_DRIVER_TEETH}T_to_{WRIST_DRIVEN_TEETH}T_HTD3M_open_belt_visual",
     )
 
 
@@ -964,10 +966,10 @@ def main() -> None:
         "wrist_keyed_28byj_shaft_to_pulley_adapter": build_wrist_keyed_shaft_adapter(),
         "shoulder_80T_htd3m_pulley": build_shoulder_pulley(),
         "elbow_60T_htd3m_pulley": build_elbow_pulley(),
-        "wrist_48T_htd3m_pulley": build_wrist_pulley(),
+        f"wrist_{WRIST_DRIVEN_TEETH}T_htd3m_pulley": build_wrist_pulley(),
         "shoulder_16T_to_80T_htd3m_belt_visual": build_shoulder_htd_belt(),
         "elbow_16T_to_60T_htd3m_belt_visual": build_elbow_htd_belt(),
-        "wrist_20T_to_48T_htd3m_belt_visual": build_wrist_htd_belt(),
+        f"wrist_{WRIST_DRIVER_TEETH}T_to_{WRIST_DRIVEN_TEETH}T_htd3m_belt_visual": build_wrist_htd_belt(),
         "transmission_components": build_model(),
     }
     for name, component in components.items():

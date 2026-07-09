@@ -1,6 +1,20 @@
 from __future__ import annotations
 
-from build123d import Align, Box, BuildPart, Cone, Cylinder, Locations, Mode
+from math import atan2, degrees, hypot, pi
+
+from build123d import (
+    Align,
+    Box,
+    BuildPart,
+    BuildSketch,
+    Cone,
+    Cylinder,
+    Locations,
+    Mode,
+    Plane,
+    SlotCenterToCenter,
+    extrude,
+)
 
 try:
     from models.common import (
@@ -12,6 +26,8 @@ try:
         M3_CLEARANCE,
         ELBOW_PULLEY_BOLT_CIRCLE,
         WRIST_BELT_CENTER_DISTANCE,
+        WRIST_DRIVER_TEETH,
+        WRIST_DRIVEN_TEETH,
         assert_printable_extent,
         circle_points,
         export_model,
@@ -26,6 +42,8 @@ except ModuleNotFoundError:
         M3_CLEARANCE,
         ELBOW_PULLEY_BOLT_CIRCLE,
         WRIST_BELT_CENTER_DISTANCE,
+        WRIST_DRIVER_TEETH,
+        WRIST_DRIVEN_TEETH,
         assert_printable_extent,
         circle_points,
         export_model,
@@ -38,18 +56,19 @@ BOTTOM_PIVOT_HOLE = 5.0
 BOTTOM_HUB_RADIUS = 24.0
 BOTTOM_HUB_THICKNESS = 14.0
 
-LINK_HALF_WIDTH_Y = 21.0
-LINK_RAIL_WIDTH_Y = 7.0
+LINK_HALF_WIDTH_Y = 24.0
+LINK_RAIL_WIDTH_Y = 6.0
 LINK_THICKNESS_X = 12.0
 LINK_RIB_THICKNESS_Z = 6.0
 
 MOTOR_FACE_THICKNESS_X = 5.0
 MOTOR_FACE_WIDTH_Y = 48.0
 MOTOR_FACE_HEIGHT_Z = 46.0
-MOTOR_MOUNT_ELBOW_END_CLEARANCE_Z = 8.0
+MOTOR_MOUNT_ELBOW_END_CLEARANCE_Z = 11.0
 MOTOR_MOUNT_BOTTOM_Z = BOTTOM_HUB_RADIUS + MOTOR_MOUNT_ELBOW_END_CLEARANCE_Z
 MOTOR_SHAFT_Z = MOTOR_MOUNT_BOTTOM_Z + MOTOR_FACE_HEIGHT_Z / 2
 TOP_WRIST_PIVOT_Z = MOTOR_SHAFT_Z + WRIST_BELT_CENTER_DISTANCE
+MOTOR_SLOT_TRAVEL = 6.0
 MOTOR_BODY_POCKET_DEPTH = 2.8
 MOTOR_BODY_POCKET_CLEARANCE = 0.35
 MOTOR_SHAFT_CLEARANCE = 10.0
@@ -57,13 +76,25 @@ MOTOR_SUPPORT_RIB_THICKNESS_Y = 5.0
 MOTOR_SUPPORT_RIB_DEPTH_X = 12.0
 WRIST_MOTOR_SIDE_SIGN = -1
 
+HTD_3M_PITCH = 3.0
+WRIST_BELT_WIDTH = 8.0
+WRIST_PULLEY_TOTAL_HEIGHT = 11.0
+WRIST_BELT_CHANNEL_CLEARANCE_X = 0.8
+WRIST_BELT_CHANNEL_SLOT_WIDTH_YZ = 4.8
+WRIST_BELT_CHANNEL_RUN_EXTENSION = 4.0
+WRIST_BELT_CHANNEL_CENTER_X = WRIST_MOTOR_SIDE_SIGN * (
+    LINK_THICKNESS_X / 2 + MOTOR_FACE_THICKNESS_X - WRIST_PULLEY_TOTAL_HEIGHT / 2
+)
+WRIST_BELT_CHANNEL_OUTER_X = WRIST_BELT_CHANNEL_CENTER_X - WRIST_BELT_WIDTH / 2 - WRIST_BELT_CHANNEL_CLEARANCE_X
+WRIST_BELT_CHANNEL_DEPTH_X = WRIST_BELT_WIDTH + 2 * WRIST_BELT_CHANNEL_CLEARANCE_X
+
 ELBOW_BOLT_HEAD_SIDE_SIGN = -1
 ELBOW_M3_COUNTERSINK_DIAMETER = 6.8
 ELBOW_M3_COUNTERSINK_DEPTH = 2.0
 
 CLEVIS_GAP_X = 18.0
 CLEVIS_EAR_THICKNESS_X = 6.0
-CLEVIS_WIDTH_Y = 34.0
+CLEVIS_WIDTH_Y = 40.0
 CLEVIS_HEIGHT_Z = 36.0
 CLEVIS_BRIDGE_HEIGHT_Z = 10.0
 
@@ -87,6 +118,64 @@ def _x_cone(bottom_radius: float, top_radius: float, height: float, mode: Mode =
         align=(Align.CENTER, Align.CENTER, Align.CENTER),
         mode=mode,
     )
+
+
+def _vertical_slot_along_x(
+    y: float,
+    z: float,
+    travel: float,
+    width: float,
+    *,
+    x_start: float,
+    depth: float,
+) -> None:
+    with BuildSketch(Plane.YZ.offset(x_start)) as slot:
+        with Locations((y, z)):
+            SlotCenterToCenter(travel, width, rotation=90)
+    extrude(slot.sketch, amount=depth, mode=Mode.SUBTRACT)
+
+
+def _slotted_x_pocket(
+    y: float,
+    z: float,
+    travel: float,
+    width: float,
+    *,
+    x_start: float,
+    depth: float,
+) -> None:
+    _vertical_slot_along_x(y, z, travel, width, x_start=x_start, depth=depth)
+
+
+def _pitch_radius(teeth: int) -> float:
+    return teeth * HTD_3M_PITCH / (2 * pi)
+
+
+def _cut_wrist_belt_channel() -> None:
+    driver_radius = _pitch_radius(WRIST_DRIVER_TEETH)
+    driven_radius = _pitch_radius(WRIST_DRIVEN_TEETH)
+    center_distance = TOP_WRIST_PIVOT_Z - MOTOR_SHAFT_Z
+    tangent_bias = (driver_radius - driven_radius) / center_distance
+    tangent_span = (1 - tangent_bias * tangent_bias) ** 0.5
+
+    for side in (1.0, -1.0):
+        start_y = -side * tangent_span * driver_radius
+        start_z = MOTOR_SHAFT_Z + tangent_bias * driver_radius
+        end_y = -side * tangent_span * driven_radius
+        end_z = TOP_WRIST_PIVOT_Z + tangent_bias * driven_radius
+        run_length = hypot(end_y - start_y, end_z - start_z)
+        run_angle = degrees(atan2(end_z - start_z, end_y - start_y))
+        center_y = (start_y + end_y) / 2
+        center_z = (start_z + end_z) / 2
+
+        with BuildSketch(Plane.YZ.offset(WRIST_BELT_CHANNEL_OUTER_X)) as channel_slot:
+            with Locations((center_y, center_z)):
+                SlotCenterToCenter(
+                    run_length + 2 * WRIST_BELT_CHANNEL_RUN_EXTENSION,
+                    WRIST_BELT_CHANNEL_SLOT_WIDTH_YZ,
+                    rotation=run_angle,
+                )
+        extrude(channel_slot.sketch, amount=WRIST_BELT_CHANNEL_DEPTH_X, mode=Mode.SUBTRACT)
 
 
 def build_model():
@@ -176,16 +265,34 @@ def build_model():
         pocket_center_x = WRIST_MOTOR_SIDE_SIGN * (
             LINK_THICKNESS_X / 2 + MOTOR_FACE_THICKNESS_X - MOTOR_BODY_POCKET_DEPTH / 2
         )
-        with Locations((pocket_center_x, 0, MOTOR_SHAFT_Z)):
-            _x_cylinder((BYJ48_BODY + MOTOR_BODY_POCKET_CLEARANCE) / 2, MOTOR_BODY_POCKET_DEPTH, Mode.SUBTRACT)
+        _slotted_x_pocket(
+            0,
+            MOTOR_SHAFT_Z,
+            MOTOR_SLOT_TRAVEL,
+            BYJ48_BODY + MOTOR_BODY_POCKET_CLEARANCE,
+            x_start=pocket_center_x - MOTOR_BODY_POCKET_DEPTH / 2,
+            depth=MOTOR_BODY_POCKET_DEPTH,
+        )
 
         motor_mount_through_x = LINK_THICKNESS_X + MOTOR_FACE_THICKNESS_X + 2.0
-        with Locations((face_x, 0, MOTOR_SHAFT_Z)):
-            _x_cylinder(MOTOR_SHAFT_CLEARANCE / 2, motor_mount_through_x, Mode.SUBTRACT)
+        _vertical_slot_along_x(
+            0,
+            MOTOR_SHAFT_Z,
+            MOTOR_SLOT_TRAVEL,
+            MOTOR_SHAFT_CLEARANCE,
+            x_start=face_x - motor_mount_through_x / 2,
+            depth=motor_mount_through_x,
+        )
 
         for y in (-BYJ48_EAR_SPACING / 2, BYJ48_EAR_SPACING / 2):
-            with Locations((face_x, y, MOTOR_SHAFT_Z)):
-                _x_cylinder(M3_CLEARANCE / 2, motor_mount_through_x, Mode.SUBTRACT)
+            _vertical_slot_along_x(
+                y,
+                MOTOR_SHAFT_Z,
+                MOTOR_SLOT_TRAVEL,
+                M3_CLEARANCE,
+                x_start=face_x - motor_mount_through_x / 2,
+                depth=motor_mount_through_x,
+            )
 
         # Top wrist clevis: two X-axis ears with 625z bearing pockets.
         ear_x = CLEVIS_GAP_X / 2 + CLEVIS_EAR_THICKNESS_X / 2
@@ -213,6 +320,8 @@ def build_model():
         for x in (-pocket_x, pocket_x):
             with Locations((x, 0, TOP_WRIST_PIVOT_Z)):
                 _x_cylinder(BEARING_625_OD / 2, BEARING_625_WIDTH, Mode.SUBTRACT)
+
+        _cut_wrist_belt_channel()
 
     model = forearm.part
     size = model.bounding_box().size

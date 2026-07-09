@@ -52,8 +52,8 @@ def test_master_assembly_arm_pulley_planes_match_motor_layout() -> None:
     elbow_belt = children_by_label["elbow_16T_to_60T_HTD3M_open_belt_visual"]
     wrist_driver = children_by_label["wrist_driver_20T_HTD3M_5mm_D_shaft"]
     wrist_adapter = children_by_label["wrist_keyed_28byj_shaft_to_pulley_adapter"]
-    wrist_driven = children_by_label["wrist_48T_HTD3M_16p15_4xM3_20BC"]
-    wrist_belt = children_by_label["wrist_20T_to_48T_HTD3M_open_belt_visual"]
+    wrist_driven = children_by_label["wrist_32T_HTD3M_16p15_4xM3_20BC"]
+    wrist_belt = children_by_label["wrist_20T_to_32T_HTD3M_open_belt_visual"]
     elbow_motor = children_by_label["elbow_nema17_stepper_motor"]
 
     def center_x(part) -> float:
@@ -286,6 +286,8 @@ def test_forearm_has_single_pulley_side_wrist_motor_mount() -> None:
     assert forearm_link.WRIST_MOTOR_SIDE_SIGN == -1
     assert mount_face_center_x < -forearm_link.LINK_THICKNESS_X / 2
     assert bbox.size.Y == pytest.approx(forearm_link.MOTOR_FACE_WIDTH_Y)
+    assert forearm_link.LINK_HALF_WIDTH_Y == pytest.approx(forearm_link.MOTOR_FACE_WIDTH_Y / 2)
+    assert forearm_link.MOTOR_SLOT_TRAVEL == pytest.approx(6.0)
     assert forearm_link.MOTOR_MOUNT_BOTTOM_Z == pytest.approx(
         forearm_link.BOTTOM_HUB_RADIUS + forearm_link.MOTOR_MOUNT_ELBOW_END_CLEARANCE_Z
     )
@@ -294,6 +296,11 @@ def test_forearm_has_single_pulley_side_wrist_motor_mount() -> None:
     )
     assert forearm_link.TOP_WRIST_PIVOT_Z - forearm_link.MOTOR_SHAFT_Z == pytest.approx(
         forearm_link.WRIST_BELT_CENTER_DISTANCE
+    )
+    assert forearm_link.WRIST_BELT_CHANNEL_OUTER_X < -forearm_link.LINK_THICKNESS_X / 2
+    assert (
+        forearm_link.WRIST_BELT_CHANNEL_OUTER_X + forearm_link.WRIST_BELT_CHANNEL_DEPTH_X
+        < forearm_link.LINK_THICKNESS_X / 2
     )
 
 
