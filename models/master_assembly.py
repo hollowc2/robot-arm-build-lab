@@ -274,110 +274,100 @@ def build_model() -> Compound:
         )
         * Rot(0, 90, 90)
     )
-    arduino_tray = build_arduino_uno_r4_minima_tray().moved(
-        Pos(0, -113, stator_model.BASE_THICKNESS)
-    )
-    base_driver_tray = build_nema17_driver_board_tray().moved(
-        Pos(stator_model.BASE_GEAR_CENTER_DISTANCE, 60, stator_model.BASE_THICKNESS)
-    )
-    base_driver_tray.label = "base_nema17_driver_board_tray"
-    shoulder_driver_tray = build_nema17_driver_board_tray().moved(
-        Pos(
-            turntable_model.LEFT_OUTER_X - 10,
-            -48,
-            AZIMUTH_TURNTABLE_Z + turntable_model.PLATE_THICKNESS,
-        )
-    )
-    shoulder_driver_tray.label = "shoulder_nema17_driver_board_tray"
-    elbow_driver_tray = build_nema17_driver_board_tray().moved(
-        Pos(
-            bicep_model.MOTOR_FACE_X + 38,
-            -33,
-            shoulder_pivot_z + bicep_model.MOTOR_SHAFT_Z,
-        )
-    )
-    elbow_driver_tray.label = "elbow_nema17_driver_board_tray"
-    wrist_driver_tray = build_28byj_uln_board_tray().moved(
-        Pos(
-            forearm_x + forearm_model.LINK_THICKNESS_X / 2 + 22,
-            -33,
-            elbow_pivot_z + forearm_model.MOTOR_SHAFT_Z + 25,
-        )
-    )
-    wrist_driver_tray.label = "wrist_28byj_uln2003_board_tray"
+    # Board trays are disabled in the main assembly preview.
+    # arduino_tray = build_arduino_uno_r4_minima_tray().moved(
+    #     Pos(0, -113, stator_model.BASE_THICKNESS)
+    # )
+    # base_driver_tray = build_nema17_driver_board_tray().moved(
+    #     Pos(stator_model.BASE_GEAR_CENTER_DISTANCE, 60, stator_model.BASE_THICKNESS)
+    # )
+    # base_driver_tray.label = "base_nema17_driver_board_tray"
+    # shoulder_driver_tray = build_nema17_driver_board_tray().moved(
+    #     Pos(
+    #         turntable_model.LEFT_OUTER_X - 10,
+    #         -48,
+    #         AZIMUTH_TURNTABLE_Z + turntable_model.PLATE_THICKNESS,
+    #     )
+    # )
+    # shoulder_driver_tray.label = "shoulder_nema17_driver_board_tray"
+    # elbow_driver_tray = build_nema17_driver_board_tray().moved(
+    #     Pos(
+    #         bicep_model.MOTOR_FACE_X + 38,
+    #         -33,
+    #         shoulder_pivot_z + bicep_model.MOTOR_SHAFT_Z,
+    #     )
+    # )
+    # elbow_driver_tray.label = "elbow_nema17_driver_board_tray"
+    # wrist_driver_tray = build_28byj_uln_board_tray().moved(
+    #     Pos(
+    #         forearm_x + forearm_model.LINK_THICKNESS_X / 2 + 22,
+    #         -33,
+    #         elbow_pivot_z + forearm_model.MOTOR_SHAFT_Z + 25,
+    #     )
+    # )
+    # wrist_driver_tray.label = "wrist_28byj_uln2003_board_tray"
 
-    base_cable_guide = build_base_cable_entry_strain_relief_guide().moved(
-        Pos(0, -98, stator_model.BASE_THICKNESS)
-    )
-    base_service_loop_guard = build_base_azimuth_service_loop_guard().moved(
-        Pos(0, 0, stator_model.BASE_THICKNESS + stator_model.THRUST_RING_HEIGHT + 0.4)
-    )
-    shoulder_loop_anchor = build_shoulder_service_loop_anchor().moved(
-        Pos(
-            turntable_model.RIGHT_OUTER_X + 18,
-            30,
-            shoulder_pivot_z - 42,
-        )
-        * Rot(0, 0, 90)
-    )
-    elbow_loop_anchor = build_elbow_service_loop_anchor().moved(
-        Pos(
-            bicep_model.ELBOW_CLEVIS_TOTAL_X / 2 + 16,
-            28,
-            elbow_pivot_z - 34,
-        )
-        * Rot(0, 0, 90)
-    )
-    wrist_loop_anchor = build_wrist_service_loop_anchor().moved(
-        Pos(
-            forearm_x + forearm_model.CLEVIS_GAP_X / 2 + forearm_model.CLEVIS_EAR_THICKNESS_X + 14,
-            24,
-            wrist_pivot_z - 26,
-        )
-        * Rot(0, 0, 90)
-    )
-    bicep_wire_channel = build_bicep_harness_channel_marker().moved(
-        Pos(bicep_model.LINK_X_THICKNESS / 2 + 4, 0, shoulder_pivot_z + 92)
-        * Rot(90, 0, 0)
-    )
-    forearm_wire_channel = build_forearm_harness_channel_marker().moved(
-        Pos(forearm_x, 0, elbow_pivot_z + 88) * Rot(90, 0, 0)
-    )
+    # Wire-management parts are disabled in the main assembly preview.
+    # base_cable_guide = build_base_cable_entry_strain_relief_guide().moved(
+    #     Pos(0, -98, stator_model.BASE_THICKNESS)
+    # )
+    # base_service_loop_guard = build_base_azimuth_service_loop_guard().moved(
+    #     Pos(0, 0, stator_model.BASE_THICKNESS + stator_model.THRUST_RING_HEIGHT + 0.4)
+    # )
+    # shoulder_loop_anchor = build_shoulder_service_loop_anchor().moved(
+    #     Pos(
+    #         turntable_model.RIGHT_OUTER_X + 18,
+    #         30,
+    #         shoulder_pivot_z - 42,
+    #     )
+    #     * Rot(0, 0, 90)
+    # )
+    # elbow_loop_anchor = build_elbow_service_loop_anchor().moved(
+    #     Pos(
+    #         bicep_model.ELBOW_CLEVIS_TOTAL_X / 2 + 16,
+    #         28,
+    #         elbow_pivot_z - 34,
+    #     )
+    #     * Rot(0, 0, 90)
+    # )
+    # wrist_loop_anchor = build_wrist_service_loop_anchor().moved(
+    #     Pos(
+    #         forearm_x + forearm_model.CLEVIS_GAP_X / 2 + forearm_model.CLEVIS_EAR_THICKNESS_X + 14,
+    #         24,
+    #         wrist_pivot_z - 26,
+    #     )
+    #     * Rot(0, 0, 90)
+    # )
+    # bicep_wire_channel = build_bicep_harness_channel_marker().moved(
+    #     Pos(bicep_model.LINK_X_THICKNESS / 2 + 4, 0, shoulder_pivot_z + 92)
+    #     * Rot(90, 0, 0)
+    # )
+    # forearm_wire_channel = build_forearm_harness_channel_marker().moved(
+    #     Pos(forearm_x, 0, elbow_pivot_z + 88) * Rot(90, 0, 0)
+    # )
 
     return Compound(
         children=[
             stator,
-            arduino_tray,
-            base_driver_tray,
-            base_cable_guide,
-            base_service_loop_guard,
             base_motor,
             base_gear,
             base_pinion,
             base_shaft,
             turntable,
             shoulder_motor,
-            shoulder_driver_tray,
-            shoulder_loop_anchor,
             shoulder_driver_pulley,
             shoulder_belt,
             shoulder_shaft,
             bicep,
-            bicep_wire_channel,
             shoulder_spacer,
             elbow_motor,
-            elbow_driver_tray,
-            elbow_loop_anchor,
             elbow_driver_pulley,
             elbow_belt,
             shoulder_pulley,
             elbow_shaft,
             forearm,
-            forearm_wire_channel,
             elbow_pulley,
             wrist_motor,
-            wrist_driver_tray,
-            wrist_loop_anchor,
             wrist_shaft_adapter,
             wrist_driver_pulley,
             wrist_belt,

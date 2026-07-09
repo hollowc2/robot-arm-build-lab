@@ -458,14 +458,14 @@ def build_base_driven_gear() -> Part:
 @lru_cache(maxsize=None)
 def build_base_driver_pinion() -> Part:
     def add_cut_features(height: float) -> None:
-        _add_d_shaft_hole(height)
+        _add_center_hole(NEMA17_SHAFT, height)
 
     pinion = _build_bd_herringbone_compound(
         20,
-        label="base_driver_20T_module1_herringbone_5mm_D_shaft",
+        label="base_driver_20T_module1_herringbone_5mm_round_shaft",
         add_cut_features=add_cut_features,
     )
-    return _finalize(pinion, "base_driver_20T_module1_herringbone_5mm_D_shaft")
+    return _finalize(pinion, "base_driver_20T_module1_herringbone_5mm_round_shaft")
 
 
 def build_shoulder_driver_pulley() -> Part:
@@ -543,6 +543,7 @@ def build_elbow_pulley() -> Part:
         center_hole=BEARING_625_OD,
         bolt_circle=ELBOW_PULLEY_BOLT_CIRCLE,
         label="elbow_60T_HTD3M_16p15_4xM3_25BC",
+        bolt_hole_diameter=M3_TAP_HOLE,
     )
 
 

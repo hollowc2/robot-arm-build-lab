@@ -1,6 +1,6 @@
 from __future__ import annotations
 
-from build123d import Align, Box, BuildPart, Cylinder, Locations, Mode
+from build123d import Align, Box, BuildPart, Cone, Cylinder, Locations, Mode
 
 try:
     from models.common import (
@@ -43,18 +43,23 @@ LINK_RAIL_WIDTH_Y = 7.0
 LINK_THICKNESS_X = 12.0
 LINK_RIB_THICKNESS_Z = 6.0
 
-# Raises the wrist motor shafts above the elbow 60T pulley envelope while
-# preserving the wrist belt center distance to the wrist pivot.
-MOTOR_SHAFT_Z = 60.0
-TOP_WRIST_PIVOT_Z = MOTOR_SHAFT_Z + WRIST_BELT_CENTER_DISTANCE
-
 MOTOR_FACE_THICKNESS_X = 5.0
 MOTOR_FACE_WIDTH_Y = 48.0
 MOTOR_FACE_HEIGHT_Z = 46.0
+MOTOR_MOUNT_ELBOW_END_CLEARANCE_Z = 8.0
+MOTOR_MOUNT_BOTTOM_Z = BOTTOM_HUB_RADIUS + MOTOR_MOUNT_ELBOW_END_CLEARANCE_Z
+MOTOR_SHAFT_Z = MOTOR_MOUNT_BOTTOM_Z + MOTOR_FACE_HEIGHT_Z / 2
+TOP_WRIST_PIVOT_Z = MOTOR_SHAFT_Z + WRIST_BELT_CENTER_DISTANCE
 MOTOR_BODY_POCKET_DEPTH = 2.8
 MOTOR_BODY_POCKET_CLEARANCE = 0.35
-MOTOR_SHAFT_CLEARANCE = 8.0
+MOTOR_SHAFT_CLEARANCE = 10.0
+MOTOR_SUPPORT_RIB_THICKNESS_Y = 5.0
+MOTOR_SUPPORT_RIB_DEPTH_X = 12.0
 WRIST_MOTOR_SIDE_SIGN = -1
+
+ELBOW_BOLT_HEAD_SIDE_SIGN = -1
+ELBOW_M3_COUNTERSINK_DIAMETER = 6.8
+ELBOW_M3_COUNTERSINK_DEPTH = 2.0
 
 CLEVIS_GAP_X = 18.0
 CLEVIS_EAR_THICKNESS_X = 6.0
@@ -73,6 +78,17 @@ def _x_cylinder(radius: float, height: float, mode: Mode = Mode.ADD) -> None:
     )
 
 
+def _x_cone(bottom_radius: float, top_radius: float, height: float, mode: Mode = Mode.ADD) -> None:
+    Cone(
+        bottom_radius=bottom_radius,
+        top_radius=top_radius,
+        height=height,
+        rotation=(0, 90, 0),
+        align=(Align.CENTER, Align.CENTER, Align.CENTER),
+        mode=mode,
+    )
+
+
 def build_model():
     """Build the forearm link with the elbow pivot at the local origin.
 
@@ -80,6 +96,8 @@ def build_model():
     The two wrist motor shaft centers are coaxial at MOTOR_SHAFT_Z, making
     the center-to-center distance to the wrist pivot exactly 109.33mm.
     """
+    if MOTOR_MOUNT_BOTTOM_Z - BOTTOM_HUB_RADIUS < 6.0:
+        raise ValueError("Forearm wrist motor mount must clear the elbow hub end by at least 6mm.")
 
     with BuildPart() as forearm:
         # Bottom elbow hub and elbow driven pulley interface.
@@ -91,6 +109,16 @@ def build_model():
         for y, z in circle_points(4, ELBOW_PULLEY_BOLT_CIRCLE, start_angle=45):
             with Locations((0, y, z)):
                 _x_cylinder(M3_CLEARANCE / 2, BOTTOM_HUB_THICKNESS + 4.0, Mode.SUBTRACT)
+            countersink_x = ELBOW_BOLT_HEAD_SIDE_SIGN * (
+                BOTTOM_HUB_THICKNESS / 2 - ELBOW_M3_COUNTERSINK_DEPTH / 2
+            )
+            with Locations((countersink_x, y, z)):
+                _x_cone(
+                    ELBOW_M3_COUNTERSINK_DIAMETER / 2,
+                    M3_CLEARANCE / 2,
+                    ELBOW_M3_COUNTERSINK_DEPTH,
+                    Mode.SUBTRACT,
+                )
 
         # Long lightweight rails from elbow hub to wrist clevis.
         rail_center_z = TOP_WRIST_PIVOT_Z / 2
@@ -123,6 +151,27 @@ def build_model():
                 MOTOR_FACE_HEIGHT_Z,
                 align=(Align.CENTER, Align.CENTER, Align.CENTER),
             )
+
+        support_x = WRIST_MOTOR_SIDE_SIGN * (
+            LINK_THICKNESS_X / 2 + MOTOR_SUPPORT_RIB_DEPTH_X / 2 - MOTOR_FACE_THICKNESS_X
+        )
+        for y in (-LINK_HALF_WIDTH_Y + LINK_RAIL_WIDTH_Y / 2, LINK_HALF_WIDTH_Y - LINK_RAIL_WIDTH_Y / 2):
+            with Locations((support_x, y, MOTOR_SHAFT_Z)):
+                Box(
+                    MOTOR_SUPPORT_RIB_DEPTH_X,
+                    MOTOR_SUPPORT_RIB_THICKNESS_Y,
+                    MOTOR_FACE_HEIGHT_Z,
+                    align=(Align.CENTER, Align.CENTER, Align.CENTER),
+                )
+
+        for z in (MOTOR_MOUNT_BOTTOM_Z, MOTOR_MOUNT_BOTTOM_Z + MOTOR_FACE_HEIGHT_Z):
+            with Locations((support_x, 0, z)):
+                Box(
+                    MOTOR_SUPPORT_RIB_DEPTH_X,
+                    LINK_HALF_WIDTH_Y * 2,
+                    LINK_RIB_THICKNESS_Z,
+                    align=(Align.CENTER, Align.CENTER, Align.CENTER),
+                )
 
         pocket_center_x = WRIST_MOTOR_SIDE_SIGN * (
             LINK_THICKNESS_X / 2 + MOTOR_FACE_THICKNESS_X - MOTOR_BODY_POCKET_DEPTH / 2

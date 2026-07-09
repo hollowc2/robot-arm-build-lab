@@ -33,7 +33,7 @@ def test_master_assembly_has_all_major_children() -> None:
 
     assembly = build_model()
 
-    assert len(assembly.children) == 38
+    assert len(assembly.children) == 26
     assert assembly.volume > 0
 
 
@@ -87,12 +87,15 @@ def test_bicep_motor_mount_is_compact_and_motor_side_facing() -> None:
 
     assert bbox.size.Y == pytest.approx(bicep_arm_link.MOTOR_PLATE_WIDTH_Y)
     assert bbox.size.X == pytest.approx(bicep_arm_link.ELBOW_CLEVIS_TOTAL_X)
-    assert bicep_arm_link.MOTOR_PLATE_WIDTH_Y == pytest.approx(46.0)
-    assert bicep_arm_link.MOTOR_PLATE_HEIGHT_Z == pytest.approx(46.0)
+    assert bicep_arm_link.MOTOR_PLATE_WIDTH_Y == pytest.approx(54.0)
+    assert bicep_arm_link.MOTOR_PLATE_HEIGHT_Z == pytest.approx(54.0)
     assert (
         bicep_arm_link.MOTOR_PLATE_CENTER_X
         + bicep_arm_link.MOTOR_PLATE_X_THICKNESS / 2
-        == pytest.approx(bicep_arm_link.MOTOR_FACE_X)
+        == pytest.approx(bicep_arm_link.MOTOR_PLATE_OUTER_X)
+    )
+    assert bicep_arm_link.MOTOR_FACE_X == pytest.approx(
+        bicep_arm_link.MOTOR_PLATE_OUTER_X - bicep_arm_link.MOTOR_FACE_INSET_X
     )
 
 
@@ -216,26 +219,43 @@ def test_forearm_has_single_pulley_side_wrist_motor_mount() -> None:
     assert forearm_link.WRIST_MOTOR_SIDE_SIGN == -1
     assert mount_face_center_x < -forearm_link.LINK_THICKNESS_X / 2
     assert bbox.size.Y == pytest.approx(forearm_link.MOTOR_FACE_WIDTH_Y)
+    assert forearm_link.MOTOR_MOUNT_BOTTOM_Z == pytest.approx(
+        forearm_link.BOTTOM_HUB_RADIUS + forearm_link.MOTOR_MOUNT_ELBOW_END_CLEARANCE_Z
+    )
+    assert forearm_link.MOTOR_SHAFT_Z == pytest.approx(
+        forearm_link.MOTOR_MOUNT_BOTTOM_Z + forearm_link.MOTOR_FACE_HEIGHT_Z / 2
+    )
+    assert forearm_link.TOP_WRIST_PIVOT_Z - forearm_link.MOTOR_SHAFT_Z == pytest.approx(
+        forearm_link.WRIST_BELT_CENTER_DISTANCE
+    )
 
 
-def test_master_assembly_includes_electronics_and_wire_guides() -> None:
+def test_forearm_elbow_hub_has_pulley_side_m3_countersinks() -> None:
+    from models import forearm_link
+
+    assert forearm_link.ELBOW_BOLT_HEAD_SIDE_SIGN == -1
+    assert forearm_link.ELBOW_M3_COUNTERSINK_DIAMETER > forearm_link.M3_CLEARANCE
+    assert 0 < forearm_link.ELBOW_M3_COUNTERSINK_DEPTH < forearm_link.BOTTOM_HUB_THICKNESS / 2
+
+
+def test_master_assembly_excludes_electronics_and_wire_guides() -> None:
     from models.master_assembly import build_model
 
     assembly = build_model()
     labels = {child.label for child in assembly.children}
 
-    assert "arduino_uno_r4_minima_tray" in labels
-    assert "base_nema17_driver_board_tray" in labels
-    assert "shoulder_nema17_driver_board_tray" in labels
-    assert "elbow_nema17_driver_board_tray" in labels
-    assert "wrist_28byj_uln2003_board_tray" in labels
-    assert "base_cable_entry_strain_relief_guide" in labels
-    assert "base_azimuth_service_loop_guard" in labels
-    assert "shoulder_service_loop_anchor" in labels
-    assert "elbow_service_loop_anchor" in labels
-    assert "wrist_service_loop_anchor" in labels
-    assert "bicep_harness_channel_marker" in labels
-    assert "forearm_harness_channel_marker" in labels
+    assert "arduino_uno_r4_minima_tray" not in labels
+    assert "base_nema17_driver_board_tray" not in labels
+    assert "shoulder_nema17_driver_board_tray" not in labels
+    assert "elbow_nema17_driver_board_tray" not in labels
+    assert "wrist_28byj_uln2003_board_tray" not in labels
+    assert "base_cable_entry_strain_relief_guide" not in labels
+    assert "base_azimuth_service_loop_guard" not in labels
+    assert "shoulder_service_loop_anchor" not in labels
+    assert "elbow_service_loop_anchor" not in labels
+    assert "wrist_service_loop_anchor" not in labels
+    assert "bicep_harness_channel_marker" not in labels
+    assert "forearm_harness_channel_marker" not in labels
 
 
 def test_motor_shafts_clear_lower_pulley_envelopes() -> None:

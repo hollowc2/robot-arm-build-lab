@@ -71,14 +71,22 @@ ELBOW_CLEVIS_TOTAL_X = ELBOW_CLEVIS_GAP_X + 2 * ELBOW_CLEVIS_EAR_THICKNESS_X
 ELBOW_CLEVIS_DROP_Z = 42.0
 ELBOW_CLEVIS_CLEARANCE_Z = 72.0
 MOTOR_PLATE_X_THICKNESS = 15.0
-MOTOR_PLATE_WIDTH_Y = 46.0
-MOTOR_PLATE_HEIGHT_Z = 46.0
+MOTOR_PLATE_WIDTH_Y = 54.0
+MOTOR_PLATE_HEIGHT_Z = 54.0
 MOTOR_SLOT_TRAVEL = 4.0
-MOTOR_FACE_X = LINK_X_THICKNESS / 2
-MOTOR_PLATE_CENTER_X = MOTOR_FACE_X - MOTOR_PLATE_X_THICKNESS / 2
+MOTOR_PLATE_OUTER_X = LINK_X_THICKNESS / 2
+MOTOR_FACE_INSET_X = 6.0
+MOTOR_FACE_X = MOTOR_PLATE_OUTER_X - MOTOR_FACE_INSET_X
+MOTOR_PLATE_BACK_X = MOTOR_PLATE_OUTER_X - MOTOR_PLATE_X_THICKNESS
+MOTOR_PLATE_CENTER_X = MOTOR_PLATE_OUTER_X - MOTOR_PLATE_X_THICKNESS / 2
+MOTOR_BODY_POCKET_CLEARANCE = 1.2
 MOTOR_PILOT_CLEARANCE = NEMA17_PILOT + 0.6
 MOTOR_PILOT_POCKET_DEPTH = 3.0
 MOTOR_SHAFT_CLEARANCE = NEMA17_SHAFT + 3.0
+MOTOR_DRIVER_PULLEY_RELIEF_RADIUS = 14.0
+MOTOR_DRIVER_PULLEY_RELIEF_DEPTH = 12.0
+ELBOW_REINFORCEMENT_WIDTH_Y = 46.0
+ELBOW_REINFORCEMENT_HEIGHT_Z = 86.0
 
 THROUGH_X = 28.0
 
@@ -98,7 +106,7 @@ def _vertical_slot_along_x(y: float, z: float, travel: float, width: float) -> N
 def _vertical_counterbored_slot_along_x(y: float, z: float, travel: float) -> None:
     _vertical_slot_along_x(y, z, travel, M3_CLEARANCE)
     custom_depth = M3_COUNTERBORE_DEPTH + 2.0
-    inset_x = -MOTOR_FACE_X + custom_depth / 2
+    inset_x = MOTOR_PLATE_BACK_X + custom_depth / 2
     with Locations((inset_x, y, z)):
         Box(custom_depth, M3_COUNTERBORE, travel, mode=Mode.SUBTRACT)
     for z_offset in (-travel / 2, travel / 2):
@@ -128,11 +136,32 @@ def _counterbored_x_hole(y: float, z: float) -> None:
 
 def _build_flush_motor_reinforcement():
     with BuildPart() as plate:
-        with BuildSketch(Plane.YZ.offset(MOTOR_FACE_X)):
+        with BuildSketch(Plane.YZ.offset(MOTOR_PLATE_OUTER_X)):
             with Locations((0, MOTOR_SHAFT_Z)):
                 RectangleRounded(MOTOR_PLATE_WIDTH_Y, MOTOR_PLATE_HEIGHT_Z, radius=3.0)
         extrude(amount=-MOTOR_PLATE_X_THICKNESS)
     return plate.part
+
+
+def _cut_motor_body_inset() -> None:
+    pocket_size = 42.3 + MOTOR_BODY_POCKET_CLEARANCE
+    with Locations((MOTOR_FACE_X + MOTOR_FACE_INSET_X / 2, 0, MOTOR_SHAFT_Z)):
+        Box(
+            MOTOR_FACE_INSET_X,
+            pocket_size,
+            pocket_size,
+            align=(Align.CENTER, Align.CENTER, Align.CENTER),
+            mode=Mode.SUBTRACT,
+        )
+
+
+def _cut_driver_pulley_relief() -> None:
+    relief_center_x = MOTOR_FACE_X - MOTOR_DRIVER_PULLEY_RELIEF_DEPTH / 2
+    with Locations((relief_center_x, 0, MOTOR_SHAFT_Z)):
+        _x_axis_hole(
+            MOTOR_DRIVER_PULLEY_RELIEF_RADIUS,
+            height=MOTOR_DRIVER_PULLEY_RELIEF_DEPTH,
+        )
 
 
 def _cut_nema17_tension_mount() -> None:
@@ -164,6 +193,28 @@ def _add_elbow_clevis() -> None:
             5.0,
             align=(Align.CENTER, Align.CENTER, Align.CENTER),
         )
+
+
+def _build_elbow_organic_reinforcement():
+    outer_x = ELBOW_CLEVIS_TOTAL_X / 2
+    with BuildPart() as reinforcement:
+        for plane_x, amount in (
+            (outer_x, -ELBOW_CLEVIS_EAR_THICKNESS_X),
+            (-outer_x, ELBOW_CLEVIS_EAR_THICKNESS_X),
+        ):
+            with BuildSketch(Plane.YZ.offset(plane_x)):
+                with Locations((0, TOP_PIVOT_Z - 24.0)):
+                    RectangleRounded(
+                        ELBOW_REINFORCEMENT_WIDTH_Y,
+                        ELBOW_REINFORCEMENT_HEIGHT_Z,
+                        radius=18.0,
+                    )
+            extrude(amount=amount)
+    return reinforcement.part
+
+
+def _add_elbow_organic_reinforcement() -> None:
+    add(_build_elbow_organic_reinforcement())
 
 
 def _cut_elbow_clevis_clearance() -> None:
@@ -209,12 +260,15 @@ def build_model():
         add(_build_flush_motor_reinforcement())
 
         _add_elbow_clevis()
+        _add_elbow_organic_reinforcement()
         with Locations((0, 0, BOTTOM_PIVOT_Z)):
             _x_axis_hole(4.0)
         for y, z in circle_points(4, SHOULDER_PULLEY_BOLT_CIRCLE, start_angle=45.0):
             _counterbored_x_hole(y, z)
 
+        _cut_motor_body_inset()
         _cut_nema17_tension_mount()
+        _cut_driver_pulley_relief()
         _cut_elbow_clevis_clearance()
         _cut_elbow_bearing_pockets()
 
