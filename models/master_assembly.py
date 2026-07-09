@@ -160,7 +160,8 @@ def build_model() -> Compound:
     base_pinion = build_base_driver_pinion().moved(
         Pos(stator_model.BASE_GEAR_CENTER_DISTANCE, 0, base_gear_z)
     )
-    base_shaft = build_base_azimuth_shaft().moved(Pos(0, 0, AZIMUTH_TURNTABLE_Z / 2))
+    base_shaft_center_z = (AZIMUTH_TURNTABLE_Z + turntable_model.PLATE_THICKNESS) / 2
+    base_shaft = build_base_azimuth_shaft().moved(Pos(0, 0, base_shaft_center_z))
     turntable = turntable_model.build_model().moved(Pos(0, 0, AZIMUTH_TURNTABLE_Z))
     turntable.label = "azimuth_turntable_shoulder_cleat"
     bicep = bicep_model.build_model().moved(Pos(0, 0, shoulder_pivot_z))

@@ -307,7 +307,7 @@ def test_forearm_elbow_hub_has_pulley_side_m3_countersinks() -> None:
 
 def test_base_120t_gear_has_bottom_m3_counterbores_for_turntable() -> None:
     from models import azimuth_turntable_shoulder_cleat, geared_base_stator, transmission_components
-    from models.common import BASE_GEAR_BOLT_CIRCLE, M3_CLEARANCE, circle_points
+    from models.common import BASE_GEAR_BOLT_CIRCLE, M3_CLEARANCE, M3_TAP_HOLE, circle_points
 
     gear = transmission_components.build_base_driven_gear()
     bbox = gear.bounding_box()
@@ -330,6 +330,33 @@ def test_base_120t_gear_has_bottom_m3_counterbores_for_turntable() -> None:
     ) == pytest.approx(circle_points(6, BASE_GEAR_BOLT_CIRCLE, start_angle=30.0))
     assert azimuth_turntable_shoulder_cleat.BASE_GEAR_BOLT_CIRCLE == pytest.approx(
         BASE_GEAR_BOLT_CIRCLE
+    )
+    assert azimuth_turntable_shoulder_cleat.BASE_GEAR_THREAD_PILOT == pytest.approx(M3_TAP_HOLE)
+    assert azimuth_turntable_shoulder_cleat.BASE_GEAR_THREAD_PILOT < M3_CLEARANCE
+    assert (
+        azimuth_turntable_shoulder_cleat.BASE_GEAR_THREAD_DEPTH
+        < azimuth_turntable_shoulder_cleat.PLATE_THICKNESS
+    )
+
+
+def test_azimuth_turntable_uses_separate_center_shaft() -> None:
+    from models import azimuth_turntable_shoulder_cleat, geared_base_stator
+    from models.common import BEARING_608_ID
+
+    turntable = azimuth_turntable_shoulder_cleat.build_model()
+    bbox = turntable.bounding_box()
+
+    assert bbox.min.Z == pytest.approx(0.0)
+    assert azimuth_turntable_shoulder_cleat.CENTER_SHAFT_CLEARANCE > BEARING_608_ID
+    assert azimuth_turntable_shoulder_cleat.CENTER_SHAFT_CLEARANCE == pytest.approx(8.5)
+    assert (
+        azimuth_turntable_shoulder_cleat.STATOR_BOSS_RELIEF_DIAMETER
+        > geared_base_stator.BEARING_BOSS_OD
+    )
+    assert azimuth_turntable_shoulder_cleat.STATOR_BOSS_RELIEF_DEPTH == pytest.approx(7.0)
+    assert (
+        azimuth_turntable_shoulder_cleat.STATOR_BOSS_RELIEF_DEPTH
+        < azimuth_turntable_shoulder_cleat.PLATE_THICKNESS
     )
 
 

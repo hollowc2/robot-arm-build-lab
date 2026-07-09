@@ -26,6 +26,7 @@ try:
         BEARING_608_OD,
         BEARING_608_WIDTH,
         M3_CLEARANCE,
+        M3_TAP_HOLE,
         NEMA17_HOLE_SPACING,
         NEMA17_PILOT,
         SHOULDER_BELT_CENTER_DISTANCE,
@@ -40,6 +41,7 @@ except ModuleNotFoundError:
         BEARING_608_OD,
         BEARING_608_WIDTH,
         M3_CLEARANCE,
+        M3_TAP_HOLE,
         NEMA17_HOLE_SPACING,
         NEMA17_PILOT,
         SHOULDER_BELT_CENTER_DISTANCE,
@@ -53,8 +55,11 @@ MODEL_NAME = "azimuth_turntable_shoulder_cleat"
 
 PLATE_RADIUS = 72.0
 PLATE_THICKNESS = 12.0
-DOWNWARD_BOSS_LENGTH = 8.0
-DOWNWARD_BOSS_DIAMETER = BEARING_608_ID
+CENTER_SHAFT_CLEARANCE = BEARING_608_ID + 0.5
+STATOR_BOSS_RELIEF_DIAMETER = 49.0
+STATOR_BOSS_RELIEF_DEPTH = 7.0
+BASE_GEAR_THREAD_PILOT = M3_TAP_HOLE
+BASE_GEAR_THREAD_DEPTH = 9.0
 
 CLEVIS_CLEAR_GAP = 43.0
 CLEVIS_WALL_THICKNESS = 12.0
@@ -253,11 +258,20 @@ def build_model():
             align=(Align.CENTER, Align.CENTER, Align.MIN),
         )
 
-        with Locations((0, 0, -DOWNWARD_BOSS_LENGTH / 2)):
+        with Locations((0, 0, STATOR_BOSS_RELIEF_DEPTH / 2 - 0.1)):
             Cylinder(
-                DOWNWARD_BOSS_DIAMETER / 2,
-                DOWNWARD_BOSS_LENGTH,
+                STATOR_BOSS_RELIEF_DIAMETER / 2,
+                STATOR_BOSS_RELIEF_DEPTH + 0.2,
                 align=(Align.CENTER, Align.CENTER, Align.CENTER),
+                mode=Mode.SUBTRACT,
+            )
+
+        with Locations((0, 0, PLATE_THICKNESS / 2)):
+            Cylinder(
+                CENTER_SHAFT_CLEARANCE / 2,
+                PLATE_THICKNESS + 2.0,
+                align=(Align.CENTER, Align.CENTER, Align.CENTER),
+                mode=Mode.SUBTRACT,
             )
 
         _add_clevis_walls()
@@ -282,10 +296,10 @@ def build_model():
             )
 
         for hole_x, hole_y in circle_points(6, BASE_GEAR_BOLT_CIRCLE, start_angle=30.0):
-            with Locations((hole_x, hole_y, PLATE_THICKNESS / 2)):
+            with Locations((hole_x, hole_y, BASE_GEAR_THREAD_DEPTH / 2 - 0.1)):
                 Cylinder(
-                    M3_CLEARANCE / 2,
-                    PLATE_THICKNESS + 4.0,
+                    BASE_GEAR_THREAD_PILOT / 2,
+                    BASE_GEAR_THREAD_DEPTH + 0.2,
                     align=(Align.CENTER, Align.CENTER, Align.CENTER),
                     mode=Mode.SUBTRACT,
                 )
