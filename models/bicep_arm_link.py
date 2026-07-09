@@ -58,8 +58,9 @@ ELBOW_BELT_CENTER_DISTANCE = 113.35
 
 PART_NAME = "bicep_arm_link"
 
+LINK_EXTENSION_Z = 10.0
 BOTTOM_PIVOT_Z = 0.0
-MOTOR_SHAFT_Z = 52.0
+MOTOR_SHAFT_Z = 52.0 + LINK_EXTENSION_Z
 TOP_PIVOT_Z = MOTOR_SHAFT_Z + ELBOW_BELT_CENTER_DISTANCE
 
 LOWER_HUB_OD = 38.5
@@ -106,6 +107,14 @@ ELBOW_REINFORCEMENT_WIDTH_Y = 46.0
 ELBOW_REINFORCEMENT_HEIGHT_Z = 86.0
 
 THROUGH_X = 28.0
+A1_NOZZLE_WIDTH = 0.4
+SPAN_WINDOW_WIDTH_Y = 15.2
+SPAN_WINDOW_TRAVEL_Z = 22.0
+SPAN_WINDOW_ZS = tuple(z + LINK_EXTENSION_Z for z in (91.0, 117.0))
+SPAN_WINDOW_THROUGH_X = LINK_X_THICKNESS + 2.0
+MOTOR_PLATE_RIB_WIDTH_Y = 5.6
+MOTOR_PLATE_RIB_HEIGHT_Z = 48.0
+MOTOR_PLATE_RIB_DEPTH_X = 4.0
 
 
 def _x_axis_hole(radius: float, height: float = THROUGH_X, mode: Mode = Mode.SUBTRACT) -> None:
@@ -331,6 +340,33 @@ def _add_elbow_organic_reinforcement() -> None:
     add(_build_elbow_organic_reinforcement())
 
 
+def _cut_rounded_span_window(z: float) -> None:
+    """Remove center web mass while leaving continuous side rails and rounded ends."""
+    x_start = -SPAN_WINDOW_THROUGH_X / 2
+    with BuildSketch(Plane.YZ.offset(x_start)) as slot:
+        with Locations((0, z)):
+            SlotCenterToCenter(
+                SPAN_WINDOW_TRAVEL_Z,
+                SPAN_WINDOW_WIDTH_Y,
+                rotation=90,
+            )
+    extrude(slot.sketch, amount=SPAN_WINDOW_THROUGH_X, mode=Mode.SUBTRACT)
+
+
+def _add_motor_plate_side_ribs() -> None:
+    """Small 0.4mm-nozzle-friendly ribs stiffen the offset NEMA17 plate."""
+    rib_center_x = MOTOR_PLATE_BACK_X + MOTOR_PLATE_RIB_DEPTH_X / 2
+    rib_y = MOTOR_PLATE_WIDTH_Y / 2 - MOTOR_PLATE_RIB_WIDTH_Y / 2
+    for y in (-rib_y, rib_y):
+        with Locations((rib_center_x, y, MOTOR_SHAFT_Z)):
+            Box(
+                MOTOR_PLATE_RIB_DEPTH_X,
+                MOTOR_PLATE_RIB_WIDTH_Y,
+                MOTOR_PLATE_RIB_HEIGHT_Z,
+                align=(Align.CENTER, Align.CENTER, Align.CENTER),
+            )
+
+
 def _cut_elbow_clevis_clearance() -> None:
     with Locations((0, 0, TOP_PIVOT_Z)):
         Box(
@@ -358,6 +394,9 @@ def build_model():
         raise ValueError("Elbow motor shaft to top pivot spacing must be exactly 113.35mm")
     if LOWER_HUB_OD > 39.0:
         raise ValueError("Lower shoulder pivot Y width must fit inside the 43mm azimuth clevis")
+    nozzle_multiple = SPAN_WINDOW_WIDTH_Y / A1_NOZZLE_WIDTH
+    if abs(nozzle_multiple - round(nozzle_multiple)) > 1e-9:
+        raise ValueError("Span window width should stay on a 0.4mm nozzle multiple.")
 
     with BuildPart() as bicep:
         # 1. Base Shoulder Hub (Restores the rounded bottom and material for the lower holes)
@@ -369,6 +408,7 @@ def build_model():
 
         # 3. Flush Motor Reinforcement
         add(_build_flush_motor_reinforcement())
+        _add_motor_plate_side_ribs()
 
         # --- Subtractive Operations ---
 
@@ -390,9 +430,8 @@ def build_model():
         _cut_elbow_bearing_pockets()
 
         # Web lightening cuts in the center span
-        for z in (95.0, 125.0):
-            with Locations((0, 0, z)):
-                Box(THROUGH_X, 14.0, 18.0, mode=Mode.SUBTRACT)
+        for z in SPAN_WINDOW_ZS:
+            _cut_rounded_span_window(z)
 
     model = bicep.part
     bbox = model.bounding_box().size
