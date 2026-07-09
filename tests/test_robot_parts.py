@@ -305,18 +305,22 @@ def test_forearm_elbow_hub_has_pulley_side_m3_countersinks() -> None:
     assert 0 < forearm_link.ELBOW_M3_COUNTERSINK_DEPTH < forearm_link.BOTTOM_HUB_THICKNESS / 2
 
 
-def test_base_120t_gear_has_bottom_m3_countersinks_for_turntable() -> None:
-    from models import azimuth_turntable_shoulder_cleat, transmission_components
+def test_base_120t_gear_has_bottom_m3_counterbores_for_turntable() -> None:
+    from models import azimuth_turntable_shoulder_cleat, geared_base_stator, transmission_components
     from models.common import BASE_GEAR_BOLT_CIRCLE, M3_CLEARANCE, circle_points
 
     gear = transmission_components.build_base_driven_gear()
     bbox = gear.bounding_box()
 
     assert bbox.size.Z == pytest.approx(transmission_components.GEAR_THICKNESS)
-    assert transmission_components.BASE_GEAR_M3_COUNTERSINK_DIAMETER > M3_CLEARANCE
+    assert transmission_components.BASE_GEAR_CENTER_BORE > geared_base_stator.BEARING_BOSS_OD
+    assert transmission_components.BASE_GEAR_CENTER_BORE < (
+        BASE_GEAR_BOLT_CIRCLE - 2 * M3_CLEARANCE
+    )
+    assert transmission_components.BASE_GEAR_M3_COUNTERBORE_DIAMETER > M3_CLEARANCE
     assert (
         0
-        < transmission_components.BASE_GEAR_M3_COUNTERSINK_DEPTH
+        < transmission_components.BASE_GEAR_M3_COUNTERBORE_DEPTH
         < transmission_components.GEAR_THICKNESS / 2
     )
     assert circle_points(

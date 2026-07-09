@@ -39,7 +39,7 @@ That command updates `models/out/robot_arm_master_assembly.step` and `models/out
 ## Current CAD Notes
 
 - The base drive uses a 120T module-1 herringbone gear driven by a 20T NEMA17 pinion at a 70 mm center distance.
-- The 120T gear's six M3 turntable holes are clocked to match the azimuth turntable and include bottom-side countersinks so hardware can sit below the gear when bolting up into the turntable.
+- The 120T gear's six M3 turntable holes are clocked to match the azimuth turntable and include bottom-side counterbores so hardware can sit below the gear when bolting up into the turntable.
 - The geared base stator carries the fixed center boss/bearing stack; keep the 120T gear center bore and vertical stack clear of that boss when adjusting the base assembly.
 
 ## Local Site

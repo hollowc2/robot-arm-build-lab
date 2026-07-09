@@ -10,7 +10,6 @@ from build123d import (
     BuildPart,
     BuildSketch,
     Circle,
-    Cone,
     Cylinder,
     Location,
     Locations,
@@ -28,7 +27,6 @@ from build123d import (
 try:
     from models.common import (
         BASE_GEAR_BOLT_CIRCLE,
-        BEARING_608_OD,
         BEARING_625_OD,
         M3_CLEARANCE,
         M3_TAP_HOLE,
@@ -46,7 +44,6 @@ try:
 except ModuleNotFoundError:
     from common import (
         BASE_GEAR_BOLT_CIRCLE,
-        BEARING_608_OD,
         BEARING_625_OD,
         M3_CLEARANCE,
         M3_TAP_HOLE,
@@ -69,9 +66,10 @@ GEAR_MODULE = 1.0
 GEAR_PRESSURE_ANGLE = 20.0
 GEAR_HELIX_ANGLE = 30.0
 GEAR_THICKNESS = 12.0
+BASE_GEAR_CENTER_BORE = 48.0
 BASE_GEAR_BOLT_START_ANGLE = 30.0
-BASE_GEAR_M3_COUNTERSINK_DIAMETER = 6.8
-BASE_GEAR_M3_COUNTERSINK_DEPTH = 2.0
+BASE_GEAR_M3_COUNTERBORE_DIAMETER = 6.8
+BASE_GEAR_M3_COUNTERBORE_DEPTH = 2.0
 HTD_3M_PITCH = 3.0
 BELT_WIDTH = 8.0
 FLANGE_HEIGHT = 1.5
@@ -432,25 +430,24 @@ def _add_bolt_circle(
             Cylinder(radius=hole_diameter / 2, height=height + 2, mode=Mode.SUBTRACT)
 
 
-def _add_bottom_countersink_bolt_circle(
+def _add_bottom_counterbore_bolt_circle(
     count: int,
     bolt_circle: float,
     height: float,
     start_angle: float = 0.0,
     *,
     hole_diameter: float = M3_CLEARANCE,
-    head_diameter: float = BASE_GEAR_M3_COUNTERSINK_DIAMETER,
-    sink_depth: float = BASE_GEAR_M3_COUNTERSINK_DEPTH,
+    head_diameter: float = BASE_GEAR_M3_COUNTERBORE_DIAMETER,
+    counterbore_depth: float = BASE_GEAR_M3_COUNTERBORE_DEPTH,
 ) -> None:
     _add_bolt_circle(count, bolt_circle, height, start_angle, hole_diameter=hole_diameter)
 
-    countersink_z = -height / 2 + sink_depth / 2
+    counterbore_z = -height / 2 + counterbore_depth / 2
     for x, y in circle_points(count, bolt_circle, start_angle=start_angle):
-        with Locations(Location((x, y, countersink_z))):
-            Cone(
-                bottom_radius=head_diameter / 2,
-                top_radius=hole_diameter / 2,
-                height=sink_depth,
+        with Locations(Location((x, y, counterbore_z))):
+            Cylinder(
+                radius=head_diameter / 2,
+                height=counterbore_depth,
                 mode=Mode.SUBTRACT,
             )
 
@@ -471,8 +468,8 @@ def _finalize(part: Part, label: str) -> Part:
 @lru_cache(maxsize=None)
 def build_base_driven_gear() -> Part:
     def add_cut_features(height: float) -> None:
-        _add_center_hole(BEARING_608_OD, height)
-        _add_bottom_countersink_bolt_circle(
+        _add_center_hole(BASE_GEAR_CENTER_BORE, height)
+        _add_bottom_counterbore_bolt_circle(
             6,
             BASE_GEAR_BOLT_CIRCLE,
             height,
@@ -481,10 +478,10 @@ def build_base_driven_gear() -> Part:
 
     gear = _build_bd_herringbone_compound(
         120,
-        label="base_driven_120T_module1_herringbone_22p15_6xM3_60BC",
+        label="base_driven_120T_module1_herringbone_48mm_bore_6xM3_60BC",
         add_cut_features=add_cut_features,
     )
-    return _finalize(gear, "base_driven_120T_module1_herringbone_22p15_6xM3_60BC")
+    return _finalize(gear, "base_driven_120T_module1_herringbone_48mm_bore_6xM3_60BC")
 
 
 @lru_cache(maxsize=None)
