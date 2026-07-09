@@ -305,6 +305,30 @@ def test_forearm_elbow_hub_has_pulley_side_m3_countersinks() -> None:
     assert 0 < forearm_link.ELBOW_M3_COUNTERSINK_DEPTH < forearm_link.BOTTOM_HUB_THICKNESS / 2
 
 
+def test_base_120t_gear_has_bottom_m3_countersinks_for_turntable() -> None:
+    from models import azimuth_turntable_shoulder_cleat, transmission_components
+    from models.common import BASE_GEAR_BOLT_CIRCLE, M3_CLEARANCE, circle_points
+
+    gear = transmission_components.build_base_driven_gear()
+    bbox = gear.bounding_box()
+
+    assert bbox.size.Z == pytest.approx(transmission_components.GEAR_THICKNESS)
+    assert transmission_components.BASE_GEAR_M3_COUNTERSINK_DIAMETER > M3_CLEARANCE
+    assert (
+        0
+        < transmission_components.BASE_GEAR_M3_COUNTERSINK_DEPTH
+        < transmission_components.GEAR_THICKNESS / 2
+    )
+    assert circle_points(
+        6,
+        BASE_GEAR_BOLT_CIRCLE,
+        start_angle=transmission_components.BASE_GEAR_BOLT_START_ANGLE,
+    ) == pytest.approx(circle_points(6, BASE_GEAR_BOLT_CIRCLE, start_angle=30.0))
+    assert azimuth_turntable_shoulder_cleat.BASE_GEAR_BOLT_CIRCLE == pytest.approx(
+        BASE_GEAR_BOLT_CIRCLE
+    )
+
+
 def test_master_assembly_excludes_electronics_and_wire_guides() -> None:
     from models.master_assembly import build_model
 
