@@ -97,6 +97,73 @@ def test_bicep_motor_mount_is_compact_and_motor_side_facing() -> None:
     assert bicep_arm_link.MOTOR_FACE_X == pytest.approx(
         bicep_arm_link.MOTOR_PLATE_OUTER_X - bicep_arm_link.MOTOR_FACE_INSET_X
     )
+    assert bicep_arm_link.MOTOR_SLOT_TRAVEL == pytest.approx(4.0)
+    assert bicep_arm_link.M3_CLEARANCE < bicep_arm_link.MOTOR_COUNTERBORE_DIAMETER
+    assert bicep_arm_link.MOTOR_COUNTERBORE_DIAMETER > bicep_arm_link.M3_COUNTERBORE
+    assert bicep_arm_link.MOTOR_COUNTERBORE_SLOT_TRAVEL > bicep_arm_link.MOTOR_SLOT_TRAVEL
+    assert bicep_arm_link.MOTOR_PLATE_BACK_X < bicep_arm_link.MOTOR_FACE_X
+    assert bicep_arm_link.MOTOR_COUNTERBORE_FACE_X == pytest.approx(
+        -bicep_arm_link.LINK_X_THICKNESS / 2
+    )
+    assert bicep_arm_link.MOTOR_COUNTERBORE_FACE_X < bicep_arm_link.MOTOR_PLATE_BACK_X
+    assert bicep_arm_link.MOTOR_COUNTERBORE_DEPTH > bicep_arm_link.M3_COUNTERBORE_DEPTH
+    assert (
+        bicep_arm_link.MOTOR_COUNTERBORE_FACE_X + bicep_arm_link.MOTOR_COUNTERBORE_DEPTH
+        > bicep_arm_link.MOTOR_PLATE_BACK_X
+    )
+    assert (
+        bicep_arm_link.MOTOR_COUNTERBORE_FACE_X + bicep_arm_link.MOTOR_COUNTERBORE_DEPTH
+        < bicep_arm_link.MOTOR_FACE_X
+    )
+
+
+def test_bicep_has_negative_x_pulley_side_clearance_planes() -> None:
+    from models import bicep_arm_link, forearm_link
+    from models.master_assembly import PULLEY_SIDE_CLEARANCE
+    from models.transmission_components import BELT_WIDTH, PULLEY_TOTAL_HEIGHT
+
+    elbow_stack_side_clearance = (
+        bicep_arm_link.ELBOW_CLEVIS_GAP_X
+        - forearm_link.BOTTOM_HUB_THICKNESS
+        - PULLEY_TOTAL_HEIGHT
+        - PULLEY_SIDE_CLEARANCE
+    ) / 2
+    elbow_pulley_x = (
+        -bicep_arm_link.ELBOW_CLEVIS_GAP_X / 2
+        + elbow_stack_side_clearance
+        + PULLEY_TOTAL_HEIGHT / 2
+    )
+    belt_inner_face_x = elbow_pulley_x + BELT_WIDTH / 2
+    belt_outer_face_x = elbow_pulley_x - BELT_WIDTH / 2
+
+    shoulder_pulley_x = -(
+        bicep_arm_link.LINK_X_THICKNESS / 2 + PULLEY_TOTAL_HEIGHT / 2 + PULLEY_SIDE_CLEARANCE
+    )
+    shoulder_inner_face_x = shoulder_pulley_x + PULLEY_TOTAL_HEIGHT / 2
+
+    assert (
+        bicep_arm_link.ELBOW_BELT_CHANNEL_FACE_X - belt_inner_face_x
+        >= bicep_arm_link.PULLEY_CHANNEL_CLEARANCE_X
+    )
+    assert (
+        belt_outer_face_x - bicep_arm_link.ELBOW_BELT_CHANNEL_OUTER_X
+        >= bicep_arm_link.PULLEY_CHANNEL_CLEARANCE_X
+    )
+    assert (
+        bicep_arm_link.ELBOW_BELT_CHANNEL_Y_AT_MOTOR
+        - bicep_arm_link.ELBOW_BELT_CHANNEL_WIDTH_Y / 2
+        > 0
+    )
+    assert bicep_arm_link.ELBOW_BELT_CHANNEL_WIDTH_Y < bicep_arm_link.ELBOW_BELT_CHANNEL_Y_AT_CLEVIS
+    assert bicep_arm_link.ELBOW_BELT_CHANNEL_Z_MIN > bicep_arm_link.MOTOR_SHAFT_Z
+    assert (
+        bicep_arm_link.ELBOW_BELT_CHANNEL_Z_MAX
+        > bicep_arm_link.TOP_PIVOT_Z - bicep_arm_link.ELBOW_CLEVIS_CLEARANCE_Z / 2
+    )
+    assert (
+        bicep_arm_link.SHOULDER_PULLEY_FLAT_FACE_X - shoulder_inner_face_x
+        >= bicep_arm_link.SHOULDER_PULLEY_EXTRA_CLEARANCE_X
+    )
 
 
 def test_elbow_clevis_sandwiches_forearm_hub_and_60t_pulley() -> None:
