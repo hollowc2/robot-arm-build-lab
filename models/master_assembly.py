@@ -10,6 +10,7 @@ except ModuleNotFoundError:
 
 AZIMUTH_TURNTABLE_Z = 28.0
 PULLEY_SIDE_CLEARANCE = 0.75
+WRIST_STACK_CLEARANCE = 1.0
 
 
 def build_model() -> Compound:
@@ -34,6 +35,7 @@ def build_model() -> Compound:
             build_nema17_driver_board_tray,
         )
         from models.nema17_stepper_motor import build_model as build_nema17
+        from models import sg90_gripper_base as gripper_model
         from models.sg90_gripper_base import build_model as build_gripper
         from models.transmission_components import (
             PULLEY_TOTAL_HEIGHT,
@@ -80,6 +82,7 @@ def build_model() -> Compound:
         from geared_base_stator import build_model as build_stator
         from byj48_stepper_motor import build_model as build_byj48
         from nema17_stepper_motor import build_model as build_nema17
+        import sg90_gripper_base as gripper_model
         from sg90_gripper_base import build_model as build_gripper
         from transmission_components import (
             PULLEY_TOTAL_HEIGHT,
@@ -152,6 +155,23 @@ def build_model() -> Compound:
         + forearm_model.MOTOR_FACE_THICKNESS_X
         - PULLEY_TOTAL_HEIGHT / 2
     )
+    wrist_gripper_x = (
+        wrist_pulley_x
+        + PULLEY_TOTAL_HEIGHT / 2
+        + WRIST_STACK_CLEARANCE
+        + gripper_model.CLEVIS_TONGUE_WIDTH / 2
+    )
+    wrist_stack_min_x = wrist_pulley_x - PULLEY_TOTAL_HEIGHT / 2
+    wrist_stack_max_x = wrist_gripper_x + gripper_model.CLEVIS_TONGUE_WIDTH / 2
+    wrist_clevis_min_x = forearm_x - forearm_model.CLEVIS_GAP_X / 2
+    wrist_clevis_max_x = forearm_x + forearm_model.CLEVIS_GAP_X / 2
+    wrist_clevis_min_x += forearm_model.WRIST_CLEVIS_GAP_CENTER_X
+    wrist_clevis_max_x += forearm_model.WRIST_CLEVIS_GAP_CENTER_X
+    if (
+        wrist_stack_min_x < wrist_clevis_min_x + WRIST_STACK_CLEARANCE
+        or wrist_stack_max_x > wrist_clevis_max_x - WRIST_STACK_CLEARANCE
+    ):
+        raise ValueError("Wrist clevis gap must fit the driven pulley, gripper tongue, and side clearances.")
 
     stator = build_stator()
     stator.label = "geared_base_stator"
@@ -168,7 +188,7 @@ def build_model() -> Compound:
     bicep.label = "bicep_arm_link"
     forearm = forearm_model.build_model().moved(Pos(forearm_x, 0, elbow_pivot_z))
     forearm.label = "forearm_link"
-    gripper = build_gripper().moved(Pos(forearm_x, 0, wrist_pivot_z) * Rot(0, 0, 0))
+    gripper = build_gripper().moved(Pos(wrist_gripper_x, 0, wrist_pivot_z) * Rot(0, 0, 0))
     gripper.label = "sg90_gripper_base"
     shoulder_shaft = build_shoulder_pivot_shaft().moved(Pos(0, 0, shoulder_pivot_z))
     elbow_shaft = build_elbow_pivot_shaft().moved(Pos(0, 0, elbow_pivot_z))

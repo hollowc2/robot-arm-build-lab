@@ -88,6 +88,8 @@ WRIST_KEYED_ADAPTER_OD = 14.0
 WRIST_KEYED_ADAPTER_LENGTH = 18.0
 WRIST_KEYED_ADAPTER_FLANGE_OD = 18.0
 WRIST_KEYED_ADAPTER_FLANGE_THICKNESS = 3.0
+WRIST_PULLEY_M3_COUNTERBORE_DIAMETER = 6.8
+WRIST_PULLEY_M3_COUNTERBORE_DEPTH = 2.0
 
 D_SHAFT_DIAMETER = NEMA17_SHAFT
 D_SHAFT_FLAT_TO_ROUND = 4.5
@@ -584,6 +586,9 @@ def build_wrist_pulley() -> Part:
         center_hole=BEARING_625_OD,
         bolt_circle=WRIST_PULLEY_BOLT_CIRCLE,
         label=f"wrist_{WRIST_DRIVEN_TEETH}T_HTD3M_16p15_4xM3_20BC",
+        bottom_counterbore=True,
+        counterbore_diameter=WRIST_PULLEY_M3_COUNTERBORE_DIAMETER,
+        counterbore_depth=WRIST_PULLEY_M3_COUNTERBORE_DEPTH,
     )
 
 
@@ -594,6 +599,9 @@ def _build_pulley(
     bolt_circle: float,
     label: str,
     bolt_hole_diameter: float = M3_CLEARANCE,
+    bottom_counterbore: bool = False,
+    counterbore_diameter: float = BASE_GEAR_M3_COUNTERBORE_DIAMETER,
+    counterbore_depth: float = BASE_GEAR_M3_COUNTERBORE_DEPTH,
 ) -> Part:
     with BuildPart() as pulley:
         blank = _bd_timing_pulley(teeth)
@@ -609,13 +617,24 @@ def _build_pulley(
             _add_fallback_pulley_blank(teeth)
 
         _add_center_hole(center_hole, PULLEY_TOTAL_HEIGHT)
-        _add_bolt_circle(
-            4,
-            bolt_circle,
-            PULLEY_TOTAL_HEIGHT,
-            start_angle=45.0,
-            hole_diameter=bolt_hole_diameter,
-        )
+        if bottom_counterbore:
+            _add_bottom_counterbore_bolt_circle(
+                4,
+                bolt_circle,
+                PULLEY_TOTAL_HEIGHT,
+                start_angle=45.0,
+                hole_diameter=bolt_hole_diameter,
+                head_diameter=counterbore_diameter,
+                counterbore_depth=counterbore_depth,
+            )
+        else:
+            _add_bolt_circle(
+                4,
+                bolt_circle,
+                PULLEY_TOTAL_HEIGHT,
+                start_angle=45.0,
+                hole_diameter=bolt_hole_diameter,
+            )
 
     return _finalize(pulley.part, label)
 

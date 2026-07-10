@@ -12,8 +12,11 @@ from build123d import (
     Locations,
     Mode,
     Plane,
+    RectangleRounded,
     SlotCenterToCenter,
+    add,
     extrude,
+    loft,
 )
 
 try:
@@ -87,16 +90,21 @@ WRIST_BELT_CHANNEL_CENTER_X = WRIST_MOTOR_SIDE_SIGN * (
 )
 WRIST_BELT_CHANNEL_OUTER_X = WRIST_BELT_CHANNEL_CENTER_X - WRIST_BELT_WIDTH / 2 - WRIST_BELT_CHANNEL_CLEARANCE_X
 WRIST_BELT_CHANNEL_DEPTH_X = WRIST_BELT_WIDTH + 2 * WRIST_BELT_CHANNEL_CLEARANCE_X
+WRIST_BELT_PULLEY_RELIEF_MARGIN = 3.0
 
 ELBOW_BOLT_HEAD_SIDE_SIGN = -1
 ELBOW_M3_COUNTERSINK_DIAMETER = 6.8
 ELBOW_M3_COUNTERSINK_DEPTH = 2.0
 
-CLEVIS_GAP_X = 18.0
+CLEVIS_GAP_X = 29.0
+WRIST_CLEVIS_GAP_CENTER_X = 2.0
 CLEVIS_EAR_THICKNESS_X = 6.0
 CLEVIS_WIDTH_Y = 40.0
 CLEVIS_HEIGHT_Z = 36.0
 CLEVIS_BRIDGE_HEIGHT_Z = 10.0
+WRIST_CLEVIS_CLEARANCE_Z = 50.0
+WRIST_HULL_TRANSITION_START_Z = TOP_WRIST_PIVOT_Z - 62.0
+WRIST_HULL_WIDTH_Y = 44.0
 
 
 def _x_cylinder(radius: float, height: float, mode: Mode = Mode.ADD) -> None:
@@ -176,6 +184,60 @@ def _cut_wrist_belt_channel() -> None:
                     rotation=run_angle,
                 )
         extrude(channel_slot.sketch, amount=WRIST_BELT_CHANNEL_DEPTH_X, mode=Mode.SUBTRACT)
+
+
+def _cut_wrist_belt_loading_relief() -> None:
+    """Open the pulley-side pockets enough to install the wrist belt loop."""
+    relief_center_x = WRIST_BELT_CHANNEL_OUTER_X + WRIST_BELT_CHANNEL_DEPTH_X / 2
+    driver_radius = _pitch_radius(WRIST_DRIVER_TEETH) + WRIST_BELT_CHANNEL_SLOT_WIDTH_YZ / 2
+    driven_radius = _pitch_radius(WRIST_DRIVEN_TEETH) + WRIST_BELT_CHANNEL_SLOT_WIDTH_YZ / 2
+    reliefs = (
+        (MOTOR_SHAFT_Z, driver_radius + WRIST_BELT_PULLEY_RELIEF_MARGIN),
+        (TOP_WRIST_PIVOT_Z, driven_radius + WRIST_BELT_PULLEY_RELIEF_MARGIN),
+    )
+
+    for z, radius in reliefs:
+        with Locations((relief_center_x, 0, z)):
+            _x_cylinder(radius, WRIST_BELT_CHANNEL_DEPTH_X, Mode.SUBTRACT)
+
+
+def _cut_wrist_clevis_clearance() -> None:
+    """Open the wrist clevis gap around the gripper base pivot boss."""
+    with Locations((WRIST_CLEVIS_GAP_CENTER_X, 0, TOP_WRIST_PIVOT_Z)):
+        Box(
+            CLEVIS_GAP_X,
+            CLEVIS_WIDTH_Y + 32.0,
+            WRIST_CLEVIS_CLEARANCE_Z,
+            align=(Align.CENTER, Align.CENTER, Align.CENTER),
+            mode=Mode.SUBTRACT,
+        )
+
+
+def _build_wrist_swept_hull():
+    """Build a continuous rounded shoulder from the forearm span into the wrist clevis."""
+    clevis_total_x = CLEVIS_GAP_X + 2 * CLEVIS_EAR_THICKNESS_X
+    clevis_base_z = TOP_WRIST_PIVOT_Z - CLEVIS_HEIGHT_Z / 2
+
+    with BuildPart() as hull:
+        with BuildSketch(Plane.XY.offset(WRIST_HULL_TRANSITION_START_Z)):
+            RectangleRounded(LINK_THICKNESS_X, LINK_HALF_WIDTH_Y * 2, radius=5.0)
+        with BuildSketch(Plane.XY.offset(clevis_base_z)):
+            with Locations((WRIST_CLEVIS_GAP_CENTER_X, 0)):
+                RectangleRounded(clevis_total_x, WRIST_HULL_WIDTH_Y, radius=7.0)
+        loft()
+
+        with BuildSketch(Plane.XY.offset(clevis_base_z)):
+            with Locations((WRIST_CLEVIS_GAP_CENTER_X, 0)):
+                RectangleRounded(clevis_total_x, WRIST_HULL_WIDTH_Y, radius=7.0)
+        with BuildSketch(Plane.XY.offset(TOP_WRIST_PIVOT_Z)):
+            with Locations((WRIST_CLEVIS_GAP_CENTER_X, 0)):
+                RectangleRounded(clevis_total_x, CLEVIS_WIDTH_Y, radius=7.0)
+        loft()
+
+        with Locations((WRIST_CLEVIS_GAP_CENTER_X, 0, TOP_WRIST_PIVOT_Z)):
+            _x_cylinder(CLEVIS_WIDTH_Y / 2, clevis_total_x)
+
+    return hull.part
 
 
 def build_model():
@@ -294,18 +356,16 @@ def build_model():
                 depth=motor_mount_through_x,
             )
 
-        # Top wrist clevis: two X-axis ears with 625z bearing pockets.
-        ear_x = CLEVIS_GAP_X / 2 + CLEVIS_EAR_THICKNESS_X / 2
-        for x in (-ear_x, ear_x):
-            with Locations((x, 0, TOP_WRIST_PIVOT_Z)):
-                Box(
-                    CLEVIS_EAR_THICKNESS_X,
-                    CLEVIS_WIDTH_Y,
-                    CLEVIS_HEIGHT_Z,
-                    align=(Align.CENTER, Align.CENTER, Align.CENTER),
-                )
+        # Top wrist clevis: a bicep-style swept shoulder cut back into two bearing ears.
+        add(_build_wrist_swept_hull())
 
-        with Locations((0, 0, TOP_WRIST_PIVOT_Z - CLEVIS_HEIGHT_Z / 2 + CLEVIS_BRIDGE_HEIGHT_Z / 2)):
+        with Locations(
+            (
+                WRIST_CLEVIS_GAP_CENTER_X,
+                0,
+                TOP_WRIST_PIVOT_Z - CLEVIS_HEIGHT_Z / 2 + CLEVIS_BRIDGE_HEIGHT_Z / 2,
+            )
+        ):
             Box(
                 CLEVIS_GAP_X + 2 * CLEVIS_EAR_THICKNESS_X,
                 CLEVIS_WIDTH_Y,
@@ -316,12 +376,19 @@ def build_model():
         with Locations((0, 0, TOP_WRIST_PIVOT_Z)):
             _x_cylinder(BEARING_625_ID / 2, CLEVIS_GAP_X + 2 * CLEVIS_EAR_THICKNESS_X + 4.0, Mode.SUBTRACT)
 
-        pocket_x = CLEVIS_GAP_X / 2 + CLEVIS_EAR_THICKNESS_X - BEARING_625_WIDTH / 2
-        for x in (-pocket_x, pocket_x):
+        left_gap_x = WRIST_CLEVIS_GAP_CENTER_X - CLEVIS_GAP_X / 2
+        right_gap_x = WRIST_CLEVIS_GAP_CENTER_X + CLEVIS_GAP_X / 2
+        pocket_positions_x = (
+            left_gap_x - CLEVIS_EAR_THICKNESS_X + BEARING_625_WIDTH / 2,
+            right_gap_x + CLEVIS_EAR_THICKNESS_X - BEARING_625_WIDTH / 2,
+        )
+        for x in pocket_positions_x:
             with Locations((x, 0, TOP_WRIST_PIVOT_Z)):
                 _x_cylinder(BEARING_625_OD / 2, BEARING_625_WIDTH, Mode.SUBTRACT)
 
+        _cut_wrist_clevis_clearance()
         _cut_wrist_belt_channel()
+        _cut_wrist_belt_loading_relief()
 
     model = forearm.part
     size = model.bounding_box().size

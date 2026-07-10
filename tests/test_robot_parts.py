@@ -201,11 +201,13 @@ def test_elbow_clevis_sandwiches_forearm_hub_and_60t_pulley() -> None:
         return (bbox.min.X + bbox.max.X) / 2
 
     elbow_bbox = elbow_driven.bounding_box()
+    local_forearm_bbox = forearm_link.build_model().bounding_box()
+    local_forearm_center_x = (local_forearm_bbox.min.X + local_forearm_bbox.max.X) / 2
     assert side_clearance >= PULLEY_SIDE_CLEARANCE
     assert elbow_bbox.min.X > -bicep_arm_link.ELBOW_CLEVIS_GAP_X / 2
     assert elbow_bbox.max.X < bicep_arm_link.ELBOW_CLEVIS_GAP_X / 2
     assert center_x(elbow_driven) == pytest.approx(expected_elbow_pulley_x)
-    assert center_x(forearm) == pytest.approx(expected_forearm_x)
+    assert center_x(forearm) == pytest.approx(expected_forearm_x + local_forearm_center_x)
 
 
 def test_master_assembly_includes_all_joint_shafts() -> None:
@@ -310,6 +312,117 @@ def test_forearm_elbow_hub_has_pulley_side_m3_countersinks() -> None:
     assert forearm_link.ELBOW_BOLT_HEAD_SIDE_SIGN == -1
     assert forearm_link.ELBOW_M3_COUNTERSINK_DIAMETER > forearm_link.M3_CLEARANCE
     assert 0 < forearm_link.ELBOW_M3_COUNTERSINK_DEPTH < forearm_link.BOTTOM_HUB_THICKNESS / 2
+
+
+def test_forearm_wrist_clevis_clears_gripper_base_pivot_boss() -> None:
+    from models import forearm_link, sg90_gripper_base
+
+    model = forearm_link.build_model()
+    bbox = model.bounding_box()
+
+    assert forearm_link.CLEVIS_GAP_X == pytest.approx(29.0)
+    assert forearm_link.WRIST_CLEVIS_GAP_CENTER_X == pytest.approx(2.0)
+    assert forearm_link.CLEVIS_GAP_X > sg90_gripper_base.CLEVIS_TONGUE_WIDTH
+    assert sg90_gripper_base.DECK_ROOT_WIDTH < forearm_link.CLEVIS_GAP_X
+    assert sg90_gripper_base.DECK_FLARE_FULL_Y > (
+        sg90_gripper_base.WRIST_JOINT_ROTATION_CLEARANCE_RADIUS
+    )
+    assert forearm_link.WRIST_CLEVIS_CLEARANCE_Z > 2 * (
+        sg90_gripper_base.WRIST_JOINT_ROTATION_CLEARANCE_RADIUS
+        + sg90_gripper_base.PLATE_THICKNESS / 2
+    )
+    assert forearm_link.WRIST_HULL_WIDTH_Y > forearm_link.CLEVIS_WIDTH_Y
+    assert forearm_link.WRIST_HULL_TRANSITION_START_Z < (
+        forearm_link.TOP_WRIST_PIVOT_Z - forearm_link.CLEVIS_HEIGHT_Z / 2
+    )
+    assert bbox.max.Z - forearm_link.TOP_WRIST_PIVOT_Z == pytest.approx(
+        forearm_link.CLEVIS_WIDTH_Y / 2
+    )
+
+
+def test_master_wrist_joint_stacks_pulley_and_gripper_with_clearance() -> None:
+    from models import bicep_arm_link, forearm_link, sg90_gripper_base
+    from models.master_assembly import PULLEY_SIDE_CLEARANCE, WRIST_STACK_CLEARANCE, build_model
+    from models.transmission_components import PULLEY_TOTAL_HEIGHT
+
+    assembly = build_model()
+    children_by_label = {child.label: child for child in assembly.children}
+    wrist_pulley = children_by_label["wrist_32T_HTD3M_16p15_4xM3_20BC"]
+    gripper = children_by_label["sg90_gripper_base"]
+
+    side_clearance = (
+        bicep_arm_link.ELBOW_CLEVIS_GAP_X
+        - forearm_link.BOTTOM_HUB_THICKNESS
+        - PULLEY_TOTAL_HEIGHT
+        - PULLEY_SIDE_CLEARANCE
+    ) / 2
+    elbow_pulley_x = (
+        -bicep_arm_link.ELBOW_CLEVIS_GAP_X / 2
+        + side_clearance
+        + PULLEY_TOTAL_HEIGHT / 2
+    )
+    forearm_x = (
+        elbow_pulley_x
+        + PULLEY_TOTAL_HEIGHT / 2
+        + PULLEY_SIDE_CLEARANCE
+        + forearm_link.BOTTOM_HUB_THICKNESS / 2
+    )
+    wrist_pulley_x = forearm_x - (
+        forearm_link.LINK_THICKNESS_X / 2
+        + forearm_link.MOTOR_FACE_THICKNESS_X
+        - PULLEY_TOTAL_HEIGHT / 2
+    )
+    expected_gripper_x = (
+        wrist_pulley_x
+        + PULLEY_TOTAL_HEIGHT / 2
+        + WRIST_STACK_CLEARANCE
+        + sg90_gripper_base.CLEVIS_TONGUE_WIDTH / 2
+    )
+
+    wrist_pulley_bbox = wrist_pulley.bounding_box()
+    gripper_bbox = gripper.bounding_box()
+    wrist_clevis_min_x = (
+        forearm_x
+        + forearm_link.WRIST_CLEVIS_GAP_CENTER_X
+        - forearm_link.CLEVIS_GAP_X / 2
+    )
+    wrist_clevis_max_x = (
+        forearm_x
+        + forearm_link.WRIST_CLEVIS_GAP_CENTER_X
+        + forearm_link.CLEVIS_GAP_X / 2
+    )
+    gripper_tongue_min_x = expected_gripper_x - sg90_gripper_base.CLEVIS_TONGUE_WIDTH / 2
+    gripper_tongue_max_x = expected_gripper_x + sg90_gripper_base.CLEVIS_TONGUE_WIDTH / 2
+    pulley_to_gripper_clearance = gripper_tongue_min_x - wrist_pulley_bbox.max.X
+    pulley_side_clearance = wrist_pulley_bbox.min.X - wrist_clevis_min_x
+    gripper_side_clearance = wrist_clevis_max_x - gripper_tongue_max_x
+
+    assert pulley_to_gripper_clearance == pytest.approx(WRIST_STACK_CLEARANCE)
+    assert 1.0 <= pulley_side_clearance <= 2.0
+    assert 1.0 <= gripper_side_clearance <= 2.0
+    assert (gripper_bbox.min.X + gripper_bbox.max.X) / 2 == pytest.approx(expected_gripper_x)
+
+
+def test_forearm_wrist_belt_has_installation_relief() -> None:
+    from models import forearm_link
+
+    assert forearm_link.WRIST_BELT_PULLEY_RELIEF_MARGIN >= 3.0
+    assert forearm_link.WRIST_BELT_CHANNEL_DEPTH_X > forearm_link.WRIST_BELT_WIDTH
+    assert forearm_link.WRIST_BELT_CHANNEL_OUTER_X < -forearm_link.LINK_THICKNESS_X / 2
+
+
+def test_wrist_pulley_has_m3_counterbores_for_gripper_base() -> None:
+    from models import transmission_components
+    from models.common import M3_CLEARANCE
+
+    pulley = transmission_components.build_wrist_pulley()
+    bbox = pulley.bounding_box()
+
+    assert bbox.size.Z == pytest.approx(transmission_components.PULLEY_TOTAL_HEIGHT)
+    assert transmission_components.WRIST_PULLEY_M3_COUNTERBORE_DIAMETER > M3_CLEARANCE
+    assert 0 < transmission_components.WRIST_PULLEY_M3_COUNTERBORE_DEPTH < (
+        transmission_components.PULLEY_TOTAL_HEIGHT / 2
+    )
 
 
 def test_base_120t_gear_has_bottom_m3_counterbores_for_turntable() -> None:
