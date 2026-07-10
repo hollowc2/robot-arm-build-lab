@@ -53,6 +53,12 @@ VIEWER_PARTS = (
     ("wrist_20T_to_32T_HTD3M_open_belt_visual", [-30, -36, 228], [-2, 36, 244], "active"),
     ("wrist_pivot_5mm_shaft", [4, -3, 246], [54, 3, 252], "active"),
     ("sg90_gripper_base", [14, -18, 246], [50, 18, 286], "active"),
+    ("left_sg90_gripper_jaw", [12, 48, 260], [30, 136, 266], "active"),
+    ("right_sg90_gripper_jaw", [34, 48, 260], [52, 136, 266], "active"),
+    ("left_sg90_servo_horn_adapter", [13, 44, 254], [28, 68, 258], "active"),
+    ("right_sg90_servo_horn_adapter", [36, 44, 254], [51, 68, 258], "active"),
+    ("left_sg90_gripper_pushrod", [12, 62, 266], [30, 94, 271], "active"),
+    ("right_sg90_gripper_pushrod", [34, 62, 266], [52, 94, 271], "active"),
     ("wrist_32T_HTD3M_16p15_4xM3_20BC", [-20, -19, 246], [-6, 19, 260], "active"),
 )
 
@@ -101,6 +107,13 @@ def _matching_children(entry_name: str, children: list[dict[str, object]]) -> li
         return [child for child in children if "shaft" in child["name"] or "spacer" in child["name"]]
     if entry_name == "transmission_components":
         return [child for child in children if any(token in child["name"] for token in ("pulley", "belt", "gear", "pinion"))]
+    if entry_name == "sg90_parallel_gripper":
+        return [
+            child
+            for child in children
+            if child["name"] == "sg90_gripper_base"
+            or any(token in child["name"] for token in ("gripper_jaw", "servo_horn_adapter", "gripper_pushrod"))
+        ]
     if entry_name == "byj48_stepper_motor":
         return [child for child in children if "28BYJ" in child["name"]]
     if entry_name == "nema17_stepper_motor":

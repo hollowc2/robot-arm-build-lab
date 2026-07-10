@@ -13,6 +13,7 @@ PART_MODULES = [
     "models.wire_management",
     "models.joint_shafts",
     "models.sg90_gripper_base",
+    "models.sg90_parallel_gripper",
     "models.byj48_stepper_motor",
     "models.nema17_stepper_motor",
     "models.transmission_components",
@@ -348,7 +349,7 @@ def test_master_wrist_joint_stacks_pulley_and_gripper_with_clearance() -> None:
     assembly = build_model()
     children_by_label = {child.label: child for child in assembly.children}
     wrist_pulley = children_by_label["wrist_32T_HTD3M_16p15_4xM3_20BC"]
-    gripper = children_by_label["sg90_gripper_base"]
+    gripper = children_by_label["sg90_parallel_gripper"]
 
     side_clearance = (
         bicep_arm_link.ELBOW_CLEVIS_GAP_X
@@ -401,6 +402,30 @@ def test_master_wrist_joint_stacks_pulley_and_gripper_with_clearance() -> None:
     assert 1.0 <= pulley_side_clearance <= 2.0
     assert 1.0 <= gripper_side_clearance <= 2.0
     assert (gripper_bbox.min.X + gripper_bbox.max.X) / 2 == pytest.approx(expected_gripper_x)
+
+
+def test_sg90_parallel_gripper_has_mirrored_printable_linkage() -> None:
+    from models import sg90_gripper_base, sg90_parallel_gripper
+    from models.common import M3_CLEARANCE, M3_TAP_HOLE
+
+    gripper = sg90_parallel_gripper.build_model()
+    labels = {child.label for child in gripper.children}
+    bbox = gripper.bounding_box()
+
+    assert "sg90_gripper_base" in labels
+    assert "left_sg90_gripper_jaw" in labels
+    assert "right_sg90_gripper_jaw" in labels
+    assert "left_sg90_servo_horn_adapter" in labels
+    assert "right_sg90_servo_horn_adapter" in labels
+    assert "left_sg90_gripper_pushrod" in labels
+    assert "right_sg90_gripper_pushrod" in labels
+    assert sg90_parallel_gripper.JAW_TIP_GAP == pytest.approx(13.0)
+    assert sg90_parallel_gripper.JAW_PIVOT_CLEARANCE > sg90_gripper_base.GRIPPER_POST_DIAMETER
+    assert sg90_parallel_gripper.JAW_RETAINING_SCREW_PILOT == pytest.approx(M3_TAP_HOLE)
+    assert sg90_parallel_gripper.LINK_WIDTH > M3_CLEARANCE
+    assert bbox.size.X <= sg90_gripper_base.OVERALL_WIDTH
+    assert bbox.size.Y > sg90_gripper_base.OVERALL_LENGTH
+    assert bbox.size.Z < 45.0
 
 
 def test_forearm_wrist_belt_has_installation_relief() -> None:

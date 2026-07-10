@@ -35,8 +35,9 @@ def build_model() -> Compound:
             build_nema17_driver_board_tray,
         )
         from models.nema17_stepper_motor import build_model as build_nema17
-        from models import sg90_gripper_base as gripper_model
-        from models.sg90_gripper_base import build_model as build_gripper
+        from models import sg90_gripper_base as gripper_base_model
+        from models import sg90_parallel_gripper as gripper_model
+        from models.sg90_parallel_gripper import build_model as build_gripper
         from models.transmission_components import (
             PULLEY_TOTAL_HEIGHT,
             build_base_driven_gear,
@@ -82,8 +83,9 @@ def build_model() -> Compound:
         from geared_base_stator import build_model as build_stator
         from byj48_stepper_motor import build_model as build_byj48
         from nema17_stepper_motor import build_model as build_nema17
-        import sg90_gripper_base as gripper_model
-        from sg90_gripper_base import build_model as build_gripper
+        import sg90_gripper_base as gripper_base_model
+        import sg90_parallel_gripper as gripper_model
+        from sg90_parallel_gripper import build_model as build_gripper
         from transmission_components import (
             PULLEY_TOTAL_HEIGHT,
             build_base_driven_gear,
@@ -159,10 +161,10 @@ def build_model() -> Compound:
         wrist_pulley_x
         + PULLEY_TOTAL_HEIGHT / 2
         + WRIST_STACK_CLEARANCE
-        + gripper_model.CLEVIS_TONGUE_WIDTH / 2
+        + gripper_base_model.CLEVIS_TONGUE_WIDTH / 2
     )
     wrist_stack_min_x = wrist_pulley_x - PULLEY_TOTAL_HEIGHT / 2
-    wrist_stack_max_x = wrist_gripper_x + gripper_model.CLEVIS_TONGUE_WIDTH / 2
+    wrist_stack_max_x = wrist_gripper_x + gripper_base_model.CLEVIS_TONGUE_WIDTH / 2
     wrist_clevis_min_x = forearm_x - forearm_model.CLEVIS_GAP_X / 2
     wrist_clevis_max_x = forearm_x + forearm_model.CLEVIS_GAP_X / 2
     wrist_clevis_min_x += forearm_model.WRIST_CLEVIS_GAP_CENTER_X
@@ -189,7 +191,7 @@ def build_model() -> Compound:
     forearm = forearm_model.build_model().moved(Pos(forearm_x, 0, elbow_pivot_z))
     forearm.label = "forearm_link"
     gripper = build_gripper().moved(Pos(wrist_gripper_x, 0, wrist_pivot_z) * Rot(0, 0, 0))
-    gripper.label = "sg90_gripper_base"
+    gripper.label = gripper_model.MODEL_NAME
     shoulder_shaft = build_shoulder_pivot_shaft().moved(Pos(0, 0, shoulder_pivot_z))
     elbow_shaft = build_elbow_pivot_shaft().moved(Pos(0, 0, elbow_pivot_z))
     wrist_shaft = build_wrist_pivot_shaft().moved(Pos(forearm_x, 0, wrist_pivot_z))

@@ -18,6 +18,7 @@ try:
     from models.common import (
         BEARING_625_OD,
         M3_CLEARANCE,
+        M3_TAP_HOLE,
         SG90_BODY_X,
         SG90_BODY_Y,
         SG90_TAB_SPACING,
@@ -30,6 +31,7 @@ except ModuleNotFoundError:
     from common import (
         BEARING_625_OD,
         M3_CLEARANCE,
+        M3_TAP_HOLE,
         SG90_BODY_X,
         SG90_BODY_Y,
         SG90_TAB_SPACING,
@@ -178,6 +180,12 @@ def build_model():
                 )
             with Locations((post_x, GRIPPER_POST_Y, post_start_z + 2.5 + post_stem_height / 2)):
                 Cylinder(radius=GRIPPER_POST_DIAMETER / 2, height=post_stem_height)
+            with Locations((post_x, GRIPPER_POST_Y, post_start_z + GRIPPER_POST_HEIGHT / 2)):
+                Cylinder(
+                    radius=M3_TAP_HOLE / 2,
+                    height=GRIPPER_POST_HEIGHT + 1.0,
+                    mode=Mode.SUBTRACT,
+                )
 
     return part.part
 
