@@ -36,6 +36,18 @@ uv run python models/master_assembly.py
 
 That command updates `models/out/robot_arm_master_assembly.step` and `models/out/robot_arm_master_assembly.stl`.
 
+To refresh the website after changing any model:
+
+```bash
+uv run python scripts/generate_catalog.py
+uv run python scripts/generate_progress_feed.py
+uv run python scripts/export_models.py
+uv run python scripts/publish_web_models.py
+cd site && npm run build
+```
+
+The export also creates the rigid-link meshes used by `/robot-arm/simulator/`.
+
 ## Current CAD Notes
 
 - The base drive uses a 120T module-1 herringbone gear driven by a 20T NEMA17 pinion at a 70 mm center distance.

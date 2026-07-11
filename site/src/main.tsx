@@ -301,6 +301,249 @@ function ModelViewer({
   return <div className="viewer" ref={mountRef} aria-label="STL model viewer" />;
 }
 
+type JointAngles = {
+  base: number;
+  shoulder: number;
+  elbow: number;
+  wrist: number;
+  gripper: number;
+};
+
+const homePose: JointAngles = { base: 0, shoulder: 0, elbow: 0, wrist: 0, gripper: 0 };
+const jointLimits: Record<keyof JointAngles, [number, number]> = {
+  base: [0, 360],
+  shoulder: [-130, 130],
+  elbow: [-135, 135],
+  wrist: [-150, 18],
+  gripper: [0, 24],
+};
+
+function clampJoint(name: keyof JointAngles, value: number) {
+  const [min, max] = jointLimits[name];
+  return Math.max(min, Math.min(max, value));
+}
+
+function RobotSimulator() {
+  const mountRef = useRef<HTMLDivElement | null>(null);
+  const jointsRef = useRef({ ...homePose });
+  const [joints, setJoints] = useState({ ...homePose });
+  const [loaded, setLoaded] = useState(0);
+
+  useEffect(() => {
+    if (!mountRef.current) return undefined;
+    const mount = mountRef.current;
+    let frame = 0;
+    const scene = new THREE.Scene();
+    scene.background = new THREE.Color("#101418");
+    const camera = new THREE.PerspectiveCamera(34, mount.clientWidth / mount.clientHeight, 0.1, 3000);
+    camera.up.set(0, 0, 1);
+    camera.position.set(650, -650, 560);
+    camera.lookAt(0, 0, 260);
+    const renderer = new THREE.WebGLRenderer({ antialias: true });
+    renderer.setPixelRatio(Math.min(window.devicePixelRatio, 2));
+    renderer.setSize(mount.clientWidth, mount.clientHeight);
+    mount.appendChild(renderer.domElement);
+    const controls = new OrbitControls(camera, renderer.domElement);
+    controls.target.set(0, 0, 260);
+    controls.enableDamping = true;
+    controls.dampingFactor = 0.08;
+    controls.minDistance = 280;
+    controls.maxDistance = 1800;
+    scene.add(new THREE.HemisphereLight("#ffffff", "#44515e", 2.5));
+    const light = new THREE.DirectionalLight("#ffffff", 3);
+    light.position.set(200, -250, 400);
+    scene.add(light);
+    const grid = new THREE.GridHelper(900, 30, "#52616f", "#2b333b");
+    grid.rotation.x = Math.PI / 2;
+    scene.add(grid);
+
+    const base = new THREE.Group();
+    const shoulder = new THREE.Group();
+    const elbow = new THREE.Group();
+    const wrist = new THREE.Group();
+    const leftJaw = new THREE.Group();
+    const rightJaw = new THREE.Group();
+    shoulder.position.set(0, 0, 162.03);
+    elbow.position.set(0, 0, 175.35);
+    wrist.position.set(-6, 0, 167.33);
+    scene.add(base);
+    base.add(shoulder);
+    shoulder.add(elbow);
+    elbow.add(wrist);
+    wrist.add(leftJaw, rightJaw);
+
+    const load = (name: string, parent: THREE.Object3D, offset: [number, number, number], material: string | THREE.Material = "#d47a4c") => {
+      new STLLoader().load(`${generatedBase}/models/${name}.stl`, (geometry) => {
+        geometry.computeVertexNormals();
+        const mesh = new THREE.Mesh(geometry, typeof material === "string"
+          ? new THREE.MeshStandardMaterial({ color: material, roughness: 0.62, metalness: 0.12 })
+          : material);
+        mesh.position.set(...offset);
+        parent.add(mesh);
+        setLoaded((count) => count + 1);
+      });
+    };
+    const loadPulley = (name: string, parent: THREE.Object3D, offset: [number, number, number]) => {
+      const pivot = new THREE.Group();
+      new STLLoader().load(`${generatedBase}/models/${name}.stl`, (geometry) => {
+        geometry.computeVertexNormals();
+        geometry.computeBoundingBox();
+        const center = geometry.boundingBox!.getCenter(new THREE.Vector3());
+        pivot.position.copy(center).add(new THREE.Vector3(...offset));
+        const mesh = new THREE.Mesh(geometry, new THREE.MeshStandardMaterial({ color: "#e7b84b", roughness: 0.5, metalness: 0.2 }));
+        mesh.position.copy(center).multiplyScalar(-1);
+        pivot.add(mesh);
+        parent.add(pivot);
+        setLoaded((count) => count + 1);
+      });
+      return pivot;
+    };
+    const belt = (name: string, parent: THREE.Object3D, offset: [number, number, number]) => {
+      const phase = { value: 0 };
+      load(name, parent, offset, new THREE.ShaderMaterial({
+        uniforms: { phase, beltColor: { value: new THREE.Color("#050505") } },
+        vertexShader: "varying vec3 p; void main(){p=position;gl_Position=projectionMatrix*modelViewMatrix*vec4(position,1.0);}",
+        fragmentShader: "uniform float phase;uniform vec3 beltColor;varying vec3 p;void main(){float stripe=step(.5,fract((p.y+p.z)/6.0+phase));gl_FragColor=vec4(beltColor+stripe*.04,1.0);}",
+      }));
+      return phase;
+    };
+    load("simulator_base_fixed", scene, [0, 0, 0], "#677985");
+    load("simulator_base_yaw", base, [0, 0, 0]);
+    load("simulator_upper_arm", shoulder, [0, 0, -162.03]);
+    load("simulator_forearm", elbow, [0, 0, -337.38]);
+    load("simulator_wrist_hardware", wrist, [6, 0, -504.71], "#8f9da6");
+    load("simulator_gripper_base", wrist, [0, 0, 0], "#60a5a1");
+    load("simulator_gripper_left", leftJaw, [0, 0, 0], "#60a5a1");
+    load("simulator_gripper_right", rightJaw, [0, 0, 0], "#60a5a1");
+    const shoulderDriver = loadPulley("simulator_shoulder_driver", base, [0, 0, 0]);
+    loadPulley("simulator_shoulder_driven", shoulder, [0, 0, -162.03]);
+    const shoulderBelt = belt("simulator_shoulder_belt", base, [0, 0, 0]);
+    const elbowDriver = loadPulley("simulator_elbow_driver", shoulder, [0, 0, -162.03]);
+    loadPulley("simulator_elbow_driven", elbow, [0, 0, -337.38]);
+    const elbowBelt = belt("simulator_elbow_belt", shoulder, [0, 0, -162.03]);
+    const wristDriver = loadPulley("simulator_wrist_driver", elbow, [0, 0, -337.38]);
+    loadPulley("simulator_wrist_driven", wrist, [6, 0, -504.71]);
+    const wristBelt = belt("simulator_wrist_belt", elbow, [0, 0, -337.38]);
+
+    let lastTime = performance.now();
+    let lastGamepadUpdate = 0;
+    const render = (time = performance.now()) => {
+      frame = requestAnimationFrame(render);
+      const gamepad = navigator.getGamepads?.().find((pad) => pad?.connected);
+      if (gamepad) {
+        const elapsed = Math.min((time - lastTime) / 1000, 0.05);
+        const axis = (index: number) => Math.abs(gamepad.axes[index] ?? 0) > 0.12 ? gamepad.axes[index] : 0;
+        const pose = jointsRef.current;
+        pose.base = (pose.base + axis(0) * 100 * elapsed + 360) % 360;
+        pose.shoulder = clampJoint("shoulder", pose.shoulder - axis(1) * 80 * elapsed);
+        pose.wrist = clampJoint("wrist", pose.wrist + axis(2) * 80 * elapsed);
+        pose.elbow = clampJoint("elbow", pose.elbow - axis(3) * 80 * elapsed);
+        pose.gripper = clampJoint("gripper", pose.gripper + ((gamepad.buttons[7]?.value ?? 0) - (gamepad.buttons[6]?.value ?? 0)) * 18 * elapsed);
+        if (gamepad.buttons[0]?.pressed) Object.assign(pose, homePose);
+        if (time - lastGamepadUpdate > 100) {
+          setJoints({ ...pose });
+          lastGamepadUpdate = time;
+        }
+      }
+      lastTime = time;
+      const pose = jointsRef.current;
+      base.rotation.z = THREE.MathUtils.degToRad(-pose.base);
+      shoulder.rotation.x = THREE.MathUtils.degToRad(-pose.shoulder);
+      elbow.rotation.x = THREE.MathUtils.degToRad(pose.elbow);
+      wrist.rotation.x = THREE.MathUtils.degToRad(-pose.wrist);
+      shoulderDriver.rotation.x = THREE.MathUtils.degToRad(-pose.shoulder * 5);
+      elbowDriver.rotation.x = THREE.MathUtils.degToRad(pose.elbow * 3.75);
+      wristDriver.rotation.x = THREE.MathUtils.degToRad(-pose.wrist * 1.6);
+      shoulderBelt.value = -pose.shoulder * 16 / 360;
+      elbowBelt.value = pose.elbow * 16 / 360;
+      wristBelt.value = -pose.wrist * 20 / 360;
+      leftJaw.position.x = -pose.gripper / 2;
+      rightJaw.position.x = pose.gripper / 2;
+      controls.update();
+      renderer.render(scene, camera);
+    };
+    render();
+    const resize = () => {
+      camera.aspect = mount.clientWidth / mount.clientHeight;
+      camera.updateProjectionMatrix();
+      renderer.setSize(mount.clientWidth, mount.clientHeight);
+    };
+    window.addEventListener("resize", resize);
+    return () => {
+      cancelAnimationFrame(frame);
+      window.removeEventListener("resize", resize);
+      controls.dispose();
+      scene.traverse((child) => {
+        if (child instanceof THREE.Mesh) {
+          child.geometry.dispose();
+          (Array.isArray(child.material) ? child.material : [child.material]).forEach((material) => material.dispose());
+        }
+      });
+      renderer.dispose();
+      mount.removeChild(renderer.domElement);
+    };
+  }, []);
+
+  const setJoint = (name: keyof JointAngles, value: number) => {
+    const next = { ...jointsRef.current, [name]: clampJoint(name, value) };
+    jointsRef.current = next;
+    setJoints(next);
+  };
+  const nudge = (name: keyof JointAngles, amount: number) => {
+    const value = jointsRef.current[name] + amount;
+    setJoint(name, name === "base" ? (value + 360) % 360 : value);
+  };
+
+  return (
+    <main className="simulator-page">
+      <header className="simulator-header">
+        <div><p className="eyebrow">Robot Arm Build Lab</p><h1>Master Assembly Simulator</h1></div>
+        <a href={import.meta.env.BASE_URL}>Back to model explorer</a>
+      </header>
+      <div className="simulator-layout">
+        <div className="simulator-view" ref={mountRef} aria-label="Articulated robot arm simulator" />
+        <div className="simulator-controls">
+          <p>{loaded}/17 CAD and drivetrain meshes loaded</p>
+          {([
+            ["base", "Base yaw", 0, 360, "°"],
+            ["shoulder", "Shoulder", -130, 130, "°"],
+            ["elbow", "Elbow", -135, 135, "°"],
+            ["wrist", "Wrist pitch", -150, 18, "°"],
+            ["gripper", "Gripper opening", 0, 24, " mm"],
+          ] as const).map(([name, label, min, max, unit]) => (
+            <label key={name}>
+              <span>{label}<strong>{joints[name]}{unit}</strong></span>
+              <input aria-label={label} type="range" min={min} max={max} value={joints[name]} onChange={(event) => setJoint(name, Number(event.target.value))} />
+            </label>
+          ))}
+          <div className="controller-pads">
+            <div className="d-pad" aria-label="Base and shoulder controls">
+              <button type="button" aria-label="Shoulder forward" onClick={() => nudge("shoulder", 5)}>▲</button>
+              <button type="button" aria-label="Base left" onClick={() => nudge("base", -5)}>◀</button>
+              <span>L</span>
+              <button type="button" aria-label="Base right" onClick={() => nudge("base", 5)}>▶</button>
+              <button type="button" aria-label="Shoulder back" onClick={() => nudge("shoulder", -5)}>▼</button>
+            </div>
+            <div className="d-pad" aria-label="Elbow and wrist controls">
+              <button type="button" aria-label="Elbow forward" onClick={() => nudge("elbow", 5)}>▲</button>
+              <button type="button" aria-label="Wrist back" onClick={() => nudge("wrist", -5)}>◀</button>
+              <span>R</span>
+              <button type="button" aria-label="Wrist forward" onClick={() => nudge("wrist", 5)}>▶</button>
+              <button type="button" aria-label="Elbow back" onClick={() => nudge("elbow", -5)}>▼</button>
+            </div>
+          </div>
+          <div className="gripper-buttons">
+            <button type="button" onClick={() => nudge("gripper", -2)}>Close</button>
+            <button type="button" onClick={() => nudge("gripper", 2)}>Open</button>
+          </div>
+          <button type="button" onClick={() => { jointsRef.current = { ...homePose }; setJoints({ ...homePose }); }}>Home all joints</button>
+          <small>Drag to orbit, scroll to zoom. Xbox: left stick = base/shoulder, right stick = wrist/elbow, triggers = gripper, A = home.</small>
+        </div>
+      </div>
+    </main>
+  );
+}
+
 function App() {
   const { data: catalog, error: catalogError } = useJson<Catalog>(`${generatedBase}/catalog.json`);
   const { data: viewerModel, error: viewerError } = useJson<ViewerModel>(`${generatedBase}/viewer-model.json`);
@@ -416,6 +659,7 @@ function App() {
               <span>{selectedTarget?.subtitle ?? "Generated CAD asset"}</span>
             </div>
             <div className="viewer-actions">
+              <a href={`${import.meta.env.BASE_URL}simulator/`}>Open Simulator</a>
               <label>
                 <input type="checkbox" checked={wireframe} onChange={(event) => setWireframe(event.target.checked)} />
                 Wireframe
@@ -550,6 +794,6 @@ function App() {
 
 createRoot(document.getElementById("root")!).render(
   <React.StrictMode>
-    <App />
+    {window.location.pathname.endsWith("/simulator/") ? <RobotSimulator /> : <App />}
   </React.StrictMode>,
 );

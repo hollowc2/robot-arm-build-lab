@@ -27,6 +27,9 @@ def main() -> None:
             continue
         shutil.copy2(source, WEB_MODEL_DIR / source.name)
 
+    for source in OUT_DIR.glob("simulator_*.stl"):
+        shutil.copy2(source, WEB_MODEL_DIR / source.name)
+
     if missing and not allow_missing:
         raise FileNotFoundError(
             "Missing STL exports for web publishing: " + ", ".join(sorted(missing))

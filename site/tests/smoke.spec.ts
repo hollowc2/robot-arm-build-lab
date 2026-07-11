@@ -15,6 +15,12 @@ test("dashboard loads a non-empty viewer", async ({ page }) => {
   await expect(page.getByRole("heading", { name: "Geared Base Stator" })).toBeVisible();
   await expect(page.getByText("STL loaded").first()).toBeVisible();
   await expect.poll(() => countRenderedPixels(canvas)).toBeGreaterThan(0);
+
+  await page.getByRole("link", { name: "Open Simulator" }).click();
+  await expect(page.getByRole("heading", { name: "Master Assembly Simulator" })).toBeVisible();
+  await expect(page.getByText("17/17 CAD and drivetrain meshes loaded")).toBeVisible();
+  await page.getByLabel("Shoulder").fill("45");
+  await expect(page.getByText("45°")).toBeVisible();
 });
 
 async function countRenderedPixels(canvas: Locator) {
