@@ -3,6 +3,7 @@ import { createRoot } from "react-dom/client";
 import * as THREE from "three";
 import { OrbitControls } from "three/examples/jsm/controls/OrbitControls.js";
 import { STLLoader } from "three/examples/jsm/loaders/STLLoader.js";
+import { advanceMotion } from "./motion";
 import "./styles.css";
 
 type BoundingBox = {
@@ -317,6 +318,15 @@ const jointLimits: Record<keyof JointAngles, [number, number]> = {
   wrist: [-150, 18],
   gripper: [0, 24],
 };
+// Real hardware will vary; keep these two limits per joint easy to calibrate.
+const jointMotion: Record<keyof JointAngles, { maxSpeed: number; acceleration: number }> = {
+  base: { maxSpeed: 90, acceleration: 180 },
+  shoulder: { maxSpeed: 70, acceleration: 140 },
+  elbow: { maxSpeed: 80, acceleration: 160 },
+  wrist: { maxSpeed: 100, acceleration: 200 },
+  gripper: { maxSpeed: 16, acceleration: 32 },
+};
+const jointNames = Object.keys(homePose) as (keyof JointAngles)[];
 
 function clampJoint(name: keyof JointAngles, value: number) {
   const [min, max] = jointLimits[name];
@@ -326,6 +336,8 @@ function clampJoint(name: keyof JointAngles, value: number) {
 function RobotSimulator() {
   const mountRef = useRef<HTMLDivElement | null>(null);
   const jointsRef = useRef({ ...homePose });
+  const targetsRef = useRef({ ...homePose });
+  const velocitiesRef = useRef({ ...homePose });
   const [joints, setJoints] = useState({ ...homePose });
   const [loaded, setLoaded] = useState(0);
 
@@ -429,24 +441,31 @@ function RobotSimulator() {
     let lastGamepadUpdate = 0;
     const render = (time = performance.now()) => {
       frame = requestAnimationFrame(render);
+      const elapsed = Math.min((time - lastTime) / 1000, 0.05);
       const gamepad = navigator.getGamepads?.().find((pad) => pad?.connected);
       if (gamepad) {
-        const elapsed = Math.min((time - lastTime) / 1000, 0.05);
         const axis = (index: number) => Math.abs(gamepad.axes[index] ?? 0) > 0.12 ? gamepad.axes[index] : 0;
-        const pose = jointsRef.current;
-        pose.base = (pose.base + axis(0) * 100 * elapsed + 360) % 360;
-        pose.shoulder = clampJoint("shoulder", pose.shoulder - axis(1) * 80 * elapsed);
-        pose.wrist = clampJoint("wrist", pose.wrist + axis(2) * 80 * elapsed);
-        pose.elbow = clampJoint("elbow", pose.elbow - axis(3) * 80 * elapsed);
-        pose.gripper = clampJoint("gripper", pose.gripper + ((gamepad.buttons[7]?.value ?? 0) - (gamepad.buttons[6]?.value ?? 0)) * 18 * elapsed);
-        if (gamepad.buttons[0]?.pressed) Object.assign(pose, homePose);
+        const targets = targetsRef.current;
+        targets.base = (targets.base + axis(0) * 100 * elapsed + 360) % 360;
+        targets.shoulder = clampJoint("shoulder", targets.shoulder - axis(1) * 80 * elapsed);
+        targets.wrist = clampJoint("wrist", targets.wrist + axis(2) * 80 * elapsed);
+        targets.elbow = clampJoint("elbow", targets.elbow - axis(3) * 80 * elapsed);
+        targets.gripper = clampJoint("gripper", targets.gripper + ((gamepad.buttons[7]?.value ?? 0) - (gamepad.buttons[6]?.value ?? 0)) * 18 * elapsed);
+        if (gamepad.buttons[0]?.pressed) Object.assign(targets, homePose);
         if (time - lastGamepadUpdate > 100) {
-          setJoints({ ...pose });
+          setJoints({ ...targets });
           lastGamepadUpdate = time;
         }
       }
       lastTime = time;
       const pose = jointsRef.current;
+      const velocities = velocitiesRef.current;
+      jointNames.forEach((name) => {
+        [pose[name], velocities[name]] = advanceMotion(
+          pose[name], velocities[name], targetsRef.current[name],
+          jointMotion[name].maxSpeed, jointMotion[name].acceleration, elapsed, name === "base",
+        );
+      });
       base.rotation.z = THREE.MathUtils.degToRad(-pose.base);
       shoulder.rotation.x = THREE.MathUtils.degToRad(-pose.shoulder);
       elbow.rotation.x = THREE.MathUtils.degToRad(pose.elbow);
@@ -485,12 +504,12 @@ function RobotSimulator() {
   }, []);
 
   const setJoint = (name: keyof JointAngles, value: number) => {
-    const next = { ...jointsRef.current, [name]: clampJoint(name, value) };
-    jointsRef.current = next;
+    const next = { ...targetsRef.current, [name]: clampJoint(name, value) };
+    targetsRef.current = next;
     setJoints(next);
   };
   const nudge = (name: keyof JointAngles, amount: number) => {
-    const value = jointsRef.current[name] + amount;
+    const value = targetsRef.current[name] + amount;
     setJoint(name, name === "base" ? (value + 360) % 360 : value);
   };
 
@@ -536,7 +555,7 @@ function RobotSimulator() {
             <button type="button" onClick={() => nudge("gripper", -2)}>Close</button>
             <button type="button" onClick={() => nudge("gripper", 2)}>Open</button>
           </div>
-          <button type="button" onClick={() => { jointsRef.current = { ...homePose }; setJoints({ ...homePose }); }}>Home all joints</button>
+          <button type="button" onClick={() => { targetsRef.current = { ...homePose }; setJoints({ ...homePose }); }}>Home all joints</button>
           <small>Drag to orbit, scroll to zoom. Xbox: left stick = base/shoulder, right stick = wrist/elbow, triggers = gripper, A = home.</small>
         </div>
       </div>

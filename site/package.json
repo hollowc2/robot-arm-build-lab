@@ -8,6 +8,7 @@
     "typecheck": "tsc --noEmit",
     "build": "tsc --noEmit && vite build",
     "preview": "vite preview --host 127.0.0.1",
+    "test:motion": "node --experimental-strip-types --test tests/motion.test.mjs",
     "smoke": "playwright test"
   },
   "dependencies": {
