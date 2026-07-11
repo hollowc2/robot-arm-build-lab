@@ -3,9 +3,21 @@ from __future__ import annotations
 from build123d import Compound, Pos, Rot
 
 try:
-    from models.common import export_model
+    from models.common import (
+        BASE_GEAR_BOLT_CIRCLE,
+        ELBOW_PULLEY_BOLT_CIRCLE,
+        SHOULDER_PULLEY_BOLT_CIRCLE,
+        circle_points,
+        export_model,
+    )
 except ModuleNotFoundError:
-    from common import export_model
+    from common import (
+        BASE_GEAR_BOLT_CIRCLE,
+        ELBOW_PULLEY_BOLT_CIRCLE,
+        SHOULDER_PULLEY_BOLT_CIRCLE,
+        circle_points,
+        export_model,
+    )
 
 
 AZIMUTH_TURNTABLE_Z = 28.0
@@ -50,6 +62,7 @@ def build_model(configuration: str = "mechanical") -> Compound:
             build_wrist_htd_belt,
             build_wrist_keyed_shaft_adapter,
             build_wrist_pulley,
+            BASE_GEAR_BOLT_START_ANGLE,
         )
         from models.wire_management import (
             build_base_azimuth_service_loop_guard,
@@ -89,6 +102,7 @@ def build_model(configuration: str = "mechanical") -> Compound:
             build_wrist_htd_belt,
             build_wrist_keyed_shaft_adapter,
             build_wrist_pulley,
+            BASE_GEAR_BOLT_START_ANGLE,
         )
         from wire_management import (
             build_base_azimuth_service_loop_guard,
@@ -234,7 +248,24 @@ def build_model(configuration: str = "mechanical") -> Compound:
         build_m3_socket_screw(30.0).moved(Pos(wrist_gripper_x, y, wrist_pivot_z + z))
         for y, z in ((7.07, 7.07), (-7.07, 7.07), (-7.07, -7.07), (7.07, -7.07))
     ]
-    for index, part in enumerate((*servo_fasteners, *jaw_fasteners, *wrist_pulley_fasteners), 1):
+    # The remaining defined driveline bolt circles use the same M3 preview hardware.
+    base_gear_fasteners = [
+        build_m3_socket_screw(16.0, axis="z").moved(Pos(x, y, base_gear_z))
+        for x, y in circle_points(6, BASE_GEAR_BOLT_CIRCLE, start_angle=BASE_GEAR_BOLT_START_ANGLE)
+    ]
+    shoulder_pulley_fasteners = [
+        build_m3_socket_screw(30.0).moved(Pos(shoulder_pulley_x, y, shoulder_pivot_z + z))
+        for y, z in circle_points(4, SHOULDER_PULLEY_BOLT_CIRCLE, start_angle=45.0)
+    ]
+    elbow_pulley_fasteners = [
+        build_m3_socket_screw(30.0).moved(Pos(elbow_pulley_x, y, elbow_pivot_z + z))
+        for y, z in circle_points(4, ELBOW_PULLEY_BOLT_CIRCLE, start_angle=45.0)
+    ]
+    for index, part in enumerate(
+        (*base_gear_fasteners, *shoulder_pulley_fasteners, *elbow_pulley_fasteners,
+         *servo_fasteners, *jaw_fasteners, *wrist_pulley_fasteners),
+        1,
+    ):
         part.label = f"installed_M3_fastener_{index:02d}"
 
     shoulder_pulley = build_shoulder_pulley().moved(
@@ -421,12 +452,14 @@ def build_model(configuration: str = "mechanical") -> Compound:
             base_pinion,
             base_shaft,
             *base_bearings,
+            *base_gear_fasteners,
             turntable,
             shoulder_motor,
             shoulder_driver_pulley,
             shoulder_belt,
             shoulder_shaft,
             *shoulder_bearings,
+            *shoulder_pulley_fasteners,
             bicep,
             shoulder_spacer,
             elbow_motor,
@@ -435,6 +468,7 @@ def build_model(configuration: str = "mechanical") -> Compound:
             shoulder_pulley,
             elbow_shaft,
             *elbow_bearings,
+            *elbow_pulley_fasteners,
             forearm,
             elbow_pulley,
             wrist_motor,
