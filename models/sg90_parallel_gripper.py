@@ -55,6 +55,7 @@ LINK_Z_CENTER = JAW_Z_CENTER + JAW_THICKNESS / 2 + LINK_THICKNESS / 2 + 0.8
 PAD_THICKNESS = 2.4
 PAD_HEIGHT = 14.0
 PAD_Z_CENTER = JAW_Z_CENTER
+PRINT_PART_CLEARANCE = 8.0
 
 OVERALL_WIDTH = max(base_model.OVERALL_WIDTH, JAW_MAX_WIDTH_X)
 OVERALL_LENGTH = JAW_TIP_Y + 3.0
@@ -284,8 +285,30 @@ def build_model() -> Compound:
     return assembly
 
 
+def _place_on_print_bed(part, x: float, y: float):
+    """Move one flat part into a non-overlapping position with its bottom at Z=0."""
+    bbox = part.bounding_box()
+    return part.moved(Pos(x - bbox.min.X, y - bbox.min.Y, -bbox.min.Z))
+
+
+def build_printable_model() -> Compound:
+    """Build the six linkage parts laid out for printing, without the gripper base."""
+    parts = [
+        _place_on_print_bed(_build_jaw(-1), 0.0, 0.0),
+        _place_on_print_bed(_build_jaw(1), 28.0, 0.0),
+        _place_on_print_bed(_build_servo_horn_adapter(-1), 55.0, 0.0),
+        _place_on_print_bed(_build_servo_horn_adapter(1), 55.0, 35.0),
+        _place_on_print_bed(_build_link(-1), 82.0, 0.0),
+        _place_on_print_bed(_build_link(1), 82.0, 42.0),
+    ]
+    plate = Compound(children=parts, label=MODEL_NAME)
+    size = plate.bounding_box().size
+    assert_printable_extent((size.X, size.Y, size.Z))
+    return plate
+
+
 def main() -> None:
-    model = build_model()
+    model = build_printable_model()
     export_model(model, MODEL_NAME)
 
     try:

@@ -19,7 +19,8 @@ def main() -> None:
 
     for entry in MODEL_REGISTRY:
         module = importlib.import_module(entry.module)
-        model = module.build_model()
+        build_for_export = getattr(module, "build_printable_model", module.build_model)
+        model = build_for_export()
         export_model(model, entry.name)
 
 

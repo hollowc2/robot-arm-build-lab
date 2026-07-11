@@ -91,6 +91,21 @@ WRIST_BELT_CHANNEL_CENTER_X = WRIST_MOTOR_SIDE_SIGN * (
 WRIST_BELT_CHANNEL_OUTER_X = WRIST_BELT_CHANNEL_CENTER_X - WRIST_BELT_WIDTH / 2 - WRIST_BELT_CHANNEL_CLEARANCE_X
 WRIST_BELT_CHANNEL_DEPTH_X = WRIST_BELT_WIDTH + 2 * WRIST_BELT_CHANNEL_CLEARANCE_X
 WRIST_BELT_PULLEY_RELIEF_MARGIN = 3.0
+# The belt channel clears the belt body, but the pulley flanges extend farther
+# in X.  Keep the complete pulley stack out of the forearm, including a small
+# print/assembly allowance on both flange faces.
+WRIST_PULLEY_AXIAL_CLEARANCE_X = 0.8
+WRIST_PULLEY_FLANGE_HEIGHT = 1.5
+WRIST_PULLEY_TOTAL_HEIGHT = WRIST_BELT_WIDTH + 2 * WRIST_PULLEY_FLANGE_HEIGHT
+WRIST_PULLEY_RELIEF_CENTER_X = WRIST_BELT_CHANNEL_CENTER_X
+WRIST_PULLEY_RELIEF_DEPTH_X = WRIST_PULLEY_TOTAL_HEIGHT + 2 * WRIST_PULLEY_AXIAL_CLEARANCE_X
+
+# A one-sided radial gate lets a closed belt loop enter the otherwise enclosed
+# belt channel.  It is positioned on the long, upper run--away from the motor
+# mounting slots and wrist bearing ears.
+WRIST_BELT_ENTRY_WIDTH_YZ = 5.2
+WRIST_BELT_ENTRY_EDGE_CLEARANCE_Y = 1.0
+WRIST_BELT_ENTRY_RUN_FRACTION = 0.52
 
 ELBOW_BOLT_HEAD_SIDE_SIGN = -1
 ELBOW_M3_COUNTERSINK_DIAMETER = 6.8
@@ -187,8 +202,8 @@ def _cut_wrist_belt_channel() -> None:
 
 
 def _cut_wrist_belt_loading_relief() -> None:
-    """Open the pulley-side pockets enough to install the wrist belt loop."""
-    relief_center_x = WRIST_BELT_CHANNEL_OUTER_X + WRIST_BELT_CHANNEL_DEPTH_X / 2
+    """Clear the complete pulley envelope, including both flanges."""
+    relief_center_x = WRIST_PULLEY_RELIEF_CENTER_X
     driver_radius = _pitch_radius(WRIST_DRIVER_TEETH) + WRIST_BELT_CHANNEL_SLOT_WIDTH_YZ / 2
     driven_radius = _pitch_radius(WRIST_DRIVEN_TEETH) + WRIST_BELT_CHANNEL_SLOT_WIDTH_YZ / 2
     reliefs = (
@@ -198,7 +213,34 @@ def _cut_wrist_belt_loading_relief() -> None:
 
     for z, radius in reliefs:
         with Locations((relief_center_x, 0, z)):
-            _x_cylinder(radius, WRIST_BELT_CHANNEL_DEPTH_X, Mode.SUBTRACT)
+            _x_cylinder(radius, WRIST_PULLEY_RELIEF_DEPTH_X, Mode.SUBTRACT)
+
+
+def _cut_wrist_belt_entry_path() -> None:
+    """Cut a service gate from the positive-Y edge into the upper belt run."""
+    driver_radius = _pitch_radius(WRIST_DRIVER_TEETH)
+    driven_radius = _pitch_radius(WRIST_DRIVEN_TEETH)
+    center_distance = TOP_WRIST_PIVOT_Z - MOTOR_SHAFT_Z
+    tangent_bias = (driver_radius - driven_radius) / center_distance
+    tangent_span = (1 - tangent_bias * tangent_bias) ** 0.5
+
+    # Use the positive-Y run.  Its point at the chosen fraction is inside the
+    # existing channel; the slot then opens through the outer rail to provide
+    # a real loading path for a continuous belt.
+    start_y = tangent_span * driver_radius
+    start_z = MOTOR_SHAFT_Z + tangent_bias * driver_radius
+    end_y = tangent_span * driven_radius
+    end_z = TOP_WRIST_PIVOT_Z + tangent_bias * driven_radius
+    run_y = start_y + (end_y - start_y) * WRIST_BELT_ENTRY_RUN_FRACTION
+    run_z = start_z + (end_z - start_z) * WRIST_BELT_ENTRY_RUN_FRACTION
+    edge_y = LINK_HALF_WIDTH_Y + WRIST_BELT_ENTRY_EDGE_CLEARANCE_Y
+    gate_length = edge_y - run_y + WRIST_BELT_CHANNEL_SLOT_WIDTH_YZ / 2
+
+    entry_start_x = WRIST_PULLEY_RELIEF_CENTER_X - WRIST_PULLEY_RELIEF_DEPTH_X / 2
+    with BuildSketch(Plane.YZ.offset(entry_start_x)) as entry:
+        with Locations(((run_y + edge_y) / 2, run_z)):
+            SlotCenterToCenter(gate_length, WRIST_BELT_ENTRY_WIDTH_YZ, rotation=0)
+    extrude(entry.sketch, amount=WRIST_PULLEY_RELIEF_DEPTH_X, mode=Mode.SUBTRACT)
 
 
 def _cut_wrist_clevis_clearance() -> None:
@@ -389,6 +431,7 @@ def build_model():
         _cut_wrist_clevis_clearance()
         _cut_wrist_belt_channel()
         _cut_wrist_belt_loading_relief()
+        _cut_wrist_belt_entry_path()
 
     model = forearm.part
     size = model.bounding_box().size
