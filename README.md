@@ -41,6 +41,15 @@ That command updates `models/out/robot_arm_master_assembly.step` and `models/out
 - The base drive uses a 120T module-1 herringbone gear driven by a 20T NEMA17 pinion at a 70 mm center distance.
 - The 120T gear's six M3 turntable holes are clocked to match the azimuth turntable and include bottom-side counterbores so hardware can sit below the gear when bolting up into the turntable.
 - The geared base stator carries the fixed center boss/bearing stack; keep the 120T gear center bore and vertical stack clear of that boss when adjusting the base assembly.
+- `models/belt_base_candidate.py` is the comparison design for the spare HTD 342-3M belt. It uses an 18T/108T pair to preserve the 6:1 base ratio; a 20T/120T pair is too large for that belt length.
+- `models/master_assembly.py` supports `mechanical`, `service`, and `guarded` configurations. The default remains `mechanical` for compatibility.
+- Printed guards and the electronics enclosure are prototypes until physical fit, full motion sweep, temperature, and interlock tests are recorded.
+
+## Child-Facing Safety Boundary
+
+This is an adult-supervised educational machine, not a certified toy. Do not energize it around children until the transmission guards, electronics enclosure, normally-closed limits, guard interlocks, external motor-power E-stop, current limits, homing, and bounded demonstration mode have all passed the checks in `content/safety-validation.md`.
+
+The Uno R4 owns motion safety. The ESP32 may provide a user interface but cannot directly enable drivers. Firmware opening an enable pin is secondary protection: the latching E-stop must interrupt 12 V motor power using appropriately rated external hardware.
 
 ## Local Site
 

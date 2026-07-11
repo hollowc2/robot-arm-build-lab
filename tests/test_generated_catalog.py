@@ -17,4 +17,15 @@ def test_viewer_model_contains_labeled_parts() -> None:
     assert "geared_base_stator" in names
     assert "bicep_arm_link" in names
     assert "forearm_link" in names
+    assert "base_drive_guard" in names
+    assert "electronics_enclosure" in names
     assert len(viewer_model["parts"]) >= 30
+
+
+def test_catalog_includes_safety_and_print_metadata() -> None:
+    catalog = build_catalog()
+    guarded = next(part for part in catalog["parts"] if part["name"] == "robot_arm_guarded_assembly")
+
+    assert guarded["material"] == "PETG"
+    assert guarded["guardDependencies"]
+    assert guarded["validation"] == "full-sweep-required"

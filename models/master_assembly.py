@@ -13,7 +13,9 @@ PULLEY_SIDE_CLEARANCE = 0.75
 WRIST_STACK_CLEARANCE = 1.0
 
 
-def build_model() -> Compound:
+def build_model(configuration: str = "mechanical") -> Compound:
+    if configuration not in {"mechanical", "guarded", "service"}:
+        raise ValueError("configuration must be mechanical, guarded, or service")
     try:
         from models import azimuth_turntable_shoulder_cleat as turntable_model
         from models import bicep_arm_link as bicep_model
@@ -28,12 +30,8 @@ def build_model() -> Compound:
             build_wrist_pivot_shaft,
         )
         from models.geared_base_stator import build_model as build_stator
+        from models.hardware import build_608_bearing, build_625_bearing, build_m3_socket_screw, build_sg90_servo
         from models.byj48_stepper_motor import build_model as build_byj48
-        from models.electronics_mounts import (
-            build_28byj_uln_board_tray,
-            build_arduino_uno_r4_minima_tray,
-            build_nema17_driver_board_tray,
-        )
         from models.nema17_stepper_motor import build_model as build_nema17
         from models import sg90_gripper_base as gripper_base_model
         from models import sg90_parallel_gripper as gripper_model
@@ -56,22 +54,12 @@ def build_model() -> Compound:
         from models.wire_management import (
             build_base_azimuth_service_loop_guard,
             build_base_cable_entry_strain_relief_guide,
-            build_bicep_harness_channel_marker,
-            build_elbow_service_loop_anchor,
-            build_forearm_harness_channel_marker,
-            build_shoulder_service_loop_anchor,
-            build_wrist_service_loop_anchor,
         )
     except ModuleNotFoundError:
         import azimuth_turntable_shoulder_cleat as turntable_model
         import bicep_arm_link as bicep_model
         import forearm_link as forearm_model
         import geared_base_stator as stator_model
-        from electronics_mounts import (
-            build_28byj_uln_board_tray,
-            build_arduino_uno_r4_minima_tray,
-            build_nema17_driver_board_tray,
-        )
         from joint_shafts import (
             SHOULDER_PIVOT_SPACER_LENGTH,
             build_base_azimuth_shaft,
@@ -81,6 +69,7 @@ def build_model() -> Compound:
             build_wrist_pivot_shaft,
         )
         from geared_base_stator import build_model as build_stator
+        from hardware import build_608_bearing, build_625_bearing, build_m3_socket_screw, build_sg90_servo
         from byj48_stepper_motor import build_model as build_byj48
         from nema17_stepper_motor import build_model as build_nema17
         import sg90_gripper_base as gripper_base_model
@@ -104,11 +93,6 @@ def build_model() -> Compound:
         from wire_management import (
             build_base_azimuth_service_loop_guard,
             build_base_cable_entry_strain_relief_guide,
-            build_bicep_harness_channel_marker,
-            build_elbow_service_loop_anchor,
-            build_forearm_harness_channel_marker,
-            build_shoulder_service_loop_anchor,
-            build_wrist_service_loop_anchor,
         )
 
     shoulder_pivot_z = AZIMUTH_TURNTABLE_Z + turntable_model.PIVOT_Z
@@ -152,7 +136,7 @@ def build_model() -> Compound:
         + PULLEY_SIDE_CLEARANCE
         + forearm_model.BOTTOM_HUB_THICKNESS / 2
     )
-    wrist_pulley_x = forearm_x - (
+    wrist_pulley_x = forearm_x + forearm_model.WRIST_ASSEMBLY_OFFSET_X - (
         forearm_model.LINK_THICKNESS_X / 2
         + forearm_model.MOTOR_FACE_THICKNESS_X
         - PULLEY_TOTAL_HEIGHT / 2
@@ -174,6 +158,8 @@ def build_model() -> Compound:
         or wrist_stack_max_x > wrist_clevis_max_x - WRIST_STACK_CLEARANCE
     ):
         raise ValueError("Wrist clevis gap must fit the driven pulley, gripper tongue, and side clearances.")
+    if abs(wrist_gripper_x) > 1e-9:
+        raise ValueError("Wrist offset must keep the gripper centered over the robot base.")
 
     stator = build_stator()
     stator.label = "geared_base_stator"
@@ -194,7 +180,62 @@ def build_model() -> Compound:
     gripper.label = gripper_model.MODEL_NAME
     shoulder_shaft = build_shoulder_pivot_shaft().moved(Pos(0, 0, shoulder_pivot_z))
     elbow_shaft = build_elbow_pivot_shaft().moved(Pos(0, 0, elbow_pivot_z))
-    wrist_shaft = build_wrist_pivot_shaft().moved(Pos(forearm_x, 0, wrist_pivot_z))
+    # Keep the trimmed shaft centered on the laterally offset wrist clevis.
+    wrist_shaft = build_wrist_pivot_shaft().moved(
+        Pos(forearm_x + forearm_model.WRIST_CLEVIS_GAP_CENTER_X, 0, wrist_pivot_z)
+    )
+
+    # Purchased hardware: bearing positions match the pockets cut into each joint.
+    base_bearings = [
+        build_608_bearing(axis="z").moved(Pos(0, 0, z))
+        for z in (30.5, 23.5)
+    ]
+    shoulder_bearings = [
+        build_608_bearing().moved(Pos(x, 0, shoulder_pivot_z)) for x in (-30.0, 30.0)
+    ]
+    elbow_bearing_x = bicep_model.ELBOW_CLEVIS_GAP_X / 2 + (5.0 + 0.25) / 2
+    elbow_bearings = [
+        build_625_bearing().moved(Pos(x, 0, elbow_pivot_z))
+        for x in (-elbow_bearing_x, elbow_bearing_x)
+    ]
+    wrist_bearings = [
+        build_625_bearing().moved(Pos(forearm_x + x, 0, wrist_pivot_z))
+        for x in (
+            forearm_model.WRIST_CLEVIS_GAP_CENTER_X - forearm_model.CLEVIS_GAP_X / 2 - forearm_model.CLEVIS_EAR_THICKNESS_X + 2.5,
+            forearm_model.WRIST_CLEVIS_GAP_CENTER_X + forearm_model.CLEVIS_GAP_X / 2 + forearm_model.CLEVIS_EAR_THICKNESS_X - 2.5,
+        )
+    ]
+    gripper_bearings = [
+        build_625_bearing().moved(Pos(wrist_gripper_x + x, 0, wrist_pivot_z))
+        for x in (-6.3, 6.3)
+    ]
+    sg90_servos = [
+        build_sg90_servo().moved(
+            Pos(wrist_gripper_x + x, gripper_base_model.SERVO_CENTER_Y, wrist_pivot_z + gripper_base_model.PLATE_THICKNESS / 2)
+        )
+        for x in (-gripper_base_model.SERVO_CENTER_X, gripper_base_model.SERVO_CENTER_X)
+    ]
+    for index, part in enumerate((*base_bearings, *shoulder_bearings, *elbow_bearings, *wrist_bearings, *gripper_bearings), 1):
+        part.label = f"installed_bearing_{index:02d}_{part.label}"
+    for index, part in enumerate(sg90_servos, 1):
+        part.label = f"installed_sg90_micro_servo_{index}"
+
+    # Visible fasteners at the gripper: four servo tabs, two jaw pivots, and wrist pulley bolts.
+    servo_fasteners = [
+        build_m3_socket_screw(8.0, axis="z").moved(Pos(wrist_gripper_x + x, y, wrist_pivot_z + 5.0))
+        for x in (-gripper_base_model.SERVO_CENTER_X, gripper_base_model.SERVO_CENTER_X)
+        for y in (gripper_base_model.SERVO_CENTER_Y - 16.0, gripper_base_model.SERVO_CENTER_Y + 16.0)
+    ]
+    jaw_fasteners = [
+        build_m3_socket_screw(18.0, axis="z").moved(Pos(wrist_gripper_x + x, gripper_base_model.GRIPPER_POST_Y, wrist_pivot_z + 11.0))
+        for x in (-gripper_base_model.SERVO_CENTER_X, gripper_base_model.SERVO_CENTER_X)
+    ]
+    wrist_pulley_fasteners = [
+        build_m3_socket_screw(30.0).moved(Pos(wrist_gripper_x, y, wrist_pivot_z + z))
+        for y, z in ((7.07, 7.07), (-7.07, 7.07), (-7.07, -7.07), (7.07, -7.07))
+    ]
+    for index, part in enumerate((*servo_fasteners, *jaw_fasteners, *wrist_pulley_fasteners), 1):
+        part.label = f"installed_M3_fastener_{index:02d}"
 
     shoulder_pulley = build_shoulder_pulley().moved(
         Pos(shoulder_pulley_x, 0, shoulder_pivot_z) * Rot(0, 90, 0)
@@ -237,7 +278,11 @@ def build_model() -> Compound:
     elbow_motor.label = "elbow_nema17_stepper_motor"
     wrist_motor_face_x = forearm_model.LINK_THICKNESS_X / 2 + forearm_model.MOTOR_FACE_THICKNESS_X
     wrist_motor = build_byj48().moved(
-        Pos(forearm_x - wrist_motor_face_x, 0, elbow_pivot_z + forearm_model.MOTOR_SHAFT_Z)
+        Pos(
+            forearm_x + forearm_model.WRIST_ASSEMBLY_OFFSET_X - wrist_motor_face_x,
+            0,
+            elbow_pivot_z + forearm_model.MOTOR_SHAFT_Z,
+        )
         * Rot(0, 90, 0)
     )
     wrist_motor.label = "wrist_28BYJ-48_stepper_motor"
@@ -369,18 +414,19 @@ def build_model() -> Compound:
     #     Pos(forearm_x, 0, elbow_pivot_z + 88) * Rot(90, 0, 0)
     # )
 
-    return Compound(
-        children=[
+    children = [
             stator,
             base_motor,
             base_gear,
             base_pinion,
             base_shaft,
+            *base_bearings,
             turntable,
             shoulder_motor,
             shoulder_driver_pulley,
             shoulder_belt,
             shoulder_shaft,
+            *shoulder_bearings,
             bicep,
             shoulder_spacer,
             elbow_motor,
@@ -388,6 +434,7 @@ def build_model() -> Compound:
             elbow_belt,
             shoulder_pulley,
             elbow_shaft,
+            *elbow_bearings,
             forearm,
             elbow_pulley,
             wrist_motor,
@@ -395,11 +442,68 @@ def build_model() -> Compound:
             wrist_driver_pulley,
             wrist_belt,
             wrist_shaft,
+            *wrist_bearings,
             gripper,
+            *gripper_bearings,
+            *sg90_servos,
+            *servo_fasteners,
+            *jaw_fasteners,
+            *wrist_pulley_fasteners,
             wrist_pulley,
-        ],
-        label="robot_arm_master_assembly",
-    )
+        ]
+
+    if configuration in {"guarded", "service"}:
+        base_cable_guide = build_base_cable_entry_strain_relief_guide().moved(
+            Pos(0, -98, stator_model.BASE_THICKNESS)
+        )
+        base_service_loop_guard = build_base_azimuth_service_loop_guard().moved(
+            Pos(0, 0, stator_model.BASE_THICKNESS + stator_model.THRUST_RING_HEIGHT + 0.4)
+        )
+        children.extend((base_cable_guide, base_service_loop_guard))
+
+    if configuration == "guarded":
+        try:
+            from models.electronics_enclosure import build_model as build_electronics_enclosure
+            from models.safety_guards import (
+                build_base_drive_guard,
+                build_elbow_belt_guard,
+                build_gripper_linkage_guard,
+                build_shoulder_belt_guard,
+                build_wrist_belt_guard,
+            )
+        except ModuleNotFoundError:
+            from electronics_enclosure import build_model as build_electronics_enclosure
+            from safety_guards import (
+                build_base_drive_guard,
+                build_elbow_belt_guard,
+                build_gripper_linkage_guard,
+                build_shoulder_belt_guard,
+                build_wrist_belt_guard,
+            )
+
+        shoulder_guard_z = (
+            AZIMUTH_TURNTABLE_Z + turntable_model.MOTOR_SHAFT_Z + shoulder_pivot_z
+        ) / 2
+        elbow_guard_z = (shoulder_pivot_z + bicep_model.MOTOR_SHAFT_Z + elbow_pivot_z) / 2
+        wrist_guard_z = (elbow_pivot_z + forearm_model.MOTOR_SHAFT_Z + wrist_pivot_z) / 2
+        enclosure = build_electronics_enclosure().moved(Pos(0, 0, -58.0))
+        children.extend(
+            (
+                enclosure,
+                build_base_drive_guard().moved(Pos(0, 0, stator_model.BASE_THICKNESS)),
+                build_shoulder_belt_guard().moved(Pos(shoulder_pulley_x, 0, shoulder_guard_z)),
+                build_elbow_belt_guard().moved(Pos(elbow_pulley_x, 0, elbow_guard_z)),
+                build_wrist_belt_guard().moved(Pos(wrist_pulley_x, 0, wrist_guard_z)),
+                build_gripper_linkage_guard().moved(Pos(wrist_gripper_x, 54.0, wrist_pivot_z + 15.0)),
+            )
+        )
+
+    label = "robot_arm_master_assembly" if configuration == "mechanical" else f"robot_arm_{configuration}_assembly"
+    return Compound(children=children, label=label)
+
+
+def build_guarded_model() -> Compound:
+    return build_model("guarded")
 
 
 def main() -> None:

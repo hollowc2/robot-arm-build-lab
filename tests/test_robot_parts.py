@@ -17,8 +17,12 @@ PART_MODULES = [
     "models.byj48_stepper_motor",
     "models.nema17_stepper_motor",
     "models.transmission_components",
+    "models.belt_base_candidate",
+    "models.safety_guards",
+    "models.electronics_enclosure",
     "models.wrist_keyed_shaft_adapter",
     "models.master_assembly",
+    "models.guarded_assembly",
 ]
 
 
@@ -34,7 +38,7 @@ def test_master_assembly_has_all_major_children() -> None:
 
     assembly = build_model()
 
-    assert len(assembly.children) == 26
+    assert len(assembly.children) == 48
     assert assembly.volume > 0
 
 
@@ -224,6 +228,21 @@ def test_master_assembly_includes_all_joint_shafts() -> None:
     assert "wrist_pivot_5mm_shaft" in labels
 
 
+def test_master_assembly_shows_installed_joint_hardware_and_flush_shafts() -> None:
+    from models import joint_shafts
+    from models.master_assembly import build_model
+
+    assembly = build_model()
+    labels = [child.label for child in assembly.children]
+
+    assert len([label for label in labels if label.startswith("installed_bearing_")]) == 10
+    assert len([label for label in labels if label.startswith("installed_sg90_")]) == 2
+    assert len([label for label in labels if label.startswith("installed_M3_fastener_")]) == 10
+    assert joint_shafts.SHOULDER_SHAFT_LENGTH == pytest.approx(67.0)
+    assert joint_shafts.ELBOW_SHAFT_LENGTH == pytest.approx(44.0)
+    assert joint_shafts.WRIST_SHAFT_LENGTH == pytest.approx(41.0)
+
+
 def test_shoulder_spacer_fills_azimuth_clevis_stack() -> None:
     from models import azimuth_turntable_shoulder_cleat, bicep_arm_link, joint_shafts
     from models.master_assembly import PULLEY_SIDE_CLEARANCE, build_model
@@ -322,7 +341,8 @@ def test_forearm_wrist_clevis_clears_gripper_base_pivot_boss() -> None:
     bbox = model.bounding_box()
 
     assert forearm_link.CLEVIS_GAP_X == pytest.approx(29.0)
-    assert forearm_link.WRIST_CLEVIS_GAP_CENTER_X == pytest.approx(2.0)
+    assert forearm_link.WRIST_ASSEMBLY_OFFSET_X == pytest.approx(-13.875)
+    assert forearm_link.WRIST_CLEVIS_GAP_CENTER_X == pytest.approx(-11.875)
     assert forearm_link.CLEVIS_GAP_X > sg90_gripper_base.CLEVIS_TONGUE_WIDTH
     assert sg90_gripper_base.DECK_ROOT_WIDTH < forearm_link.CLEVIS_GAP_X
     assert sg90_gripper_base.DECK_FLARE_FULL_Y > (
@@ -368,7 +388,7 @@ def test_master_wrist_joint_stacks_pulley_and_gripper_with_clearance() -> None:
         + PULLEY_SIDE_CLEARANCE
         + forearm_link.BOTTOM_HUB_THICKNESS / 2
     )
-    wrist_pulley_x = forearm_x - (
+    wrist_pulley_x = forearm_x + forearm_link.WRIST_ASSEMBLY_OFFSET_X - (
         forearm_link.LINK_THICKNESS_X / 2
         + forearm_link.MOTOR_FACE_THICKNESS_X
         - PULLEY_TOTAL_HEIGHT / 2
@@ -402,6 +422,7 @@ def test_master_wrist_joint_stacks_pulley_and_gripper_with_clearance() -> None:
     assert 1.0 <= pulley_side_clearance <= 2.0
     assert 1.0 <= gripper_side_clearance <= 2.0
     assert (gripper_bbox.min.X + gripper_bbox.max.X) / 2 == pytest.approx(expected_gripper_x)
+    assert expected_gripper_x == pytest.approx(0.0)
 
 
 def test_sg90_parallel_gripper_has_mirrored_printable_linkage() -> None:
@@ -428,12 +449,42 @@ def test_sg90_parallel_gripper_has_mirrored_printable_linkage() -> None:
     assert bbox.size.Z < 45.0
 
 
+def test_sg90_parallel_gripper_print_plate_excludes_base() -> None:
+    from models import sg90_parallel_gripper
+
+    plate = sg90_parallel_gripper.build_printable_model()
+    labels = {child.label for child in plate.children}
+
+    assert "sg90_gripper_base" not in labels
+    assert labels == {
+        "left_sg90_gripper_jaw",
+        "right_sg90_gripper_jaw",
+        "left_sg90_servo_horn_adapter",
+        "right_sg90_servo_horn_adapter",
+        "left_sg90_gripper_pushrod",
+        "right_sg90_gripper_pushrod",
+    }
+    assert all(child.bounding_box().min.Z == pytest.approx(0.0) for child in plate.children)
+    boxes = [child.bounding_box() for child in plate.children]
+    for index, first in enumerate(boxes):
+        for second in boxes[index + 1 :]:
+            x_gap = max(first.min.X - second.max.X, second.min.X - first.max.X)
+            y_gap = max(first.min.Y - second.max.Y, second.min.Y - first.max.Y)
+            assert max(x_gap, y_gap) >= sg90_parallel_gripper.PRINT_PART_CLEARANCE
+
+
 def test_forearm_wrist_belt_has_installation_relief() -> None:
     from models import forearm_link
 
     assert forearm_link.WRIST_BELT_PULLEY_RELIEF_MARGIN >= 3.0
     assert forearm_link.WRIST_BELT_CHANNEL_DEPTH_X > forearm_link.WRIST_BELT_WIDTH
     assert forearm_link.WRIST_BELT_CHANNEL_OUTER_X < -forearm_link.LINK_THICKNESS_X / 2
+    assert forearm_link.WRIST_PULLEY_RELIEF_DEPTH_X > forearm_link.WRIST_PULLEY_TOTAL_HEIGHT
+    assert forearm_link.WRIST_PULLEY_RELIEF_CENTER_X == pytest.approx(
+        forearm_link.WRIST_BELT_CHANNEL_CENTER_X
+    )
+    assert forearm_link.WRIST_BELT_ENTRY_WIDTH_YZ > forearm_link.WRIST_BELT_CHANNEL_SLOT_WIDTH_YZ
+    assert 0 < forearm_link.WRIST_BELT_ENTRY_RUN_FRACTION < 1
 
 
 def test_wrist_pulley_has_m3_counterbores_for_gripper_base() -> None:

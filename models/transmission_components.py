@@ -27,6 +27,7 @@ from build123d import (
 try:
     from models.common import (
         BASE_GEAR_BOLT_CIRCLE,
+        HTD_3M_PITCH,
         BEARING_625_OD,
         M3_CLEARANCE,
         M3_TAP_HOLE,
@@ -46,6 +47,7 @@ try:
 except ModuleNotFoundError:
     from common import (
         BASE_GEAR_BOLT_CIRCLE,
+        HTD_3M_PITCH,
         BEARING_625_OD,
         M3_CLEARANCE,
         M3_TAP_HOLE,
@@ -63,9 +65,6 @@ except ModuleNotFoundError:
         export_model,
     )
 
-# Override center distance to match the HTD 342-3M belt specification
-ELBOW_BELT_CENTER_DISTANCE = 113.35
-
 GEAR_MODULE = 1.0
 GEAR_PRESSURE_ANGLE = 20.0
 GEAR_HELIX_ANGLE = 30.0
@@ -74,7 +73,6 @@ BASE_GEAR_CENTER_BORE = 48.0
 BASE_GEAR_BOLT_START_ANGLE = 30.0
 BASE_GEAR_M3_COUNTERBORE_DIAMETER = 6.8
 BASE_GEAR_M3_COUNTERBORE_DEPTH = 2.0
-HTD_3M_PITCH = 3.0
 BELT_WIDTH = 8.0
 FLANGE_HEIGHT = 1.5
 PULLEY_TOTAL_HEIGHT = BELT_WIDTH + 2 * FLANGE_HEIGHT
@@ -501,6 +499,27 @@ def build_base_driver_pinion() -> Part:
     return _finalize(pinion, "base_driver_20T_module1_herringbone_5mm_round_shaft")
 
 
+def build_base_belt_driver_pulley() -> Part:
+    return _build_motor_pulley(
+        teeth=18,
+        label="base_driver_18T_HTD3M_5mm_round_shaft",
+        keyed=False,
+    )
+
+
+def build_base_belt_driven_pulley() -> Part:
+    return _build_pulley(
+        teeth=108,
+        center_hole=BASE_GEAR_CENTER_BORE,
+        bolt_circle=BASE_GEAR_BOLT_CIRCLE,
+        bolt_count=6,
+        label="base_driven_108T_HTD3M_48mm_bore_6xM3_60BC",
+        bottom_counterbore=True,
+        counterbore_diameter=BASE_GEAR_M3_COUNTERBORE_DIAMETER,
+        counterbore_depth=BASE_GEAR_M3_COUNTERBORE_DEPTH,
+    )
+
+
 def build_shoulder_driver_pulley() -> Part:
     return _build_motor_pulley(
         teeth=16,
@@ -597,6 +616,7 @@ def _build_pulley(
     teeth: int,
     center_hole: float,
     bolt_circle: float,
+    bolt_count: int = 4,
     label: str,
     bolt_hole_diameter: float = M3_CLEARANCE,
     bottom_counterbore: bool = False,
@@ -619,7 +639,7 @@ def _build_pulley(
         _add_center_hole(center_hole, PULLEY_TOTAL_HEIGHT)
         if bottom_counterbore:
             _add_bottom_counterbore_bolt_circle(
-                4,
+                bolt_count,
                 bolt_circle,
                 PULLEY_TOTAL_HEIGHT,
                 start_angle=45.0,
@@ -629,7 +649,7 @@ def _build_pulley(
             )
         else:
             _add_bolt_circle(
-                4,
+                bolt_count,
                 bolt_circle,
                 PULLEY_TOTAL_HEIGHT,
                 start_angle=45.0,
@@ -923,6 +943,15 @@ def build_shoulder_htd_belt() -> Compound:
         driven_teeth=80,
         center_distance=SHOULDER_BELT_CENTER_DISTANCE,
         label="shoulder_16T_to_80T_HTD3M_open_belt_visual",
+    )
+
+
+def build_base_htd_belt(center_distance: float) -> Compound:
+    return build_htd3m_open_belt(
+        driver_teeth=18,
+        driven_teeth=108,
+        center_distance=center_distance,
+        label="base_18T_to_108T_HTD342_3M_open_belt_visual",
     )
 
 

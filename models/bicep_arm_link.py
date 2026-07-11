@@ -25,7 +25,7 @@ try:
         BEARING_625_WIDTH,
         ELBOW_BELT_CENTER_DISTANCE,
         M3_CLEARANCE,
-        M3_COUNTERBORE,
+        M3_COUNTERBORE as _M3_COUNTERBORE,
         M3_COUNTERBORE_DEPTH,
         NEMA17_HOLE_SPACING,
         NEMA17_PILOT,
@@ -42,7 +42,7 @@ except ModuleNotFoundError:
         BEARING_625_WIDTH,
         ELBOW_BELT_CENTER_DISTANCE,
         M3_CLEARANCE,
-        M3_COUNTERBORE,
+        M3_COUNTERBORE as _M3_COUNTERBORE,
         M3_COUNTERBORE_DEPTH,
         NEMA17_HOLE_SPACING,
         NEMA17_PILOT,
@@ -53,10 +53,8 @@ except ModuleNotFoundError:
         export_model,
     )
 
-# Override center distance to match the HTD 342-3M belt specification
-ELBOW_BELT_CENTER_DISTANCE = 113.35
-
 PART_NAME = "bicep_arm_link"
+M3_COUNTERBORE = _M3_COUNTERBORE
 
 LINK_EXTENSION_Z = 10.0
 BOTTOM_PIVOT_Z = 0.0

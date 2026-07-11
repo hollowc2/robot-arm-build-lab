@@ -16,6 +16,12 @@ GENERATED_DIR = ROOT / "site" / "public" / "generated"
 
 
 VIEWER_PARTS = (
+    ("electronics_enclosure", [-98, -94, -58], [98, 94, 3], "draft"),
+    ("base_drive_guard", [-78, -78, 8], [78, 78, 30], "draft"),
+    ("shoulder_belt_guard", [-27, -52, 62], [-10, 52, 171], "draft"),
+    ("elbow_belt_guard", [-31, -42, 214], [-14, 42, 388], "draft"),
+    ("wrist_belt_guard", [-29, -30, 390], [-12, 30, 548], "draft"),
+    ("gripper_linkage_guard", [-10, 25, 505], [50, 83, 508], "draft"),
     ("geared_base_stator", [-82, -82, 0], [82, 82, 20], "active"),
     ("arduino_uno_r4_minima_tray", [-45, -132, 20], [45, -94, 28], "active"),
     ("base_nema17_driver_board_tray", [48, 42, 20], [92, 78, 28], "active"),
@@ -99,6 +105,12 @@ def _viewer_children() -> list[dict[str, object]]:
 
 
 def _matching_children(entry_name: str, children: list[dict[str, object]]) -> list[dict[str, object]]:
+    if entry_name == "safety_guards":
+        return [child for child in children if "guard" in child["name"]]
+    if entry_name == "electronics_enclosure":
+        return [child for child in children if child["name"] == "electronics_enclosure"]
+    if entry_name == "belt_base_candidate":
+        return [child for child in children if child["name"] in {"geared_base_stator", "base_drive_guard"}]
     if entry_name == "electronics_mounts":
         return [child for child in children if "tray" in child["name"] or "board" in child["name"]]
     if entry_name == "wire_management":
@@ -128,7 +140,7 @@ def build_catalog() -> dict[str, Any]:
     parts: list[dict[str, Any]] = []
 
     for entry in MODEL_REGISTRY:
-        if entry.name == "robot_arm_master_assembly":
+        if entry.name in {"robot_arm_master_assembly", "robot_arm_guarded_assembly"}:
             bbox = _bbox_from_boxes([child["bbox"] for child in children])
             volume = round(sum(float(child["volumeMm3"]) for child in children), 3)
         else:
@@ -144,6 +156,11 @@ def build_catalog() -> dict[str, Any]:
                 "category": entry.category,
                 "status": entry.status,
                 "printReady": entry.print_ready,
+                "material": entry.material,
+                "printOrientation": entry.print_orientation,
+                "hardware": list(entry.hardware),
+                "guardDependencies": list(entry.guard_dependencies),
+                "validation": entry.validation,
                 "volumeMm3": volume,
                 "bbox": bbox,
                 "webModel": f"generated/models/{entry.name}.stl",

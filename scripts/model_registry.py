@@ -11,6 +11,11 @@ class ModelEntry:
     category: str
     status: str
     print_ready: bool
+    material: str = "PETG"
+    print_orientation: str = "largest flat face down"
+    hardware: tuple[str, ...] = ()
+    guard_dependencies: tuple[str, ...] = ()
+    validation: str = "cad-only"
 
 
 MODEL_REGISTRY: tuple[ModelEntry, ...] = (
@@ -26,8 +31,12 @@ MODEL_REGISTRY: tuple[ModelEntry, ...] = (
     ModelEntry("models.byj48_stepper_motor", "byj48_stepper_motor", "28BYJ-48 Stepper Motor", "reference", "reference", False),
     ModelEntry("models.nema17_stepper_motor", "nema17_stepper_motor", "NEMA 17 Stepper Motor", "reference", "reference", False),
     ModelEntry("models.transmission_components", "transmission_components", "Transmission Components", "drive", "prototype", True),
+    ModelEntry("models.belt_base_candidate", "belt_base_candidate", "342-3M Belt Base Candidate", "base", "comparison", True, hardware=("HTD 342-3M-8 belt", "608 bearings", "NEMA 17", "M3 hardware")),
+    ModelEntry("models.safety_guards", "safety_guards", "Transmission Safety Guards", "safety", "prototype", True, hardware=("captive M3 screws",), validation="fit-test-required"),
+    ModelEntry("models.electronics_enclosure", "electronics_enclosure", "Electronics Enclosure", "safety", "prototype", True, hardware=("M3 screws", "guard interlock switch"), validation="fit-test-required"),
     ModelEntry("models.wrist_keyed_shaft_adapter", "wrist_keyed_28byj_shaft_to_pulley_adapter", "Wrist Keyed Shaft Adapter", "drive", "prototype", True),
     ModelEntry("models.master_assembly", "robot_arm_master_assembly", "Robot Arm Master Assembly", "assembly", "active", False),
+    ModelEntry("models.guarded_assembly", "robot_arm_guarded_assembly", "Guarded Robot Arm Assembly", "assembly", "prototype", False, guard_dependencies=("base_drive_guard", "shoulder_belt_guard", "elbow_belt_guard", "wrist_belt_guard", "gripper_linkage_guard", "electronics_enclosure"), validation="full-sweep-required"),
 )
 
 

@@ -79,13 +79,19 @@ MOTOR_SUPPORT_RIB_THICKNESS_Y = 5.0
 MOTOR_SUPPORT_RIB_DEPTH_X = 12.0
 WRIST_MOTOR_SIDE_SIGN = -1
 
+# The elbow pulley stack moves the forearm 5.875 mm to the positive-X side of
+# the base centerline.  The pulley/tongue wrist stack would add a further
+# 8 mm.  Move the complete wrist drive and clevis back by their combined
+# amount so the gripper center plane returns to X=0 in the straight-arm pose.
+WRIST_ASSEMBLY_OFFSET_X = -13.875
+
 HTD_3M_PITCH = 3.0
 WRIST_BELT_WIDTH = 8.0
 WRIST_PULLEY_TOTAL_HEIGHT = 11.0
 WRIST_BELT_CHANNEL_CLEARANCE_X = 0.8
 WRIST_BELT_CHANNEL_SLOT_WIDTH_YZ = 4.8
 WRIST_BELT_CHANNEL_RUN_EXTENSION = 4.0
-WRIST_BELT_CHANNEL_CENTER_X = WRIST_MOTOR_SIDE_SIGN * (
+WRIST_BELT_CHANNEL_CENTER_X = WRIST_ASSEMBLY_OFFSET_X + WRIST_MOTOR_SIDE_SIGN * (
     LINK_THICKNESS_X / 2 + MOTOR_FACE_THICKNESS_X - WRIST_PULLEY_TOTAL_HEIGHT / 2
 )
 WRIST_BELT_CHANNEL_OUTER_X = WRIST_BELT_CHANNEL_CENTER_X - WRIST_BELT_WIDTH / 2 - WRIST_BELT_CHANNEL_CLEARANCE_X
@@ -112,7 +118,7 @@ ELBOW_M3_COUNTERSINK_DIAMETER = 6.8
 ELBOW_M3_COUNTERSINK_DEPTH = 2.0
 
 CLEVIS_GAP_X = 29.0
-WRIST_CLEVIS_GAP_CENTER_X = 2.0
+WRIST_CLEVIS_GAP_CENTER_X = WRIST_ASSEMBLY_OFFSET_X + 2.0
 CLEVIS_EAR_THICKNESS_X = 6.0
 CLEVIS_WIDTH_Y = 40.0
 CLEVIS_HEIGHT_Z = 36.0
@@ -314,8 +320,8 @@ def build_model():
                 )
 
         # Long lightweight rails from elbow hub to wrist clevis.
-        rail_center_z = TOP_WRIST_PIVOT_Z / 2
-        rail_height_z = TOP_WRIST_PIVOT_Z
+        rail_center_z = WRIST_HULL_TRANSITION_START_Z / 2
+        rail_height_z = WRIST_HULL_TRANSITION_START_Z
         for y in (-LINK_HALF_WIDTH_Y + LINK_RAIL_WIDTH_Y / 2, LINK_HALF_WIDTH_Y - LINK_RAIL_WIDTH_Y / 2):
             with Locations((0, y, rail_center_z)):
                 Box(
@@ -336,7 +342,9 @@ def build_model():
                 )
 
         # Single wrist motor mount on the pulley side of the forearm.
-        face_x = WRIST_MOTOR_SIDE_SIGN * (LINK_THICKNESS_X / 2 + MOTOR_FACE_THICKNESS_X / 2)
+        face_x = WRIST_ASSEMBLY_OFFSET_X + WRIST_MOTOR_SIDE_SIGN * (
+            LINK_THICKNESS_X / 2 + MOTOR_FACE_THICKNESS_X / 2
+        )
         with Locations((face_x, 0, MOTOR_SHAFT_Z)):
             Box(
                 MOTOR_FACE_THICKNESS_X,
@@ -345,13 +353,31 @@ def build_model():
                 align=(Align.CENTER, Align.CENTER, Align.CENTER),
             )
 
-        support_x = WRIST_MOTOR_SIDE_SIGN * (
+        support_x = WRIST_ASSEMBLY_OFFSET_X + WRIST_MOTOR_SIDE_SIGN * (
             LINK_THICKNESS_X / 2 + MOTOR_SUPPORT_RIB_DEPTH_X / 2 - MOTOR_FACE_THICKNESS_X
         )
         for y in (-LINK_HALF_WIDTH_Y + LINK_RAIL_WIDTH_Y / 2, LINK_HALF_WIDTH_Y - LINK_RAIL_WIDTH_Y / 2):
             with Locations((support_x, y, MOTOR_SHAFT_Z)):
                 Box(
                     MOTOR_SUPPORT_RIB_DEPTH_X,
+                    MOTOR_SUPPORT_RIB_THICKNESS_Y,
+                    MOTOR_FACE_HEIGHT_Z,
+                    align=(Align.CENTER, Align.CENTER, Align.CENTER),
+                )
+
+        # Tie the offset motor support back into the unshifted lower rails.
+        # The two slim webs preserve the open center channel while giving the
+        # shifted drive plate a continuous load path into the elbow hub.
+        support_inner_x = support_x + MOTOR_SUPPORT_RIB_DEPTH_X / 2
+        rail_outer_x = -LINK_THICKNESS_X / 2
+        bridge_width_x = rail_outer_x - support_inner_x
+        if bridge_width_x <= 0:
+            raise ValueError("Offset wrist motor support must reach the forearm rails.")
+        bridge_center_x = support_inner_x + bridge_width_x / 2
+        for y in (-LINK_HALF_WIDTH_Y + LINK_RAIL_WIDTH_Y / 2, LINK_HALF_WIDTH_Y - LINK_RAIL_WIDTH_Y / 2):
+            with Locations((bridge_center_x, y, MOTOR_SHAFT_Z)):
+                Box(
+                    bridge_width_x,
                     MOTOR_SUPPORT_RIB_THICKNESS_Y,
                     MOTOR_FACE_HEIGHT_Z,
                     align=(Align.CENTER, Align.CENTER, Align.CENTER),
@@ -366,7 +392,7 @@ def build_model():
                     align=(Align.CENTER, Align.CENTER, Align.CENTER),
                 )
 
-        pocket_center_x = WRIST_MOTOR_SIDE_SIGN * (
+        pocket_center_x = WRIST_ASSEMBLY_OFFSET_X + WRIST_MOTOR_SIDE_SIGN * (
             LINK_THICKNESS_X / 2 + MOTOR_FACE_THICKNESS_X - MOTOR_BODY_POCKET_DEPTH / 2
         )
         _slotted_x_pocket(
@@ -415,7 +441,7 @@ def build_model():
                 align=(Align.CENTER, Align.CENTER, Align.CENTER),
             )
 
-        with Locations((0, 0, TOP_WRIST_PIVOT_Z)):
+        with Locations((WRIST_CLEVIS_GAP_CENTER_X, 0, TOP_WRIST_PIVOT_Z)):
             _x_cylinder(BEARING_625_ID / 2, CLEVIS_GAP_X + 2 * CLEVIS_EAR_THICKNESS_X + 4.0, Mode.SUBTRACT)
 
         left_gap_x = WRIST_CLEVIS_GAP_CENTER_X - CLEVIS_GAP_X / 2

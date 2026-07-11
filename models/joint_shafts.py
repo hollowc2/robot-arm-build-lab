@@ -14,16 +14,19 @@ BASE_SHAFT_DIAMETER = BEARING_608_ID
 BASE_SHAFT_LENGTH = 52.0
 
 SHOULDER_SHAFT_DIAMETER = BEARING_608_ID
-SHOULDER_SHAFT_LENGTH = 75.0
+# Flush to the two outer faces of the shoulder clevis (43 mm gap + two 12 mm walls).
+SHOULDER_SHAFT_LENGTH = 67.0
 SHOULDER_PIVOT_SPACER_ID = SHOULDER_SHAFT_DIAMETER + 0.5
 SHOULDER_PIVOT_SPACER_OD = 20.0
 SHOULDER_PIVOT_SPACER_LENGTH = 11.0
 
 ELBOW_SHAFT_DIAMETER = BEARING_625_ID
-ELBOW_SHAFT_LENGTH = 52.0
+# Flush to the 28 mm elbow gap and its two 8 mm bearing ears.
+ELBOW_SHAFT_LENGTH = 44.0
 
 WRIST_SHAFT_DIAMETER = BEARING_625_ID
-WRIST_SHAFT_LENGTH = 52.0
+# Flush to the 29 mm wrist gap and its two 6 mm bearing ears.
+WRIST_SHAFT_LENGTH = 41.0
 
 
 def _build_shaft(*, diameter: float, length: float, axis: str, label: str) -> Part:
