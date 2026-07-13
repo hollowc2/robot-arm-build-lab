@@ -1,5 +1,6 @@
 import React, { useEffect, useMemo, useRef, useState } from "react";
 import { createRoot } from "react-dom/client";
+import * as CANNON from "cannon-es";
 import * as THREE from "three";
 import { OrbitControls } from "three/examples/jsm/controls/OrbitControls.js";
 import { STLLoader } from "three/examples/jsm/loaders/STLLoader.js";
@@ -335,11 +336,13 @@ function clampJoint(name: keyof JointAngles, value: number) {
 
 function RobotSimulator() {
   const mountRef = useRef<HTMLDivElement | null>(null);
+  const resetObjectsRef = useRef<() => void>(() => undefined);
   const jointsRef = useRef({ ...homePose });
   const targetsRef = useRef({ ...homePose });
   const velocitiesRef = useRef({ ...homePose });
   const [joints, setJoints] = useState({ ...homePose });
   const [loaded, setLoaded] = useState(0);
+  const [heldName, setHeldName] = useState<string | null>(null);
 
   useEffect(() => {
     if (!mountRef.current) return undefined;
@@ -365,9 +368,24 @@ function RobotSimulator() {
     const light = new THREE.DirectionalLight("#ffffff", 3);
     light.position.set(200, -250, 400);
     scene.add(light);
+    const floor = new THREE.Mesh(
+      new THREE.PlaneGeometry(900, 900),
+      new THREE.MeshStandardMaterial({ color: "#202a31", roughness: 0.88, metalness: 0.02 }),
+    );
+    floor.position.z = -0.5;
+    scene.add(floor);
     const grid = new THREE.GridHelper(900, 30, "#52616f", "#2b333b");
     grid.rotation.x = Math.PI / 2;
+    grid.position.z = 0.2;
     scene.add(grid);
+
+    const world = new CANNON.World({ gravity: new CANNON.Vec3(0, 0, -981) });
+    world.allowSleep = true;
+    world.broadphase = new CANNON.SAPBroadphase(world);
+    world.defaultContactMaterial.friction = 0.55;
+    world.defaultContactMaterial.restitution = 0.18;
+    (world.solver as CANNON.GSSolver).iterations = 12;
+    world.addBody(new CANNON.Body({ mass: 0, shape: new CANNON.Plane() }));
 
     const base = new THREE.Group();
     const shoulder = new THREE.Group();
@@ -383,6 +401,11 @@ function RobotSimulator() {
     shoulder.add(elbow);
     elbow.add(wrist);
     wrist.add(leftJaw, rightJaw);
+    const gripPoint = new THREE.Object3D();
+    gripPoint.position.set(0, 124, 14);
+    wrist.add(gripPoint);
+
+    const movingMeshes: THREE.Mesh[] = [];
 
     const load = (name: string, parent: THREE.Object3D, offset: [number, number, number], material: string | THREE.Material = "#d47a4c") => {
       new STLLoader().load(`${generatedBase}/models/${name}.stl`, (geometry) => {
@@ -390,8 +413,10 @@ function RobotSimulator() {
         const mesh = new THREE.Mesh(geometry, typeof material === "string"
           ? new THREE.MeshStandardMaterial({ color: material, roughness: 0.62, metalness: 0.12 })
           : material);
+        geometry.computeBoundingBox();
         mesh.position.set(...offset);
         parent.add(mesh);
+        if (parent !== scene && parent !== base) movingMeshes.push(mesh);
         setLoaded((count) => count + 1);
       });
     };
@@ -406,6 +431,7 @@ function RobotSimulator() {
         mesh.position.copy(center).multiplyScalar(-1);
         pivot.add(mesh);
         parent.add(pivot);
+        if (parent !== base) movingMeshes.push(mesh);
         setLoaded((count) => count + 1);
       });
       return pivot;
@@ -437,6 +463,104 @@ function RobotSimulator() {
     loadPulley("simulator_wrist_driven", wrist, [6, 0, -504.71]);
     const wristBelt = belt("simulator_wrist_belt", elbow, [0, 0, -337.38]);
 
+    const robotColliders: { marker: THREE.Object3D; body: CANNON.Body }[] = [];
+    const addRobotCollider = (parent: THREE.Object3D, position: [number, number, number], shape: CANNON.Shape) => {
+      const marker = new THREE.Object3D();
+      marker.position.set(...position);
+      parent.add(marker);
+      const body = new CANNON.Body({ mass: 0, type: CANNON.Body.KINEMATIC, shape });
+      world.addBody(body);
+      robotColliders.push({ marker, body });
+    };
+    addRobotCollider(scene, [0, 0, 70], new CANNON.Cylinder(65, 65, 140, 16));
+    addRobotCollider(shoulder, [0, 0, 88], new CANNON.Box(new CANNON.Vec3(28, 24, 88)));
+    addRobotCollider(elbow, [0, 0, 84], new CANNON.Box(new CANNON.Vec3(24, 22, 84)));
+    addRobotCollider(wrist, [0, 28, 4], new CANNON.Box(new CANNON.Vec3(20, 38, 17)));
+    addRobotCollider(leftJaw, [-7, 105, 14], new CANNON.Box(new CANNON.Vec3(3, 31, 6)));
+    addRobotCollider(rightJaw, [7, 105, 14], new CANNON.Box(new CANNON.Vec3(3, 31, 6)));
+
+    type PhysicsProp = {
+      name: string;
+      mesh: THREE.Mesh;
+      body: CANNON.Body;
+      mass: number;
+      start: [number, number, number];
+    };
+    const props: PhysicsProp[] = [];
+    const addProp = (
+      name: string,
+      geometry: THREE.BufferGeometry,
+      shape: CANNON.Shape,
+      start: [number, number, number],
+      color: string,
+      mass = 0.06,
+    ) => {
+      const mesh = new THREE.Mesh(geometry, new THREE.MeshStandardMaterial({ color, roughness: 0.62, metalness: 0.04 }));
+      scene.add(mesh);
+      const body = new CANNON.Body({ mass, shape, position: new CANNON.Vec3(...start) });
+      body.linearDamping = 0.08;
+      body.angularDamping = 0.12;
+      body.allowSleep = true;
+      world.addBody(body);
+      props.push({ name, mesh, body, mass, start });
+    };
+    const cubeShape = new CANNON.Box(new CANNON.Vec3(7, 11, 11));
+    addProp("orange block", new THREE.BoxGeometry(14, 22, 22), cubeShape, [90, 145, 11], "#ef8354");
+    addProp("blue block", new THREE.BoxGeometry(14, 22, 22), cubeShape, [-85, 150, 11], "#4ea5d9");
+    addProp("yellow block", new THREE.BoxGeometry(14, 22, 22), cubeShape, [135, 70, 11], "#f4d35e");
+    addProp("green block", new THREE.BoxGeometry(14, 22, 22), cubeShape, [-130, 75, 11], "#70c1b3");
+    addProp("red ball", new THREE.SphereGeometry(9, 24, 16), new CANNON.Sphere(9), [0, 180, 9], "#ee6055", 0.04);
+
+    let held: PhysicsProp | null = null;
+    const gripPosition = new THREE.Vector3();
+    const previousGripPosition = new THREE.Vector3();
+    const gripQuaternion = new THREE.Quaternion();
+    const gripVelocity = new THREE.Vector3();
+    const markerPosition = new THREE.Vector3();
+    const markerQuaternion = new THREE.Quaternion();
+    const floorBounds = new THREE.Box3();
+    const release = () => {
+      if (!held) return;
+      held.body.type = CANNON.Body.DYNAMIC;
+      held.body.mass = held.mass;
+      held.body.updateMassProperties();
+      held.body.velocity.set(gripVelocity.x, gripVelocity.y, gripVelocity.z);
+      held.body.wakeUp();
+      held = null;
+      setHeldName(null);
+    };
+    const resetObjects = () => {
+      release();
+      props.forEach((prop) => {
+        prop.body.type = CANNON.Body.DYNAMIC;
+        prop.body.mass = prop.mass;
+        prop.body.updateMassProperties();
+        prop.body.position.set(...prop.start);
+        prop.body.quaternion.set(0, 0, 0, 1);
+        prop.body.velocity.setZero();
+        prop.body.angularVelocity.setZero();
+        prop.body.wakeUp();
+      });
+    };
+    resetObjectsRef.current = resetObjects;
+    let motionBlocked = false;
+
+    const applyPose = (pose: JointAngles) => {
+      base.rotation.z = THREE.MathUtils.degToRad(-pose.base);
+      shoulder.rotation.x = THREE.MathUtils.degToRad(-pose.shoulder);
+      elbow.rotation.x = THREE.MathUtils.degToRad(pose.elbow);
+      wrist.rotation.x = THREE.MathUtils.degToRad(-pose.wrist);
+      shoulderDriver.rotation.x = THREE.MathUtils.degToRad(-pose.shoulder * 5);
+      elbowDriver.rotation.x = THREE.MathUtils.degToRad(pose.elbow * 3.75);
+      wristDriver.rotation.x = THREE.MathUtils.degToRad(-pose.wrist * 1.6);
+      shoulderBelt.value = -pose.shoulder * 16 / 360;
+      elbowBelt.value = pose.elbow * 16 / 360;
+      wristBelt.value = -pose.wrist * 20 / 360;
+      leftJaw.position.x = -pose.gripper / 2;
+      rightJaw.position.x = pose.gripper / 2;
+      scene.updateMatrixWorld(true);
+    };
+
     let lastTime = performance.now();
     let lastGamepadUpdate = 0;
     const render = (time = performance.now()) => {
@@ -460,24 +584,70 @@ function RobotSimulator() {
       lastTime = time;
       const pose = jointsRef.current;
       const velocities = velocitiesRef.current;
+      const previousPose = { ...pose };
       jointNames.forEach((name) => {
         [pose[name], velocities[name]] = advanceMotion(
           pose[name], velocities[name], targetsRef.current[name],
           jointMotion[name].maxSpeed, jointMotion[name].acceleration, elapsed, name === "base",
         );
       });
-      base.rotation.z = THREE.MathUtils.degToRad(-pose.base);
-      shoulder.rotation.x = THREE.MathUtils.degToRad(-pose.shoulder);
-      elbow.rotation.x = THREE.MathUtils.degToRad(pose.elbow);
-      wrist.rotation.x = THREE.MathUtils.degToRad(-pose.wrist);
-      shoulderDriver.rotation.x = THREE.MathUtils.degToRad(-pose.shoulder * 5);
-      elbowDriver.rotation.x = THREE.MathUtils.degToRad(pose.elbow * 3.75);
-      wristDriver.rotation.x = THREE.MathUtils.degToRad(-pose.wrist * 1.6);
-      shoulderBelt.value = -pose.shoulder * 16 / 360;
-      elbowBelt.value = pose.elbow * 16 / 360;
-      wristBelt.value = -pose.wrist * 20 / 360;
-      leftJaw.position.x = -pose.gripper / 2;
-      rightJaw.position.x = pose.gripper / 2;
+      applyPose(pose);
+      const hitFloor = movingMeshes.some((mesh) => {
+        if (!mesh.geometry.boundingBox) return false;
+        return floorBounds.copy(mesh.geometry.boundingBox).applyMatrix4(mesh.matrixWorld).min.z < 0;
+      });
+      if (hitFloor) {
+        Object.assign(pose, previousPose);
+        Object.assign(velocities, homePose);
+        targetsRef.current = { ...previousPose };
+        if (!motionBlocked) setJoints({ ...previousPose });
+        motionBlocked = true;
+        applyPose(pose);
+      } else motionBlocked = false;
+
+      gripPoint.getWorldPosition(gripPosition);
+      gripPoint.getWorldQuaternion(gripQuaternion);
+      gripVelocity.copy(gripPosition).sub(previousGripPosition).divideScalar(Math.max(elapsed, 1 / 120));
+      previousGripPosition.copy(gripPosition);
+      if (pose.gripper > 12) release();
+      if (!held && pose.gripper <= 8) {
+        let nearest: PhysicsProp | null = null;
+        let nearestDistance = 34;
+        for (const prop of props) {
+          if (prop.body.type !== CANNON.Body.DYNAMIC) continue;
+          const distance = gripPosition.distanceTo(prop.mesh.position);
+          if (distance < nearestDistance) {
+            nearest = prop;
+            nearestDistance = distance;
+          }
+        }
+        if (nearest) {
+          held = nearest;
+          held.body.type = CANNON.Body.KINEMATIC;
+          held.body.mass = 0;
+          held.body.updateMassProperties();
+          held.body.wakeUp();
+          setHeldName(held.name);
+        }
+      }
+      if (held) {
+        held.body.position.set(gripPosition.x, gripPosition.y, gripPosition.z);
+        held.body.quaternion.set(gripQuaternion.x, gripQuaternion.y, gripQuaternion.z, gripQuaternion.w);
+        held.body.velocity.set(gripVelocity.x, gripVelocity.y, gripVelocity.z);
+      }
+      robotColliders.forEach(({ marker, body }) => {
+        marker.getWorldPosition(markerPosition);
+        marker.getWorldQuaternion(markerQuaternion);
+        body.position.set(markerPosition.x, markerPosition.y, markerPosition.z);
+        body.quaternion.set(markerQuaternion.x, markerQuaternion.y, markerQuaternion.z, markerQuaternion.w);
+        body.aabbNeedsUpdate = true;
+      });
+      world.step(1 / 60, elapsed, 5);
+      if (held) held.body.position.set(gripPosition.x, gripPosition.y, gripPosition.z);
+      props.forEach(({ mesh, body }) => {
+        mesh.position.set(body.position.x, body.position.y, body.position.z);
+        mesh.quaternion.set(body.quaternion.x, body.quaternion.y, body.quaternion.z, body.quaternion.w);
+      });
       controls.update();
       renderer.render(scene, camera);
     };
@@ -492,6 +662,7 @@ function RobotSimulator() {
       cancelAnimationFrame(frame);
       window.removeEventListener("resize", resize);
       controls.dispose();
+      resetObjectsRef.current = () => undefined;
       scene.traverse((child) => {
         if (child instanceof THREE.Mesh) {
           child.geometry.dispose();
@@ -523,6 +694,7 @@ function RobotSimulator() {
         <div className="simulator-view" ref={mountRef} aria-label="Articulated robot arm simulator" />
         <div className="simulator-controls">
           <p>{loaded}/17 CAD and drivetrain meshes loaded</p>
+          <p className="physics-status">5 physics objects ready · {heldName ? `holding ${heldName}` : "gripper empty"}</p>
           {([
             ["base", "Base yaw", 0, 360, "°"],
             ["shoulder", "Shoulder", -130, 130, "°"],
@@ -555,8 +727,9 @@ function RobotSimulator() {
             <button type="button" onClick={() => nudge("gripper", -2)}>Close</button>
             <button type="button" onClick={() => nudge("gripper", 2)}>Open</button>
           </div>
+          <button type="button" onClick={() => resetObjectsRef.current()}>Reset physics objects</button>
           <button type="button" onClick={() => { targetsRef.current = { ...homePose }; setJoints({ ...homePose }); }}>Home all joints</button>
-          <small>Drag to orbit, scroll to zoom. Xbox: left stick = base/shoulder, right stick = wrist/elbow, triggers = gripper, A = home.</small>
+          <small>Close the gripper around a prop to grab it; open while moving to toss it. Stack blocks on the floor. Xbox: sticks = joints, triggers = gripper, A = home.</small>
         </div>
       </div>
     </main>

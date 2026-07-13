@@ -19,6 +19,8 @@ test("dashboard loads a non-empty viewer", async ({ page }) => {
   await page.getByRole("link", { name: "Open Simulator" }).click();
   await expect(page.getByRole("heading", { name: "Master Assembly Simulator" })).toBeVisible();
   await expect(page.getByText("17/17 CAD and drivetrain meshes loaded")).toBeVisible({ timeout: 30_000 });
+  await expect(page.getByText(/5 physics objects ready/)).toBeVisible();
+  await page.getByRole("button", { name: "Reset physics objects" }).click();
   await page.getByLabel("Shoulder").fill("45");
   await expect(page.getByText("45°")).toBeVisible();
 });

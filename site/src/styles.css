@@ -386,6 +386,10 @@ dt {
   color: #bdc8d0;
 }
 
+.simulator-controls .physics-status {
+  color: #9fc0be;
+}
+
 .pipeline {
   display: grid;
   gap: 8px;

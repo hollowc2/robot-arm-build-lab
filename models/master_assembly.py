@@ -271,12 +271,16 @@ def build_model(configuration: str = "mechanical") -> Compound:
         build_m3_socket_screw(30.0).moved(Pos(elbow_pulley_x, y, elbow_pivot_z + z))
         for y, z in circle_points(4, ELBOW_PULLEY_BOLT_CIRCLE, start_angle=45.0)
     ]
-    for index, part in enumerate(
-        (*base_gear_fasteners, *shoulder_pulley_fasteners, *elbow_pulley_fasteners,
-         *servo_fasteners, *jaw_fasteners, *wrist_pulley_fasteners),
-        1,
+    for group, fasteners in (
+        ("base_gear", base_gear_fasteners),
+        ("shoulder_pulley", shoulder_pulley_fasteners),
+        ("elbow_pulley", elbow_pulley_fasteners),
+        ("servo", servo_fasteners),
+        ("jaw", jaw_fasteners),
+        ("wrist_pulley", wrist_pulley_fasteners),
     ):
-        part.label = f"installed_M3_fastener_{index:02d}"
+        for index, part in enumerate(fasteners, 1):
+            part.label = f"installed_M3_fastener_{group}_{index:02d}"
 
     shoulder_pulley = build_shoulder_pulley().moved(
         Pos(shoulder_pulley_x, 0, shoulder_pivot_z) * Rot(0, 90, 0)
