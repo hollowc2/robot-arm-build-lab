@@ -337,12 +337,14 @@ function clampJoint(name: keyof JointAngles, value: number) {
 function RobotSimulator() {
   const mountRef = useRef<HTMLDivElement | null>(null);
   const resetObjectsRef = useRef<() => void>(() => undefined);
+  const runDemoRef = useRef<() => void>(() => undefined);
   const jointsRef = useRef({ ...homePose });
   const targetsRef = useRef({ ...homePose });
   const velocitiesRef = useRef({ ...homePose });
   const [joints, setJoints] = useState({ ...homePose });
   const [loaded, setLoaded] = useState(0);
   const [heldName, setHeldName] = useState<string | null>(null);
+  const [demoStatus, setDemoStatus] = useState<string | null>(null);
 
   useEffect(() => {
     if (!mountRef.current) return undefined;
@@ -404,6 +406,20 @@ function RobotSimulator() {
     const gripPoint = new THREE.Object3D();
     gripPoint.position.set(0, 124, 14);
     wrist.add(gripPoint);
+
+    const demoBase = new THREE.Group();
+    const demoShoulder = new THREE.Group();
+    const demoElbow = new THREE.Group();
+    const demoWrist = new THREE.Group();
+    const demoGrip = new THREE.Object3D();
+    demoShoulder.position.copy(shoulder.position);
+    demoElbow.position.copy(elbow.position);
+    demoWrist.position.copy(wrist.position);
+    demoGrip.position.copy(gripPoint.position);
+    demoBase.add(demoShoulder);
+    demoShoulder.add(demoElbow);
+    demoElbow.add(demoWrist);
+    demoWrist.add(demoGrip);
 
     const movingMeshes: THREE.Mesh[] = [];
 
@@ -504,11 +520,11 @@ function RobotSimulator() {
       world.addBody(body);
       props.push({ name, mesh, body, mass, start });
     };
-    const cubeShape = new CANNON.Box(new CANNON.Vec3(7, 11, 11));
-    addProp("orange block", new THREE.BoxGeometry(14, 22, 22), cubeShape, [90, 145, 11], "#ef8354");
-    addProp("blue block", new THREE.BoxGeometry(14, 22, 22), cubeShape, [-85, 150, 11], "#4ea5d9");
-    addProp("yellow block", new THREE.BoxGeometry(14, 22, 22), cubeShape, [135, 70, 11], "#f4d35e");
-    addProp("green block", new THREE.BoxGeometry(14, 22, 22), cubeShape, [-130, 75, 11], "#70c1b3");
+    const cubeShape = new CANNON.Box(new CANNON.Vec3(12, 11, 11));
+    addProp("orange block", new THREE.BoxGeometry(24, 22, 22), cubeShape, [90, 145, 11], "#ef8354");
+    addProp("blue block", new THREE.BoxGeometry(24, 22, 22), cubeShape, [-85, 150, 11], "#4ea5d9");
+    addProp("yellow block", new THREE.BoxGeometry(24, 22, 22), cubeShape, [135, 70, 11], "#f4d35e");
+    addProp("green block", new THREE.BoxGeometry(24, 22, 22), cubeShape, [-130, 75, 11], "#70c1b3");
     addProp("red ball", new THREE.SphereGeometry(9, 24, 16), new CANNON.Sphere(9), [0, 180, 9], "#ee6055", 0.04);
 
     let held: PhysicsProp | null = null;
@@ -519,6 +535,8 @@ function RobotSimulator() {
     const markerPosition = new THREE.Vector3();
     const markerQuaternion = new THREE.Quaternion();
     const floorBounds = new THREE.Box3();
+    type DemoStep = { label: string; target: JointAngles; pause: number; settledAt?: number };
+    let demo: { steps: DemoStep[]; index: number } | null = null;
     const release = () => {
       if (!held) return;
       held.body.type = CANNON.Body.DYNAMIC;
@@ -530,6 +548,8 @@ function RobotSimulator() {
       setHeldName(null);
     };
     const resetObjects = () => {
+      demo = null;
+      setDemoStatus(null);
       release();
       props.forEach((prop) => {
         prop.body.type = CANNON.Body.DYNAMIC;
@@ -544,6 +564,96 @@ function RobotSimulator() {
     };
     resetObjectsRef.current = resetObjects;
     let motionBlocked = false;
+
+    const normalizeBase = (value: number) => (value % 360 + 360) % 360;
+    const demoPosition = new THREE.Vector3();
+    const demoScore = (pose: JointAngles, target: THREE.Vector3) => {
+      demoBase.rotation.z = THREE.MathUtils.degToRad(-pose.base);
+      demoShoulder.rotation.x = THREE.MathUtils.degToRad(-pose.shoulder);
+      demoElbow.rotation.x = THREE.MathUtils.degToRad(pose.elbow);
+      demoWrist.rotation.x = THREE.MathUtils.degToRad(-pose.wrist);
+      demoBase.updateMatrixWorld(true);
+      demoGrip.getWorldPosition(demoPosition);
+      return demoPosition.distanceToSquared(target);
+    };
+    const solveDemoPose = (target: THREE.Vector3, gripper: number) => {
+      const base = normalizeBase(THREE.MathUtils.radToDeg(Math.atan2(target.x, target.y)));
+      let winner: JointAngles | null = null;
+      let winnerScore = Infinity;
+      for (const seed of [[45, -110, -48], [30, -130, -66], [-125, 125, -100]]) {
+        let candidate: JointAngles = { base, shoulder: seed[0], elbow: seed[1], wrist: seed[2], gripper };
+        for (const step of [24, 8, 2, 0.5]) {
+          for (let round = 0; round < 12; round += 1) {
+            for (const joint of ["base", "shoulder", "elbow", "wrist"] as const) {
+              let best = candidate;
+              let bestScore = demoScore(candidate, target);
+              for (const delta of [-step, step]) {
+                const value = joint === "base" ? normalizeBase(candidate[joint] + delta) : clampJoint(joint, candidate[joint] + delta);
+                const next = { ...candidate, [joint]: value };
+                const score = demoScore(next, target);
+                if (score < bestScore) {
+                  best = next;
+                  bestScore = score;
+                }
+              }
+              candidate = best;
+            }
+          }
+        }
+        const score = demoScore(candidate, target);
+        if (score < winnerScore) {
+          winner = candidate;
+          winnerScore = score;
+        }
+      }
+      return winner!;
+    };
+    const makeDemoStep = (label: string, point: [number, number, number], gripper: number, pause = 220): DemoStep => ({
+      label,
+      target: solveDemoPose(new THREE.Vector3(...point), gripper),
+      pause,
+    });
+    const atDemoTarget = (pose: JointAngles, target: JointAngles) => jointNames.every((name) => {
+      const difference = name === "base"
+        ? Math.abs(((pose.base - target.base + 540) % 360) - 180)
+        : Math.abs(pose[name] - target[name]);
+      return difference < 1.2;
+    });
+    const startDemo = () => {
+      resetObjects();
+      const stack: [number, number] = [0, 120];
+      const blocks = props.filter((prop) => prop.name.endsWith("block"));
+      const steps: DemoStep[] = [
+        { label: "Demo: opening gripper", target: { ...homePose, gripper: 24 }, pause: 500 },
+      ];
+      blocks.forEach((block, index) => {
+        const [x, y] = block.start;
+        const height = 12 + index * 22;
+        steps.push(
+          makeDemoStep(`Demo: approaching ${block.name}`, [x, y, 88], 24),
+          makeDemoStep(`Demo: gripping ${block.name}`, [x, y, 18], 24),
+          makeDemoStep(`Demo: lifting ${block.name}`, [x, y, 18], 0, 650),
+          makeDemoStep(`Demo: carrying ${block.name}`, [x, y, 88], 0),
+          makeDemoStep(`Demo: stacking ${block.name}`, [stack[0], stack[1], height + 70], 0),
+          makeDemoStep(`Demo: placing ${block.name}`, [stack[0], stack[1], height], 0, 280),
+          makeDemoStep(`Demo: releasing ${block.name}`, [stack[0], stack[1], height], 24, 900),
+        );
+      });
+      const ball = props.find((prop) => prop.name === "red ball")!;
+      const [ballX, ballY] = ball.start;
+      steps.push(
+        makeDemoStep("Demo: approaching red ball", [ballX, ballY, 88], 24),
+        makeDemoStep("Demo: gripping red ball", [ballX, ballY, 18], 24),
+        makeDemoStep("Demo: lifting red ball", [ballX, ballY, 18], 0, 650),
+        makeDemoStep("Demo: balancing red ball", [stack[0], stack[1], 98], 0, 300),
+        makeDemoStep("Demo: releasing red ball", [stack[0], stack[1], 98], 24, 1400),
+      );
+      demo = { steps, index: 0 };
+      targetsRef.current = { ...steps[0].target };
+      setJoints({ ...steps[0].target });
+      setDemoStatus(steps[0].label);
+    };
+    runDemoRef.current = startDemo;
 
     const applyPose = (pose: JointAngles) => {
       base.rotation.z = THREE.MathUtils.degToRad(-pose.base);
@@ -567,7 +677,7 @@ function RobotSimulator() {
       frame = requestAnimationFrame(render);
       const elapsed = Math.min((time - lastTime) / 1000, 0.05);
       const gamepad = navigator.getGamepads?.().find((pad) => pad?.connected);
-      if (gamepad) {
+      if (gamepad && !demo) {
         const axis = (index: number) => Math.abs(gamepad.axes[index] ?? 0) > 0.12 ? gamepad.axes[index] : 0;
         const targets = targetsRef.current;
         targets.base = (targets.base + axis(0) * 100 * elapsed + 360) % 360;
@@ -648,6 +758,24 @@ function RobotSimulator() {
         mesh.position.set(body.position.x, body.position.y, body.position.z);
         mesh.quaternion.set(body.quaternion.x, body.quaternion.y, body.quaternion.z, body.quaternion.w);
       });
+      if (demo) {
+        const step = demo.steps[demo.index];
+        if (atDemoTarget(pose, step.target)) {
+          if (step.settledAt === undefined) step.settledAt = time;
+          if (time - step.settledAt >= step.pause) {
+            demo.index += 1;
+            if (demo.index === demo.steps.length) {
+              demo = null;
+              setDemoStatus("Demo complete: four blocks stacked, red ball balanced");
+            } else {
+              const next = demo.steps[demo.index];
+              targetsRef.current = { ...next.target };
+              setJoints({ ...next.target });
+              setDemoStatus(next.label);
+            }
+          }
+        } else step.settledAt = undefined;
+      }
       controls.update();
       renderer.render(scene, camera);
     };
@@ -663,6 +791,7 @@ function RobotSimulator() {
       window.removeEventListener("resize", resize);
       controls.dispose();
       resetObjectsRef.current = () => undefined;
+      runDemoRef.current = () => undefined;
       scene.traverse((child) => {
         if (child instanceof THREE.Mesh) {
           child.geometry.dispose();
@@ -695,6 +824,7 @@ function RobotSimulator() {
         <div className="simulator-controls">
           <p>{loaded}/17 CAD and drivetrain meshes loaded</p>
           <p className="physics-status">5 physics objects ready · {heldName ? `holding ${heldName}` : "gripper empty"}</p>
+          {demoStatus && <p className="physics-status">{demoStatus}</p>}
           {([
             ["base", "Base yaw", 0, 360, "°"],
             ["shoulder", "Shoulder", -130, 130, "°"],
@@ -728,6 +858,7 @@ function RobotSimulator() {
             <button type="button" onClick={() => nudge("gripper", 2)}>Open</button>
           </div>
           <button type="button" onClick={() => resetObjectsRef.current()}>Reset physics objects</button>
+          <button type="button" disabled={loaded !== 17 || demoStatus?.startsWith("Demo:")} onClick={() => runDemoRef.current()}>Demo</button>
           <button type="button" onClick={() => { targetsRef.current = { ...homePose }; setJoints({ ...homePose }); }}>Home all joints</button>
           <small>Close the gripper around a prop to grab it; open while moving to toss it. Stack blocks on the floor. Xbox: sticks = joints, triggers = gripper, A = home.</small>
         </div>

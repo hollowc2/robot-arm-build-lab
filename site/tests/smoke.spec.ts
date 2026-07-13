@@ -23,6 +23,8 @@ test("dashboard loads a non-empty viewer", async ({ page }) => {
   await page.getByRole("button", { name: "Reset physics objects" }).click();
   await page.getByLabel("Shoulder").fill("45");
   await expect(page.getByText("45°")).toBeVisible();
+  await page.getByRole("button", { name: "Demo" }).click();
+  await expect(page.getByText("Demo: opening gripper")).toBeVisible();
 });
 
 async function countRenderedPixels(canvas: Locator) {
