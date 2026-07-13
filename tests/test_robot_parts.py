@@ -319,46 +319,43 @@ def test_master_assembly_includes_single_wrist_motor() -> None:
     assert wrist_center_x < forearm_x - forearm_link.LINK_THICKNESS_X / 2
 
 
-def test_forearm_has_single_pulley_side_wrist_motor_mount() -> None:
+def test_forearm_has_integrated_closed_slot_wrist_motor_mount() -> None:
     from models import forearm_link
 
     model = forearm_link.build_model()
     bbox = model.bounding_box()
-    mount_face_center_x = forearm_link.WRIST_MOTOR_SIDE_SIGN * (
-        forearm_link.LINK_THICKNESS_X / 2 + forearm_link.MOTOR_FACE_THICKNESS_X / 2
+    local_mount_face_x = forearm_link.WRIST_MOTOR_SIDE_SIGN * (
+        forearm_link.LINK_THICKNESS_X / 2
+        + forearm_link.MOTOR_FACE_THICKNESS_X / 2
     )
+    mount_face_center_x = forearm_link.WRIST_ASSEMBLY_OFFSET_X + local_mount_face_x
 
     assert forearm_link.WRIST_MOTOR_SIDE_SIGN == -1
-    assert mount_face_center_x < -forearm_link.LINK_THICKNESS_X / 2
+    assert local_mount_face_x < -forearm_link.LINK_THICKNESS_X / 2
     assert bbox.size.Y == pytest.approx(forearm_link.MOTOR_FACE_WIDTH_Y)
-    assert forearm_link.LINK_HALF_WIDTH_Y == pytest.approx(forearm_link.MOTOR_FACE_WIDTH_Y / 2)
-    assert forearm_link.MOTOR_SLOT_TRAVEL == pytest.approx(6.0)
-    assert forearm_link.MOTOR_MOUNT_BOTTOM_Z == pytest.approx(
-        forearm_link.BOTTOM_HUB_RADIUS + forearm_link.MOTOR_MOUNT_ELBOW_END_CLEARANCE_Z
+    assert len(model.solids()) == 1
+    assert forearm_link.MOTOR_SLOT_TRAVEL == pytest.approx(10.0)
+    assert forearm_link.MOTOR_SLOT_TOP_Z == pytest.approx(
+        forearm_link.MOTOR_SLOT_CENTER_Z + forearm_link.MOTOR_SLOT_TRAVEL / 2
     )
-    assert forearm_link.MOTOR_SHAFT_Z == pytest.approx(
-        forearm_link.MOTOR_MOUNT_BOTTOM_Z + forearm_link.MOTOR_FACE_HEIGHT_Z / 2
+    assert forearm_link.MOTOR_SLOT_BOTTOM_Z == pytest.approx(
+        forearm_link.MOTOR_SLOT_CENTER_Z - forearm_link.MOTOR_SLOT_TRAVEL / 2
     )
+    assert forearm_link.MOTOR_MOUNT_BOTTOM_Z - forearm_link.BOTTOM_HUB_RADIUS >= 6.0
     assert forearm_link.TOP_WRIST_PIVOT_Z - forearm_link.MOTOR_SHAFT_Z == pytest.approx(
         forearm_link.WRIST_BELT_CENTER_DISTANCE
     )
     assert forearm_link.WRIST_BELT_CHANNEL_OUTER_X < -forearm_link.LINK_THICKNESS_X / 2
     assert (
-        forearm_link.WRIST_BELT_CHANNEL_OUTER_X + forearm_link.WRIST_BELT_CHANNEL_DEPTH_X
+        forearm_link.WRIST_BELT_CHANNEL_OUTER_X
+        + forearm_link.WRIST_BELT_CHANNEL_DEPTH_X
         < forearm_link.LINK_THICKNESS_X / 2
     )
 
-    mount_face_center_x = forearm_link.WRIST_ASSEMBLY_OFFSET_X + mount_face_center_x
-    upper_hole_y = forearm_link.BYJ48_EAR_SPACING / 2
-    hole_edge_y = upper_hole_y + forearm_link.BYJ48_MOUNT_HOLE / 2 - 0.05
-    assert not model.is_inside(
-        (mount_face_center_x, hole_edge_y, forearm_link.MOTOR_SHAFT_Z),
-        tolerance=1e-6,
-    )
     motor_mount_outer_x = (
         mount_face_center_x - forearm_link.MOTOR_FACE_THICKNESS_X / 2
     )
-    mounting_ring_y = upper_hole_y + 3.5
+    mounting_ring_y = forearm_link.BYJ48_EAR_SPACING / 2 + 3.5
     assert not model.is_inside(
         (
             motor_mount_outer_x + forearm_link.MOTOR_MOUNT_RECESS_DEPTH_X / 2,
@@ -381,37 +378,99 @@ def test_forearm_has_single_pulley_side_wrist_motor_mount() -> None:
         >= 3.6
     )
 
+    # The adjustment features are closed at both ends, unlike the former
+    # downward-open fork, while the center of each ear slot remains clear.
+    closed_end_offset = forearm_link.MOTOR_MOUNT_RECESS_SLOT_WIDTH_YZ / 2 + 1.0
+    for y in (
+        -forearm_link.BYJ48_EAR_SPACING / 2,
+        forearm_link.BYJ48_EAR_SPACING / 2,
+    ):
+        assert not model.is_inside(
+            (mount_face_center_x, y, forearm_link.MOTOR_SLOT_CENTER_Z),
+            tolerance=1e-6,
+        )
+        assert model.is_inside(
+            (
+                mount_face_center_x,
+                y,
+                forearm_link.MOTOR_SLOT_BOTTOM_Z - closed_end_offset,
+            ),
+            tolerance=1e-6,
+        )
+        assert model.is_inside(
+            (
+                mount_face_center_x,
+                y,
+                forearm_link.MOTOR_SLOT_TOP_Z + closed_end_offset,
+            ),
+            tolerance=1e-6,
+        )
 
-def test_forearm_wrist_drive_fits_htd_342_3m_belt() -> None:
+    # Rounded lightening windows leave continuous side rails and a cross-web.
+    for z in forearm_link.SPAN_WINDOW_ZS:
+        assert not model.is_inside((0, 0, z), tolerance=1e-6)
+        assert model.is_inside(
+            (0, forearm_link.SPAN_WINDOW_WIDTH_Y / 2 + 3.0, z),
+            tolerance=1e-6,
+        )
+    assert model.is_inside(
+        (0, 0, sum(forearm_link.SPAN_WINDOW_ZS) / 2),
+        tolerance=1e-6,
+    )
+
+
+def test_forearm_wrist_drive_tensions_342_3m_belt_on_20t_32t_pair() -> None:
     from models import forearm_link
     from models.common import (
         HTD_342_3M_PITCH_LENGTH,
+        WRIST_BELT_UNTENSIONED_CENTER_DISTANCE,
         WRIST_DRIVER_TEETH,
         WRIST_DRIVEN_TEETH,
         open_belt_pitch_length,
     )
 
-    nominal_pitch_length = open_belt_pitch_length(
+    fit_pitch_length = open_belt_pitch_length(
+        WRIST_DRIVER_TEETH,
+        WRIST_DRIVEN_TEETH,
+        WRIST_BELT_UNTENSIONED_CENTER_DISTANCE,
+    )
+    installed_pitch_length = open_belt_pitch_length(
         WRIST_DRIVER_TEETH,
         WRIST_DRIVEN_TEETH,
         forearm_link.WRIST_BELT_CENTER_DISTANCE,
     )
-    half_slot_travel = forearm_link.MOTOR_SLOT_TRAVEL / 2
+    slack_end_center_distance = (
+        forearm_link.TOP_WRIST_PIVOT_Z - forearm_link.MOTOR_SLOT_TOP_Z
+    )
+    tension_end_center_distance = (
+        forearm_link.TOP_WRIST_PIVOT_Z - forearm_link.MOTOR_SLOT_BOTTOM_Z
+    )
     slack_end_pitch_length = open_belt_pitch_length(
         WRIST_DRIVER_TEETH,
         WRIST_DRIVEN_TEETH,
-        forearm_link.WRIST_BELT_CENTER_DISTANCE - half_slot_travel,
+        slack_end_center_distance,
     )
     tension_end_pitch_length = open_belt_pitch_length(
         WRIST_DRIVER_TEETH,
         WRIST_DRIVEN_TEETH,
-        forearm_link.WRIST_BELT_CENTER_DISTANCE + half_slot_travel,
+        tension_end_center_distance,
+    )
+    fit_motor_z = (
+        forearm_link.TOP_WRIST_PIVOT_Z
+        - WRIST_BELT_UNTENSIONED_CENTER_DISTANCE
     )
 
-    assert nominal_pitch_length == pytest.approx(HTD_342_3M_PITCH_LENGTH)
-    assert forearm_link.MOTOR_SLOT_TRAVEL == pytest.approx(6.0)
+    assert (WRIST_DRIVER_TEETH, WRIST_DRIVEN_TEETH) == (20, 32)
+    assert fit_pitch_length == pytest.approx(HTD_342_3M_PITCH_LENGTH)
+    assert installed_pitch_length > HTD_342_3M_PITCH_LENGTH
+    assert (
+        forearm_link.WRIST_BELT_CENTER_DISTANCE
+        - WRIST_BELT_UNTENSIONED_CENTER_DISTANCE
+        == pytest.approx(1.0)
+    )
+    assert forearm_link.MOTOR_SLOT_BOTTOM_Z < fit_motor_z < forearm_link.MOTOR_SLOT_TOP_Z
     assert slack_end_pitch_length < HTD_342_3M_PITCH_LENGTH
-    assert tension_end_pitch_length > HTD_342_3M_PITCH_LENGTH
+    assert tension_end_pitch_length > installed_pitch_length
 
 
 def test_wrist_belt_runs_outside_connected_bicep_style_clevis() -> None:
@@ -448,7 +507,7 @@ def test_wrist_belt_runs_outside_connected_bicep_style_clevis() -> None:
         (
             forearm_link.WRIST_OFFSET_EAR_OUTER_X + 4.0,
             0,
-            forearm_link.WRIST_OFFSET_EAR_GUSSET_FULL_Z - 3.0,
+            forearm_link.WRIST_CLEVIS_CLEARANCE_BOTTOM_Z - 4.0,
         ),
         tolerance=1e-6,
     )

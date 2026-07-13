@@ -49,9 +49,11 @@ SHOULDER_BELT_CENTER_DISTANCE = 94.03
 HTD_3M_PITCH = 3.0
 HTD_342_3M_PITCH_LENGTH = 342.0
 ELBOW_BELT_CENTER_DISTANCE = 113.35
-# HTD 342-3M with the 20T/32T wrist pulley pair requires 131.8755 mm
-# pitch-center spacing.  The 6 mm motor slots provide ±3 mm tension travel.
-WRIST_BELT_CENTER_DISTANCE = 131.87553391244688
+# A 342 mm HTD 3M belt closes around the 20T/32T wrist pair at this
+# pitch-center distance.  The assembled preview adds 1 mm of center distance
+# for working tension; the forearm slots still pass through this fit point.
+WRIST_BELT_UNTENSIONED_CENTER_DISTANCE = 131.87553391244688
+WRIST_BELT_CENTER_DISTANCE = WRIST_BELT_UNTENSIONED_CENTER_DISTANCE + 1.0
 
 WRIST_DRIVER_TEETH = 20
 WRIST_DRIVEN_TEETH = 32
