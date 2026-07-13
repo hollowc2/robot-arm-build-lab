@@ -27,7 +27,7 @@ def main() -> None:
         model = build_for_export()
         if entry.name == "robot_arm_master_assembly":
             children = tuple(model.children)
-            gripper_children = tuple(children[32].children)
+            gripper_children = tuple(next(child for child in children if child.label == "sg90_parallel_gripper").children)
             export_model(model, entry.name)
             link_ranges = {
                 "simulator_base_fixed": (0, 1, 3),
