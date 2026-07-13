@@ -288,11 +288,33 @@ def _build_wrist_offset_ear_gusset():
                     radius=3.0,
                 )
         with BuildSketch(Plane.XY.offset(WRIST_CLEVIS_CLEARANCE_BOTTOM_Z)):
-            with Locations((gusset_center_x, 0)):
+            with Locations(
+                (WRIST_OFFSET_EAR_OUTER_X + CLEVIS_EAR_THICKNESS_X / 2, 0)
+            ):
                 RectangleRounded(
-                    gusset_span_x,
-                    WRIST_OFFSET_EAR_GUSSET_WIDTH_Y,
-                    radius=3.0,
+                    CLEVIS_EAR_THICKNESS_X,
+                    CLEVIS_WIDTH_Y,
+                    radius=2.5,
+                )
+        loft()
+
+        with BuildSketch(Plane.XY.offset(WRIST_CLEVIS_CLEARANCE_BOTTOM_Z)):
+            with Locations(
+                (WRIST_OFFSET_EAR_OUTER_X + CLEVIS_EAR_THICKNESS_X / 2, 0)
+            ):
+                RectangleRounded(
+                    CLEVIS_EAR_THICKNESS_X,
+                    CLEVIS_WIDTH_Y,
+                    radius=2.5,
+                )
+        with BuildSketch(Plane.XY.offset(TOP_WRIST_PIVOT_Z)):
+            with Locations(
+                (WRIST_OFFSET_EAR_OUTER_X + CLEVIS_EAR_THICKNESS_X / 2, 0)
+            ):
+                RectangleRounded(
+                    CLEVIS_EAR_THICKNESS_X,
+                    CLEVIS_WIDTH_Y,
+                    radius=2.5,
                 )
         loft()
 

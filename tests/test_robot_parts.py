@@ -365,9 +365,22 @@ def test_forearm_wrist_drive_fits_htd_342_3m_belt() -> None:
         WRIST_DRIVEN_TEETH,
         forearm_link.WRIST_BELT_CENTER_DISTANCE,
     )
+    half_slot_travel = forearm_link.MOTOR_SLOT_TRAVEL / 2
+    slack_end_pitch_length = open_belt_pitch_length(
+        WRIST_DRIVER_TEETH,
+        WRIST_DRIVEN_TEETH,
+        forearm_link.WRIST_BELT_CENTER_DISTANCE - half_slot_travel,
+    )
+    tension_end_pitch_length = open_belt_pitch_length(
+        WRIST_DRIVER_TEETH,
+        WRIST_DRIVEN_TEETH,
+        forearm_link.WRIST_BELT_CENTER_DISTANCE + half_slot_travel,
+    )
 
     assert nominal_pitch_length == pytest.approx(HTD_342_3M_PITCH_LENGTH)
     assert forearm_link.MOTOR_SLOT_TRAVEL == pytest.approx(6.0)
+    assert slack_end_pitch_length < HTD_342_3M_PITCH_LENGTH
+    assert tension_end_pitch_length > HTD_342_3M_PITCH_LENGTH
 
 
 def test_wrist_belt_runs_outside_connected_bicep_style_clevis() -> None:
@@ -405,6 +418,15 @@ def test_wrist_belt_runs_outside_connected_bicep_style_clevis() -> None:
             forearm_link.WRIST_OFFSET_EAR_OUTER_X + 4.0,
             0,
             forearm_link.WRIST_OFFSET_EAR_GUSSET_FULL_Z - 3.0,
+        ),
+        tolerance=1e-6,
+    )
+    assert forearm.is_inside(
+        (
+            forearm_link.WRIST_OFFSET_EAR_OUTER_X
+            + forearm_link.CLEVIS_EAR_THICKNESS_X / 2,
+            10.0,
+            forearm_link.WRIST_CLEVIS_CLEARANCE_BOTTOM_Z + 1.0,
         ),
         tolerance=1e-6,
     )
