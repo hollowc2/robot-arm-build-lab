@@ -27,6 +27,8 @@ from build123d import (
 try:
     from models.common import (
         BASE_GEAR_BOLT_CIRCLE,
+        BYJ48_SHAFT_ACROSS_FLATS,
+        BYJ48_SHAFT_DIAMETER,
         HTD_3M_PITCH,
         BEARING_625_OD,
         M3_CLEARANCE,
@@ -47,6 +49,8 @@ try:
 except ModuleNotFoundError:
     from common import (
         BASE_GEAR_BOLT_CIRCLE,
+        BYJ48_SHAFT_ACROSS_FLATS,
+        BYJ48_SHAFT_DIAMETER,
         HTD_3M_PITCH,
         BEARING_625_OD,
         M3_CLEARANCE,
@@ -408,6 +412,22 @@ def _add_d_shaft_hole(height: float) -> None:
         )
 
 
+def _add_double_d_shaft_hole(height: float) -> None:
+    """Cut a 28BYJ-48 bore with two opposing flats."""
+    _add_center_hole(BYJ48_SHAFT_DIAMETER, height)
+
+    filler_depth = (BYJ48_SHAFT_DIAMETER - BYJ48_SHAFT_ACROSS_FLATS) / 2
+    filler_center_x = BYJ48_SHAFT_ACROSS_FLATS / 2 + filler_depth / 2
+    for side in (-1.0, 1.0):
+        with Locations(Location((side * filler_center_x, 0, 0))):
+            Box(
+                filler_depth,
+                BYJ48_SHAFT_DIAMETER + 1.0,
+                height,
+                align=(Align.CENTER, Align.CENTER, Align.CENTER),
+            )
+
+
 def _add_d_shaft_hole_2d() -> None:
     _add_center_hole_2d(D_SHAFT_DIAMETER)
 
@@ -527,7 +547,7 @@ def build_shoulder_driver_pulley() -> Part:
     return _build_motor_pulley(
         teeth=16,
         label="shoulder_driver_16T_HTD3M_5mm_D_shaft",
-        keyed=True,
+        shaft_profile="single_d",
     )
 
 
@@ -535,15 +555,15 @@ def build_elbow_driver_pulley() -> Part:
     return _build_motor_pulley(
         teeth=16,
         label="elbow_driver_16T_HTD3M_5mm_round_shaft",
-        keyed=False,
+        shaft_profile="round",
     )
 
 
 def build_wrist_driver_pulley() -> Part:
     return _build_motor_pulley(
         teeth=WRIST_DRIVER_TEETH,
-        label=f"wrist_driver_{WRIST_DRIVER_TEETH}T_HTD3M_5mm_D_shaft",
-        keyed=True,
+        label=f"wrist_driver_{WRIST_DRIVER_TEETH}T_HTD3M_5mm_double_D_shaft",
+        shaft_profile="double_d",
     )
 
 
@@ -569,7 +589,7 @@ def build_wrist_keyed_shaft_adapter() -> Part:
                 height=WRIST_KEYED_ADAPTER_FLANGE_THICKNESS,
             )
 
-        _add_d_shaft_hole(WRIST_KEYED_ADAPTER_LENGTH)
+        _add_double_d_shaft_hole(WRIST_KEYED_ADAPTER_LENGTH)
 
         for z_offset in (-4.0, 4.0):
             with Locations(Location((0, 0, z_offset), (90, 0, 0))):
@@ -662,7 +682,7 @@ def _build_pulley(
     return _finalize(pulley.part, label)
 
 
-def _build_motor_pulley(*, teeth: int, label: str, keyed: bool) -> Part:
+def _build_motor_pulley(*, teeth: int, label: str, shaft_profile: str) -> Part:
     with BuildPart() as pulley:
         blank = _bd_timing_pulley(teeth)
         if blank is not None:
@@ -676,10 +696,14 @@ def _build_motor_pulley(*, teeth: int, label: str, keyed: bool) -> Part:
         else:
             _add_fallback_pulley_blank(teeth)
 
-        if keyed:
+        if shaft_profile == "single_d":
             _add_d_shaft_hole(PULLEY_TOTAL_HEIGHT)
-        else:
+        elif shaft_profile == "double_d":
+            _add_double_d_shaft_hole(PULLEY_TOTAL_HEIGHT)
+        elif shaft_profile == "round":
             _add_center_hole(NEMA17_SHAFT, PULLEY_TOTAL_HEIGHT)
+        else:
+            raise ValueError(f"Unknown motor pulley shaft profile: {shaft_profile}")
 
     return _finalize(pulley.part, label)
 

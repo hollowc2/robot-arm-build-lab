@@ -3,9 +3,23 @@ from __future__ import annotations
 from build123d import Align, Box, BuildPart, Cylinder, Locations, Mode, Part
 
 try:
-    from models.common import BYJ48_BODY, BYJ48_EAR_SPACING, BYJ48_MOUNT_HOLE, export_model
+    from models.common import (
+        BYJ48_BODY,
+        BYJ48_EAR_SPACING,
+        BYJ48_MOUNT_HOLE,
+        BYJ48_SHAFT_ACROSS_FLATS,
+        BYJ48_SHAFT_DIAMETER,
+        export_model,
+    )
 except ModuleNotFoundError:
-    from common import BYJ48_BODY, BYJ48_EAR_SPACING, BYJ48_MOUNT_HOLE, export_model
+    from common import (
+        BYJ48_BODY,
+        BYJ48_EAR_SPACING,
+        BYJ48_MOUNT_HOLE,
+        BYJ48_SHAFT_ACROSS_FLATS,
+        BYJ48_SHAFT_DIAMETER,
+        export_model,
+    )
 
 
 PART_NAME = "28BYJ-48_stepper_motor"
@@ -16,7 +30,6 @@ MOUNT_EAR_WIDTH = 7.0
 MOUNT_EAR_LENGTH = 10.0
 FRONT_BOSS_DIAMETER = 9.0
 FRONT_BOSS_HEIGHT = 1.5
-SHAFT_DIAMETER = 5.0
 SHAFT_LENGTH = 10.0
 MOUNT_HOLE_DEPTH = 3.0
 
@@ -68,10 +81,25 @@ def build_model() -> Part:
             align=(Align.CENTER, Align.CENTER, Align.MIN),
         )
         Cylinder(
-            SHAFT_DIAMETER / 2,
+            BYJ48_SHAFT_DIAMETER / 2,
             SHAFT_LENGTH,
             align=(Align.CENTER, Align.CENTER, Align.MIN),
         )
+        shaft_flat_cut_depth = (
+            BYJ48_SHAFT_DIAMETER - BYJ48_SHAFT_ACROSS_FLATS
+        ) / 2 + 0.5
+        shaft_flat_cut_x = (
+            BYJ48_SHAFT_ACROSS_FLATS / 2 + shaft_flat_cut_depth / 2
+        )
+        for side in (-1.0, 1.0):
+            with Locations((side * shaft_flat_cut_x, 0, SHAFT_LENGTH / 2)):
+                Box(
+                    shaft_flat_cut_depth,
+                    BYJ48_SHAFT_DIAMETER + 1.0,
+                    SHAFT_LENGTH + 0.2,
+                    align=(Align.CENTER, Align.CENTER, Align.CENTER),
+                    mode=Mode.SUBTRACT,
+                )
 
     motor.part.label = PART_NAME
     return motor.part

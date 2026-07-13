@@ -55,7 +55,7 @@ def test_master_assembly_arm_pulley_planes_match_motor_layout() -> None:
     elbow_driver = children_by_label["elbow_driver_16T_HTD3M_5mm_round_shaft"]
     elbow_driven = children_by_label["elbow_60T_HTD3M_16p15_4xM3_25BC"]
     elbow_belt = children_by_label["elbow_16T_to_60T_HTD3M_open_belt_visual"]
-    wrist_driver = children_by_label["wrist_driver_20T_HTD3M_5mm_D_shaft"]
+    wrist_driver = children_by_label["wrist_driver_20T_HTD3M_5mm_double_D_shaft"]
     wrist_adapter = children_by_label["wrist_keyed_28byj_shaft_to_pulley_adapter"]
     wrist_driven = children_by_label["wrist_32T_HTD3M_16p15_4xM3_20BC"]
     wrist_belt = children_by_label["wrist_20T_to_32T_HTD3M_open_belt_visual"]
@@ -651,6 +651,32 @@ def test_wrist_pulley_has_m3_counterbores_for_gripper_base() -> None:
     assert 0 < transmission_components.WRIST_PULLEY_M3_COUNTERBORE_DEPTH < (
         transmission_components.PULLEY_TOTAL_HEIGHT / 2
     )
+
+
+def test_wrist_driver_and_motor_use_matching_double_d_shaft() -> None:
+    from models import byj48_stepper_motor, transmission_components
+    from models.common import BYJ48_SHAFT_ACROSS_FLATS, BYJ48_SHAFT_DIAMETER
+
+    pulley = transmission_components.build_wrist_driver_pulley()
+    motor = byj48_stepper_motor.build_model()
+    just_beyond_flat = BYJ48_SHAFT_ACROSS_FLATS / 2 + 0.1
+    near_round_edge = BYJ48_SHAFT_DIAMETER / 2 - 0.1
+
+    assert not pulley.is_inside((0, 0, 0), tolerance=1e-6)
+    assert pulley.is_inside((just_beyond_flat, 0, 0), tolerance=1e-6)
+    assert pulley.is_inside((-just_beyond_flat, 0, 0), tolerance=1e-6)
+    assert not pulley.is_inside((0, near_round_edge, 0), tolerance=1e-6)
+
+    shaft_z = byj48_stepper_motor.SHAFT_LENGTH / 2
+    assert not motor.is_inside(
+        (just_beyond_flat, 0, shaft_z),
+        tolerance=1e-6,
+    )
+    assert not motor.is_inside(
+        (-just_beyond_flat, 0, shaft_z),
+        tolerance=1e-6,
+    )
+    assert motor.is_inside((0, near_round_edge, shaft_z), tolerance=1e-6)
 
 
 def test_base_120t_gear_has_bottom_m3_counterbores_for_turntable() -> None:
