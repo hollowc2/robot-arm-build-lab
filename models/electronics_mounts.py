@@ -14,18 +14,19 @@ UNO_TRAY_NAME = "arduino_uno_r4_minima_tray"
 NEMA17_DRIVER_TRAY_NAME = "nema17_driver_board_tray"
 BYJ_ULN_TRAY_NAME = "28byj_uln2003_board_tray"
 
-BASE_THICKNESS = 3.0
+BASE_THICKNESS = 2.0
 WALL_THICKNESS = 2.4
-WALL_HEIGHT = 5.0
+WALL_HEIGHT = 2.0
 BOARD_CLEARANCE = 1.0
 CABLE_GAP_WIDTH = 16.0
 
-STANDOFF_DIAMETER = 7.0
-STANDOFF_HEIGHT = 5.5
+STANDOFF_DIAMETER = 6.0
+STANDOFF_HEIGHT = 2.0
 STANDOFF_PILOT = M3_TAP_HOLE
 
-BASE_MOUNT_INSET = 6.0
-BASE_MOUNT_BOSS_DIAMETER = 9.0
+ATTACHMENT_TAB_RADIUS = 5.0
+ATTACHMENT_TAB_REACH = 5.0
+ATTACHMENT_TAB_EDGE_INSET = 6.0
 
 UNO_BOARD_X = 68.6
 UNO_BOARD_Y = 53.4
@@ -43,11 +44,15 @@ STEPSTICK_HOLE_INSET = 2.8
 
 ULN2003_BOARD_X = 35.0
 ULN2003_BOARD_Y = 32.0
+# Common four-hole ULN2003 carrier: 29.5 x 27 mm hole centers.  Clone boards
+# vary, so keep this pattern explicit and easy to adjust after a physical check.
+ULN2003_HOLE_SPACING_X = 29.5
+ULN2003_HOLE_SPACING_Y = 27.0
 ULN2003_HOLE_POINTS = (
-    (-14.0, -12.5),
-    (14.0, -12.5),
-    (-14.0, 12.5),
-    (14.0, 12.5),
+    (-ULN2003_HOLE_SPACING_X / 2, -ULN2003_HOLE_SPACING_Y / 2),
+    (ULN2003_HOLE_SPACING_X / 2, -ULN2003_HOLE_SPACING_Y / 2),
+    (-ULN2003_HOLE_SPACING_X / 2, ULN2003_HOLE_SPACING_Y / 2),
+    (ULN2003_HOLE_SPACING_X / 2, ULN2003_HOLE_SPACING_Y / 2),
 )
 
 
@@ -61,6 +66,7 @@ class BoardTraySpec:
     standoff_points: tuple[tuple[float, float], ...]
     wall_gap_sides: tuple[str, ...] = ("front",)
     base_mounts: bool = True
+    attachment_side: str = "back"
 
     @property
     def tray_x(self) -> float:
@@ -73,6 +79,16 @@ class BoardTraySpec:
     @property
     def height(self) -> float:
         return BASE_THICKNESS + max(WALL_HEIGHT, STANDOFF_HEIGHT)
+
+    @property
+    def footprint_x(self) -> float:
+        extra = 2 * ATTACHMENT_TAB_REACH if self.base_mounts and self.attachment_side in ("left", "right") else 0.0
+        return self.tray_x + extra
+
+    @property
+    def footprint_y(self) -> float:
+        extra = 2 * ATTACHMENT_TAB_REACH if self.base_mounts and self.attachment_side in ("front", "back") else 0.0
+        return self.tray_y + extra
 
 
 def _add_rail(x: float, y: float, size_x: float, size_y: float) -> None:
@@ -113,24 +129,52 @@ def _add_perimeter_lips(spec: BoardTraySpec) -> None:
             _add_rail(x, 0, WALL_THICKNESS, tray_y)
 
 
-def _cut_base_mounts(tray_x: float, tray_y: float) -> None:
-    mount_x = tray_x / 2 - BASE_MOUNT_INSET
-    mount_y = tray_y / 2 - BASE_MOUNT_INSET
-    for x in (-mount_x, mount_x):
-        for y in (-mount_y, mount_y):
-            with Locations((x, y, BASE_THICKNESS)):
-                Cylinder(
-                    BASE_MOUNT_BOSS_DIAMETER / 2,
-                    1.6,
-                    align=(Align.CENTER, Align.CENTER, Align.MIN),
-                )
-            with Locations((x, y, 0)):
-                Cylinder(
-                    M3_CLEARANCE / 2,
-                    BASE_THICKNESS + 2.0,
-                    align=(Align.CENTER, Align.CENTER, Align.MIN),
-                    mode=Mode.SUBTRACT,
-                )
+def _add_attachment_tabs(spec: BoardTraySpec) -> None:
+    """Add two flush ears outside the board footprint.
+
+    Keeping the attachment screws outside the PCB makes the carrier thinner
+    and lets its mounting edge sit directly against the associated motor pad.
+    """
+    side = spec.attachment_side
+    if side not in ("front", "back", "left", "right"):
+        raise ValueError(f"Unsupported attachment side: {side}")
+
+    if side in ("front", "back"):
+        side_sign = -1.0 if side == "front" else 1.0
+        tab_offset = min(spec.tray_x / 2 - ATTACHMENT_TAB_EDGE_INSET, 18.0)
+        centers = (
+            (-tab_offset, side_sign * (spec.tray_y / 2 + ATTACHMENT_TAB_REACH)),
+            (tab_offset, side_sign * (spec.tray_y / 2 + ATTACHMENT_TAB_REACH)),
+        )
+        neck_size = (2 * ATTACHMENT_TAB_RADIUS, 2 * ATTACHMENT_TAB_REACH)
+    else:
+        side_sign = -1.0 if side == "left" else 1.0
+        tab_offset = min(spec.tray_y / 2 - ATTACHMENT_TAB_EDGE_INSET, 18.0)
+        centers = (
+            (side_sign * (spec.tray_x / 2 + ATTACHMENT_TAB_REACH), -tab_offset),
+            (side_sign * (spec.tray_x / 2 + ATTACHMENT_TAB_REACH), tab_offset),
+        )
+        neck_size = (2 * ATTACHMENT_TAB_REACH, 2 * ATTACHMENT_TAB_RADIUS)
+
+    for x, y in centers:
+        with Locations((x, y, 0)):
+            Cylinder(
+                ATTACHMENT_TAB_RADIUS,
+                BASE_THICKNESS,
+                align=(Align.CENTER, Align.CENTER, Align.MIN),
+            )
+            Box(
+                neck_size[0],
+                neck_size[1],
+                BASE_THICKNESS,
+                align=(Align.CENTER, Align.CENTER, Align.MIN),
+            )
+            Cylinder(
+                M3_CLEARANCE / 2,
+                BASE_THICKNESS + 0.4,
+                align=(Align.CENTER, Align.CENTER, Align.MIN),
+                mode=Mode.SUBTRACT,
+            )
 
 
 def _add_standoffs(spec: BoardTraySpec) -> None:
@@ -152,7 +196,7 @@ def _add_standoffs(spec: BoardTraySpec) -> None:
 
 def build_board_tray(spec: BoardTraySpec) -> Part:
     """Build a ventilated electronics tray from a board footprint and hole pattern."""
-    assert_printable_extent((spec.tray_x, spec.tray_y, spec.height))
+    assert_printable_extent((spec.footprint_x, spec.footprint_y, spec.height))
 
     with BuildPart() as tray:
         Box(
@@ -166,7 +210,7 @@ def build_board_tray(spec: BoardTraySpec) -> Part:
         _add_standoffs(spec)
 
         if spec.base_mounts:
-            _cut_base_mounts(spec.tray_x, spec.tray_y)
+            _add_attachment_tabs(spec)
 
         # A shallow underside relief reduces plastic while leaving screw bosses supported.
         with Locations((0, 0, 0)):
@@ -195,7 +239,7 @@ def build_arduino_uno_r4_minima_tray() -> Part:
     )
 
 
-def build_nema17_driver_board_tray(driver_count: int = 1) -> Part:
+def build_nema17_driver_board_tray(driver_count: int = 1, attachment_side: str = "back") -> Part:
     """Build a tray for one or more StepStick-style NEMA17 driver carrier boards."""
     if driver_count < 1:
         raise ValueError("driver_count must be at least 1")
@@ -216,11 +260,12 @@ def build_nema17_driver_board_tray(driver_count: int = 1) -> Part:
             board_y=STEPSTICK_BOARD_Y,
             standoff_points=tuple(standoffs),
             wall_gap_sides=("front", "back"),
+            attachment_side=attachment_side,
         )
     )
 
 
-def build_28byj_uln_board_tray() -> Part:
+def build_28byj_uln_board_tray(attachment_side: str = "back") -> Part:
     """Build a compact tray for the common ULN2003 board used with 28BYJ steppers."""
     return build_board_tray(
         BoardTraySpec(
@@ -229,6 +274,7 @@ def build_28byj_uln_board_tray() -> Part:
             board_y=ULN2003_BOARD_Y,
             standoff_points=ULN2003_HOLE_POINTS,
             wall_gap_sides=("front", "right"),
+            attachment_side=attachment_side,
         )
     )
 

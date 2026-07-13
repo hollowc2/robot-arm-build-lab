@@ -24,8 +24,9 @@ def test_viewer_model_contains_labeled_parts() -> None:
 
 def test_catalog_includes_safety_and_print_metadata() -> None:
     catalog = build_catalog()
-    guarded = next(part for part in catalog["parts"] if part["name"] == "robot_arm_guarded_assembly")
+    snap_cover = next(
+        part for part in catalog["parts"] if part["name"] == "bicep_elbow_belt_snap_cover"
+    )
 
-    assert guarded["material"] == "PETG"
-    assert guarded["guardDependencies"]
-    assert guarded["validation"] == "full-sweep-required"
+    assert snap_cover["material"] == "PETG"
+    assert snap_cover["validation"] == "fit-test-required"

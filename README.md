@@ -54,7 +54,7 @@ The export also creates the rigid-link meshes used by `/robot-arm/simulator/`.
 - The 120T gear's six M3 turntable holes are clocked to match the azimuth turntable and include bottom-side counterbores so hardware can sit below the gear when bolting up into the turntable.
 - The geared base stator carries the fixed center boss/bearing stack; keep the 120T gear center bore and vertical stack clear of that boss when adjusting the base assembly.
 - `models/belt_base_candidate.py` is the comparison design for the spare HTD 342-3M belt. It uses an 18T/108T pair to preserve the 6:1 base ratio; a 20T/120T pair is too large for that belt length.
-- `models/master_assembly.py` supports `mechanical`, `service`, and `guarded` configurations. The default remains `mechanical` for compatibility.
+- `models/master_assembly.py` supports `mechanical` and `service` configurations. The default remains `mechanical`.
 - Printed guards and the electronics enclosure are prototypes until physical fit, full motion sweep, temperature, and interlock tests are recorded.
 
 ## Child-Facing Safety Boundary

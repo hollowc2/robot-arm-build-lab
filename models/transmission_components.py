@@ -88,6 +88,9 @@ WRIST_KEYED_ADAPTER_FLANGE_OD = 18.0
 WRIST_KEYED_ADAPTER_FLANGE_THICKNESS = 3.0
 WRIST_PULLEY_M3_COUNTERBORE_DIAMETER = 6.8
 WRIST_PULLEY_M3_COUNTERBORE_DEPTH = 2.0
+# Slightly undersized for an M3 screw to form a firm thread directly in the
+# printed elbow pulley.  Other tapped features retain the nominal 2.5 mm pilot.
+ELBOW_PULLEY_M3_THREAD_PILOT = 2.3
 
 D_SHAFT_DIAMETER = NEMA17_SHAFT
 D_SHAFT_FLAT_TO_ROUND = 4.5
@@ -595,7 +598,7 @@ def build_elbow_pulley() -> Part:
         center_hole=BEARING_625_OD,
         bolt_circle=ELBOW_PULLEY_BOLT_CIRCLE,
         label="elbow_60T_HTD3M_16p15_4xM3_25BC",
-        bolt_hole_diameter=M3_TAP_HOLE,
+        bolt_hole_diameter=ELBOW_PULLEY_M3_THREAD_PILOT,
     )
 
 

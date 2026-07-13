@@ -39,6 +39,7 @@ VIEWER_PARTS = (
     ("shoulder_16T_to_80T_HTD3M_open_belt_visual", [-76, -52, 70], [-54, 52, 82], "active"),
     ("shoulder_pivot_8mm_shaft", [-38, -4, 70], [38, 4, 78], "active"),
     ("bicep_arm_link", [-12, -23, 72], [34, 23, 176], "active"),
+    ("bicep_elbow_belt_snap_cover", [-25.587, -34.155, 104], [-8.6, 34.155, 270.35], "draft"),
     ("bicep_harness_channel_marker", [0, -8, 130], [12, 8, 170], "draft"),
     ("shoulder_pivot_8mm_spacer", [8, -10, 70], [20, 10, 82], "active"),
     ("elbow_nema17_stepper_motor", [24, -22, 142], [66, 22, 184], "active"),
@@ -140,7 +141,7 @@ def build_catalog() -> dict[str, Any]:
     parts: list[dict[str, Any]] = []
 
     for entry in MODEL_REGISTRY:
-        if entry.name in {"robot_arm_master_assembly", "robot_arm_guarded_assembly"}:
+        if entry.name == "robot_arm_master_assembly":
             bbox = _bbox_from_boxes([child["bbox"] for child in children])
             volume = round(sum(float(child["volumeMm3"]) for child in children), 3)
         else:

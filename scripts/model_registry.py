@@ -22,6 +22,7 @@ MODEL_REGISTRY: tuple[ModelEntry, ...] = (
     ModelEntry("models.geared_base_stator", "geared_base_stator", "Geared Base Stator", "base", "prototype", True),
     ModelEntry("models.azimuth_turntable_shoulder_cleat", "azimuth_turntable_shoulder_cleat", "Azimuth Turntable Shoulder Cleat", "base", "prototype", True),
     ModelEntry("models.bicep_arm_link", "bicep_arm_link", "Bicep Arm Link", "arm", "prototype", True),
+    ModelEntry("models.bicep_belt_cover", "bicep_elbow_belt_snap_cover", "Bicep Elbow Belt Snap Cover", "safety", "prototype", True, validation="fit-test-required"),
     ModelEntry("models.forearm_link", "forearm_link", "Forearm Link", "arm", "prototype", True),
     ModelEntry("models.electronics_mounts", "electronics_mounts", "Electronics Mounts", "electronics", "draft", True),
     ModelEntry("models.wire_management", "wire_management", "Wire Management", "electronics", "draft", True),
@@ -36,7 +37,6 @@ MODEL_REGISTRY: tuple[ModelEntry, ...] = (
     ModelEntry("models.electronics_enclosure", "electronics_enclosure", "Electronics Enclosure", "safety", "prototype", True, hardware=("M3 screws", "guard interlock switch"), validation="fit-test-required"),
     ModelEntry("models.wrist_keyed_shaft_adapter", "wrist_keyed_28byj_shaft_to_pulley_adapter", "Wrist Keyed Shaft Adapter", "drive", "prototype", True),
     ModelEntry("models.master_assembly", "robot_arm_master_assembly", "Robot Arm Master Assembly", "assembly", "active", False),
-    ModelEntry("models.guarded_assembly", "robot_arm_guarded_assembly", "Guarded Robot Arm Assembly", "assembly", "prototype", False, guard_dependencies=("base_drive_guard", "shoulder_belt_guard", "elbow_belt_guard", "wrist_belt_guard", "gripper_linkage_guard", "electronics_enclosure"), validation="full-sweep-required"),
 )
 
 

@@ -41,35 +41,6 @@ def test_guard_and_enclosure_safety_parameters() -> None:
     assert electronics_enclosure.VENT_WIDTH < 5.0
 
 
-def test_guarded_assembly_contains_required_protection() -> None:
-    from models.guarded_assembly import build_model
-
-    assembly = build_model()
-    labels = {child.label for child in assembly.children}
-    assert {
-        "electronics_enclosure",
-        "base_drive_guard",
-        "shoulder_belt_guard",
-        "elbow_belt_guard",
-        "wrist_belt_guard",
-        "gripper_linkage_guard",
-        "base_cable_entry_strain_relief_guide",
-        "base_azimuth_service_loop_guard",
-    }.issubset(labels)
-
-    children = {child.label: child for child in assembly.children}
-    for belt_label, guard_label in (
-        ("shoulder_16T_to_80T_HTD3M_open_belt_visual", "shoulder_belt_guard"),
-        ("elbow_16T_to_60T_HTD3M_open_belt_visual", "elbow_belt_guard"),
-        ("wrist_20T_to_32T_HTD3M_open_belt_visual", "wrist_belt_guard"),
-    ):
-        belt = children[belt_label].bounding_box()
-        guard = children[guard_label].bounding_box()
-        assert guard.min.X < belt.min.X < belt.max.X < guard.max.X
-        assert guard.min.Y < belt.min.Y < belt.max.Y < guard.max.Y
-        assert guard.min.Z < belt.min.Z < belt.max.Z < guard.max.Z
-
-
 def test_safety_controller_host_state_machine(tmp_path: Path) -> None:
     executable = tmp_path / "safety-controller-test"
     subprocess.run(

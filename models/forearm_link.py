@@ -7,7 +7,6 @@ from build123d import (
     Box,
     BuildPart,
     BuildSketch,
-    Cone,
     Cylinder,
     Locations,
     Mode,
@@ -25,8 +24,10 @@ try:
         BEARING_625_OD,
         BEARING_625_WIDTH,
         BYJ48_BODY,
+        BYJ48_MOUNT_HOLE,
         BYJ48_EAR_SPACING,
         M3_CLEARANCE,
+        M3_COUNTERBORE_DEPTH,
         ELBOW_PULLEY_BOLT_CIRCLE,
         WRIST_BELT_CENTER_DISTANCE,
         WRIST_DRIVER_TEETH,
@@ -41,8 +42,10 @@ except ModuleNotFoundError:
         BEARING_625_OD,
         BEARING_625_WIDTH,
         BYJ48_BODY,
+        BYJ48_MOUNT_HOLE,
         BYJ48_EAR_SPACING,
         M3_CLEARANCE,
+        M3_COUNTERBORE_DEPTH,
         ELBOW_PULLEY_BOLT_CIRCLE,
         WRIST_BELT_CENTER_DISTANCE,
         WRIST_DRIVER_TEETH,
@@ -106,42 +109,33 @@ WRIST_PULLEY_TOTAL_HEIGHT = WRIST_BELT_WIDTH + 2 * WRIST_PULLEY_FLANGE_HEIGHT
 WRIST_PULLEY_RELIEF_CENTER_X = WRIST_BELT_CHANNEL_CENTER_X
 WRIST_PULLEY_RELIEF_DEPTH_X = WRIST_PULLEY_TOTAL_HEIGHT + 2 * WRIST_PULLEY_AXIAL_CLEARANCE_X
 
-# A one-sided radial gate lets a closed belt loop enter the otherwise enclosed
-# belt channel.  It is positioned on the long, upper run--away from the motor
-# mounting slots and wrist bearing ears.
-WRIST_BELT_ENTRY_WIDTH_YZ = 5.2
-WRIST_BELT_ENTRY_EDGE_CLEARANCE_Y = 1.0
-WRIST_BELT_ENTRY_RUN_FRACTION = 0.52
 
 ELBOW_BOLT_HEAD_SIDE_SIGN = -1
-ELBOW_M3_COUNTERSINK_DIAMETER = 6.8
-ELBOW_M3_COUNTERSINK_DEPTH = 2.0
+ELBOW_M3_COUNTERBORE_DIAMETER = 6.8
+ELBOW_M3_COUNTERBORE_DEPTH = M3_COUNTERBORE_DEPTH
 
 CLEVIS_GAP_X = 29.0
 WRIST_CLEVIS_GAP_CENTER_X = WRIST_ASSEMBLY_OFFSET_X + 2.0
 CLEVIS_EAR_THICKNESS_X = 6.0
-CLEVIS_WIDTH_Y = 40.0
+CLEVIS_WIDTH_Y = 26.0
 CLEVIS_HEIGHT_Z = 36.0
 CLEVIS_BRIDGE_HEIGHT_Z = 10.0
 WRIST_CLEVIS_CLEARANCE_Z = 50.0
 WRIST_HULL_TRANSITION_START_Z = TOP_WRIST_PIVOT_Z - 62.0
-WRIST_HULL_WIDTH_Y = 44.0
+WRIST_HULL_WIDTH_Y = 28.0
+WRIST_CLEVIS_CLEARANCE_BOTTOM_Z = TOP_WRIST_PIVOT_Z - WRIST_CLEVIS_CLEARANCE_Z / 2
+WRIST_OFFSET_EAR_GUSSET_WIDTH_Y = 14.0
+WRIST_OFFSET_EAR_GUSSET_FULL_Z = WRIST_CLEVIS_CLEARANCE_BOTTOM_Z - 10.0
+WRIST_OFFSET_EAR_OUTER_X = (
+    WRIST_CLEVIS_GAP_CENTER_X - CLEVIS_GAP_X / 2 - CLEVIS_EAR_THICKNESS_X
+)
+WRIST_OFFSET_EAR_GUSSET_INNER_X = -LINK_THICKNESS_X / 2
+
 
 
 def _x_cylinder(radius: float, height: float, mode: Mode = Mode.ADD) -> None:
     Cylinder(
         radius=radius,
-        height=height,
-        rotation=(0, 90, 0),
-        align=(Align.CENTER, Align.CENTER, Align.CENTER),
-        mode=mode,
-    )
-
-
-def _x_cone(bottom_radius: float, top_radius: float, height: float, mode: Mode = Mode.ADD) -> None:
-    Cone(
-        bottom_radius=bottom_radius,
-        top_radius=top_radius,
         height=height,
         rotation=(0, 90, 0),
         align=(Align.CENTER, Align.CENTER, Align.CENTER),
@@ -180,7 +174,7 @@ def _pitch_radius(teeth: int) -> float:
     return teeth * HTD_3M_PITCH / (2 * pi)
 
 
-def _cut_wrist_belt_channel() -> None:
+def _cut_wrist_belt_channels() -> None:
     driver_radius = _pitch_radius(WRIST_DRIVER_TEETH)
     driven_radius = _pitch_radius(WRIST_DRIVEN_TEETH)
     center_distance = TOP_WRIST_PIVOT_Z - MOTOR_SHAFT_Z
@@ -222,31 +216,6 @@ def _cut_wrist_belt_loading_relief() -> None:
             _x_cylinder(radius, WRIST_PULLEY_RELIEF_DEPTH_X, Mode.SUBTRACT)
 
 
-def _cut_wrist_belt_entry_path() -> None:
-    """Cut a service gate from the positive-Y edge into the upper belt run."""
-    driver_radius = _pitch_radius(WRIST_DRIVER_TEETH)
-    driven_radius = _pitch_radius(WRIST_DRIVEN_TEETH)
-    center_distance = TOP_WRIST_PIVOT_Z - MOTOR_SHAFT_Z
-    tangent_bias = (driver_radius - driven_radius) / center_distance
-    tangent_span = (1 - tangent_bias * tangent_bias) ** 0.5
-
-    # Use the positive-Y run.  Its point at the chosen fraction is inside the
-    # existing channel; the slot then opens through the outer rail to provide
-    # a real loading path for a continuous belt.
-    start_y = tangent_span * driver_radius
-    start_z = MOTOR_SHAFT_Z + tangent_bias * driver_radius
-    end_y = tangent_span * driven_radius
-    end_z = TOP_WRIST_PIVOT_Z + tangent_bias * driven_radius
-    run_y = start_y + (end_y - start_y) * WRIST_BELT_ENTRY_RUN_FRACTION
-    run_z = start_z + (end_z - start_z) * WRIST_BELT_ENTRY_RUN_FRACTION
-    edge_y = LINK_HALF_WIDTH_Y + WRIST_BELT_ENTRY_EDGE_CLEARANCE_Y
-    gate_length = edge_y - run_y + WRIST_BELT_CHANNEL_SLOT_WIDTH_YZ / 2
-
-    entry_start_x = WRIST_PULLEY_RELIEF_CENTER_X - WRIST_PULLEY_RELIEF_DEPTH_X / 2
-    with BuildSketch(Plane.YZ.offset(entry_start_x)) as entry:
-        with Locations(((run_y + edge_y) / 2, run_z)):
-            SlotCenterToCenter(gate_length, WRIST_BELT_ENTRY_WIDTH_YZ, rotation=0)
-    extrude(entry.sketch, amount=WRIST_PULLEY_RELIEF_DEPTH_X, mode=Mode.SUBTRACT)
 
 
 def _cut_wrist_clevis_clearance() -> None:
@@ -288,12 +257,54 @@ def _build_wrist_swept_hull():
     return hull.part
 
 
+def _build_wrist_offset_ear_gusset():
+    """Brace the offset clevis ear through the belt-free space between both runs."""
+    gusset_span_x = WRIST_OFFSET_EAR_GUSSET_INNER_X - WRIST_OFFSET_EAR_OUTER_X
+    gusset_center_x = WRIST_OFFSET_EAR_OUTER_X + gusset_span_x / 2
+    if gusset_span_x <= 0:
+        raise ValueError("Offset wrist ear gusset has no X span.")
+
+    with BuildPart() as gusset:
+        with BuildSketch(Plane.XY.offset(WRIST_HULL_TRANSITION_START_Z)):
+            RectangleRounded(
+                LINK_THICKNESS_X,
+                WRIST_OFFSET_EAR_GUSSET_WIDTH_Y,
+                radius=3.0,
+            )
+        with BuildSketch(Plane.XY.offset(WRIST_OFFSET_EAR_GUSSET_FULL_Z)):
+            with Locations((gusset_center_x, 0)):
+                RectangleRounded(
+                    gusset_span_x,
+                    WRIST_OFFSET_EAR_GUSSET_WIDTH_Y,
+                    radius=3.0,
+                )
+        loft()
+
+        with BuildSketch(Plane.XY.offset(WRIST_OFFSET_EAR_GUSSET_FULL_Z)):
+            with Locations((gusset_center_x, 0)):
+                RectangleRounded(
+                    gusset_span_x,
+                    WRIST_OFFSET_EAR_GUSSET_WIDTH_Y,
+                    radius=3.0,
+                )
+        with BuildSketch(Plane.XY.offset(WRIST_CLEVIS_CLEARANCE_BOTTOM_Z)):
+            with Locations((gusset_center_x, 0)):
+                RectangleRounded(
+                    gusset_span_x,
+                    WRIST_OFFSET_EAR_GUSSET_WIDTH_Y,
+                    radius=3.0,
+                )
+        loft()
+
+    return gusset.part
+
+
 def build_model():
     """Build the forearm link with the elbow pivot at the local origin.
 
     The lower elbow pivot and upper wrist pivot both use X as the pivot axis.
-    The two wrist motor shaft centers are coaxial at MOTOR_SHAFT_Z, making
-    the center-to-center distance to the wrist pivot exactly 109.33mm.
+    The wrist motor shaft is coaxial at MOTOR_SHAFT_Z, and its center distance
+    to the wrist pivot matches WRIST_BELT_CENTER_DISTANCE.
     """
     if MOTOR_MOUNT_BOTTOM_Z - BOTTOM_HUB_RADIUS < 6.0:
         raise ValueError("Forearm wrist motor mount must clear the elbow hub end by at least 6mm.")
@@ -308,14 +319,13 @@ def build_model():
         for y, z in circle_points(4, ELBOW_PULLEY_BOLT_CIRCLE, start_angle=45):
             with Locations((0, y, z)):
                 _x_cylinder(M3_CLEARANCE / 2, BOTTOM_HUB_THICKNESS + 4.0, Mode.SUBTRACT)
-            countersink_x = ELBOW_BOLT_HEAD_SIDE_SIGN * (
-                BOTTOM_HUB_THICKNESS / 2 - ELBOW_M3_COUNTERSINK_DEPTH / 2
+            counterbore_x = ELBOW_BOLT_HEAD_SIDE_SIGN * (
+                BOTTOM_HUB_THICKNESS / 2 - ELBOW_M3_COUNTERBORE_DEPTH / 2
             )
-            with Locations((countersink_x, y, z)):
-                _x_cone(
-                    ELBOW_M3_COUNTERSINK_DIAMETER / 2,
-                    M3_CLEARANCE / 2,
-                    ELBOW_M3_COUNTERSINK_DEPTH,
+            with Locations((counterbore_x, y, z)):
+                _x_cylinder(
+                    ELBOW_M3_COUNTERBORE_DIAMETER / 2,
+                    ELBOW_M3_COUNTERBORE_DEPTH,
                     Mode.SUBTRACT,
                 )
 
@@ -419,13 +429,14 @@ def build_model():
                 y,
                 MOTOR_SHAFT_Z,
                 MOTOR_SLOT_TRAVEL,
-                M3_CLEARANCE,
+                BYJ48_MOUNT_HOLE,
                 x_start=face_x - motor_mount_through_x / 2,
                 depth=motor_mount_through_x,
             )
 
         # Top wrist clevis: a bicep-style swept shoulder cut back into two bearing ears.
         add(_build_wrist_swept_hull())
+        add(_build_wrist_offset_ear_gusset())
 
         with Locations(
             (
@@ -455,9 +466,8 @@ def build_model():
                 _x_cylinder(BEARING_625_OD / 2, BEARING_625_WIDTH, Mode.SUBTRACT)
 
         _cut_wrist_clevis_clearance()
-        _cut_wrist_belt_channel()
+        _cut_wrist_belt_channels()
         _cut_wrist_belt_loading_relief()
-        _cut_wrist_belt_entry_path()
 
     model = forearm.part
     size = model.bounding_box().size

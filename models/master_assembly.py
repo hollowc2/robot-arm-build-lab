@@ -26,11 +26,12 @@ WRIST_STACK_CLEARANCE = 1.0
 
 
 def build_model(configuration: str = "mechanical") -> Compound:
-    if configuration not in {"mechanical", "guarded", "service"}:
-        raise ValueError("configuration must be mechanical, guarded, or service")
+    if configuration not in {"mechanical", "service"}:
+        raise ValueError("configuration must be mechanical or service")
     try:
         from models import azimuth_turntable_shoulder_cleat as turntable_model
         from models import bicep_arm_link as bicep_model
+        from models.bicep_belt_cover import build_model as build_bicep_belt_cover
         from models import forearm_link as forearm_model
         from models import geared_base_stator as stator_model
         from models.joint_shafts import (
@@ -45,6 +46,10 @@ def build_model(configuration: str = "mechanical") -> Compound:
         from models.hardware import build_608_bearing, build_625_bearing, build_m3_socket_screw, build_sg90_servo
         from models.byj48_stepper_motor import build_model as build_byj48
         from models.nema17_stepper_motor import build_model as build_nema17
+        from models.electronics_mounts import (
+            build_28byj_uln_board_tray,
+            build_nema17_driver_board_tray,
+        )
         from models import sg90_gripper_base as gripper_base_model
         from models import sg90_parallel_gripper as gripper_model
         from models.sg90_parallel_gripper import build_model as build_gripper
@@ -71,6 +76,7 @@ def build_model(configuration: str = "mechanical") -> Compound:
     except ModuleNotFoundError:
         import azimuth_turntable_shoulder_cleat as turntable_model
         import bicep_arm_link as bicep_model
+        from bicep_belt_cover import build_model as build_bicep_belt_cover
         import forearm_link as forearm_model
         import geared_base_stator as stator_model
         from joint_shafts import (
@@ -85,6 +91,10 @@ def build_model(configuration: str = "mechanical") -> Compound:
         from hardware import build_608_bearing, build_625_bearing, build_m3_socket_screw, build_sg90_servo
         from byj48_stepper_motor import build_model as build_byj48
         from nema17_stepper_motor import build_model as build_nema17
+        from electronics_mounts import (
+            build_28byj_uln_board_tray,
+            build_nema17_driver_board_tray,
+        )
         import sg90_gripper_base as gripper_base_model
         import sg90_parallel_gripper as gripper_model
         from sg90_parallel_gripper import build_model as build_gripper
@@ -373,38 +383,49 @@ def build_model(configuration: str = "mechanical") -> Compound:
         )
         * Rot(0, 90, 90)
     )
-    # Board trays are disabled in the main assembly preview.
-    # arduino_tray = build_arduino_uno_r4_minima_tray().moved(
-    #     Pos(0, -113, stator_model.BASE_THICKNESS)
-    # )
-    # base_driver_tray = build_nema17_driver_board_tray().moved(
-    #     Pos(stator_model.BASE_GEAR_CENTER_DISTANCE, 60, stator_model.BASE_THICKNESS)
-    # )
-    # base_driver_tray.label = "base_nema17_driver_board_tray"
-    # shoulder_driver_tray = build_nema17_driver_board_tray().moved(
-    #     Pos(
-    #         turntable_model.LEFT_OUTER_X - 10,
-    #         -48,
-    #         AZIMUTH_TURNTABLE_Z + turntable_model.PLATE_THICKNESS,
-    #     )
-    # )
-    # shoulder_driver_tray.label = "shoulder_nema17_driver_board_tray"
-    # elbow_driver_tray = build_nema17_driver_board_tray().moved(
-    #     Pos(
-    #         bicep_model.MOTOR_FACE_X + 38,
-    #         -33,
-    #         shoulder_pivot_z + bicep_model.MOTOR_SHAFT_Z,
-    #     )
-    # )
-    # elbow_driver_tray.label = "elbow_nema17_driver_board_tray"
-    # wrist_driver_tray = build_28byj_uln_board_tray().moved(
-    #     Pos(
-    #         forearm_x + forearm_model.LINK_THICKNESS_X / 2 + 22,
-    #         -33,
-    #         elbow_pivot_z + forearm_model.MOTOR_SHAFT_Z + 25,
-    #     )
-    # )
-    # wrist_driver_tray.label = "wrist_28byj_uln2003_board_tray"
+    # Keep each motor driver on the same structural stage as its motor.  The
+    # arm-mounted carriers stand on edge just outside the motor envelope so
+    # their thin attachment ears can fasten directly to the adjacent pad.
+    base_driver_tray = build_nema17_driver_board_tray().moved(
+        Pos(stator_model.BASE_GEAR_CENTER_DISTANCE, -30, stator_model.BASE_THICKNESS)
+    )
+    base_driver_tray.label = "base_nema17_driver_board_tray"
+    shoulder_driver_tray = build_nema17_driver_board_tray(attachment_side="right")
+    shoulder_driver_tab_x = (
+        turntable_model.LEFT_OUTER_X - turntable_model.MOTOR_PAD_THICKNESS / 2
+    )
+    shoulder_driver_tray = shoulder_driver_tray.moved(
+        Pos(
+            shoulder_driver_tab_x - shoulder_driver_tray.bounding_box().max.X,
+            -turntable_model.MOTOR_PAD_FACE / 2,
+            AZIMUTH_TURNTABLE_Z + turntable_model.MOTOR_SHAFT_Z,
+        )
+        * Rot(90, 0, 0)
+    )
+    shoulder_driver_tray.label = "shoulder_nema17_driver_board_tray"
+    elbow_driver_tray = build_nema17_driver_board_tray(attachment_side="right")
+    elbow_driver_tray = elbow_driver_tray.moved(
+        Pos(
+            bicep_model.MOTOR_PLATE_CENTER_X - elbow_driver_tray.bounding_box().max.X,
+            -bicep_model.MOTOR_PLATE_WIDTH_Y / 2,
+            shoulder_pivot_z + bicep_model.MOTOR_SHAFT_Z,
+        )
+        * Rot(90, 0, 0)
+    )
+    elbow_driver_tray.label = "elbow_nema17_driver_board_tray"
+    wrist_driver_tray = build_28byj_uln_board_tray(attachment_side="right")
+    wrist_driver_tab_x = forearm_x + forearm_model.WRIST_ASSEMBLY_OFFSET_X - (
+        forearm_model.LINK_THICKNESS_X / 2 + forearm_model.MOTOR_FACE_THICKNESS_X / 2
+    )
+    wrist_driver_tray = wrist_driver_tray.moved(
+        Pos(
+            wrist_driver_tab_x - wrist_driver_tray.bounding_box().max.X,
+            -forearm_model.MOTOR_FACE_WIDTH_Y / 2,
+            elbow_pivot_z + forearm_model.MOTOR_SHAFT_Z,
+        )
+        * Rot(90, 0, 0)
+    )
+    wrist_driver_tray.label = "wrist_28byj_uln2003_board_tray"
 
     # Wire-management parts are disabled in the main assembly preview.
     # base_cable_guide = build_base_cable_entry_strain_relief_guide().moved(
@@ -448,6 +469,7 @@ def build_model(configuration: str = "mechanical") -> Compound:
     children = [
             stator,
             base_motor,
+            base_driver_tray,
             base_gear,
             base_pinion,
             base_shaft,
@@ -455,6 +477,7 @@ def build_model(configuration: str = "mechanical") -> Compound:
             *base_gear_fasteners,
             turntable,
             shoulder_motor,
+            shoulder_driver_tray,
             shoulder_driver_pulley,
             shoulder_belt,
             shoulder_shaft,
@@ -463,6 +486,7 @@ def build_model(configuration: str = "mechanical") -> Compound:
             bicep,
             shoulder_spacer,
             elbow_motor,
+            elbow_driver_tray,
             elbow_driver_pulley,
             elbow_belt,
             shoulder_pulley,
@@ -472,6 +496,7 @@ def build_model(configuration: str = "mechanical") -> Compound:
             forearm,
             elbow_pulley,
             wrist_motor,
+            wrist_driver_tray,
             wrist_shaft_adapter,
             wrist_driver_pulley,
             wrist_belt,
@@ -486,7 +511,11 @@ def build_model(configuration: str = "mechanical") -> Compound:
             wrist_pulley,
         ]
 
-    if configuration in {"guarded", "service"}:
+    # Service mode leaves the fitted snap cover off for drivetrain access.
+    if configuration == "mechanical":
+        children.append(build_bicep_belt_cover().moved(Pos(0, 0, shoulder_pivot_z)))
+
+    if configuration == "service":
         base_cable_guide = build_base_cable_entry_strain_relief_guide().moved(
             Pos(0, -98, stator_model.BASE_THICKNESS)
         )
@@ -495,49 +524,8 @@ def build_model(configuration: str = "mechanical") -> Compound:
         )
         children.extend((base_cable_guide, base_service_loop_guard))
 
-    if configuration == "guarded":
-        try:
-            from models.electronics_enclosure import build_model as build_electronics_enclosure
-            from models.safety_guards import (
-                build_base_drive_guard,
-                build_elbow_belt_guard,
-                build_gripper_linkage_guard,
-                build_shoulder_belt_guard,
-                build_wrist_belt_guard,
-            )
-        except ModuleNotFoundError:
-            from electronics_enclosure import build_model as build_electronics_enclosure
-            from safety_guards import (
-                build_base_drive_guard,
-                build_elbow_belt_guard,
-                build_gripper_linkage_guard,
-                build_shoulder_belt_guard,
-                build_wrist_belt_guard,
-            )
-
-        shoulder_guard_z = (
-            AZIMUTH_TURNTABLE_Z + turntable_model.MOTOR_SHAFT_Z + shoulder_pivot_z
-        ) / 2
-        elbow_guard_z = (shoulder_pivot_z + bicep_model.MOTOR_SHAFT_Z + elbow_pivot_z) / 2
-        wrist_guard_z = (elbow_pivot_z + forearm_model.MOTOR_SHAFT_Z + wrist_pivot_z) / 2
-        enclosure = build_electronics_enclosure().moved(Pos(0, 0, -58.0))
-        children.extend(
-            (
-                enclosure,
-                build_base_drive_guard().moved(Pos(0, 0, stator_model.BASE_THICKNESS)),
-                build_shoulder_belt_guard().moved(Pos(shoulder_pulley_x, 0, shoulder_guard_z)),
-                build_elbow_belt_guard().moved(Pos(elbow_pulley_x, 0, elbow_guard_z)),
-                build_wrist_belt_guard().moved(Pos(wrist_pulley_x, 0, wrist_guard_z)),
-                build_gripper_linkage_guard().moved(Pos(wrist_gripper_x, 54.0, wrist_pivot_z + 15.0)),
-            )
-        )
-
     label = "robot_arm_master_assembly" if configuration == "mechanical" else f"robot_arm_{configuration}_assembly"
     return Compound(children=children, label=label)
-
-
-def build_guarded_model() -> Compound:
-    return build_model("guarded")
 
 
 def main() -> None:

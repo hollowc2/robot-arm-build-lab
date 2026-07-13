@@ -8,6 +8,7 @@ PART_MODULES = [
     "models.geared_base_stator",
     "models.azimuth_turntable_shoulder_cleat",
     "models.bicep_arm_link",
+    "models.bicep_belt_cover",
     "models.forearm_link",
     "models.electronics_mounts",
     "models.wire_management",
@@ -22,7 +23,6 @@ PART_MODULES = [
     "models.electronics_enclosure",
     "models.wrist_keyed_shaft_adapter",
     "models.master_assembly",
-    "models.guarded_assembly",
 ]
 
 
@@ -38,7 +38,7 @@ def test_master_assembly_has_all_major_children() -> None:
 
     assembly = build_model()
 
-    assert len(assembly.children) == 62
+    assert len(assembly.children) == 67
     assert assembly.volume > 0
 
 
@@ -120,6 +120,23 @@ def test_bicep_motor_mount_is_compact_and_motor_side_facing() -> None:
         bicep_arm_link.MOTOR_COUNTERBORE_FACE_X + bicep_arm_link.MOTOR_COUNTERBORE_DEPTH
         < bicep_arm_link.MOTOR_FACE_X
     )
+
+
+def test_bicep_belt_cover_is_open_backed_and_has_two_snap_pairs() -> None:
+    from models import bicep_belt_cover
+
+    cover = bicep_belt_cover.build_model()
+    bbox = cover.bounding_box()
+
+    assert cover.label == "bicep_elbow_belt_snap_cover"
+    assert bbox.min.Z == pytest.approx(bicep_belt_cover.COVER_BOTTOM_Z)
+    assert bbox.max.Z == pytest.approx(bicep_belt_cover.COVER_TOP_Z)
+    # Smooth lofting may bow a few tenths beyond the nominal section width.
+    assert bbox.size.Y == pytest.approx(bicep_belt_cover.UPPER_OUTER_WIDTH_Y, abs=0.5)
+    assert bicep_belt_cover.COVER_FRONT_X_UPPER < bicep_belt_cover.COVER_FRONT_X_LOWER
+    assert bicep_belt_cover.COVER_REAR_X_UPPER < bicep_belt_cover.COVER_REAR_X_LOWER
+    assert bicep_belt_cover.SNAP_HOOK_PROJECTION_X > bicep_belt_cover.SNAP_FIT_CLEARANCE
+    assert bicep_belt_cover.SNAP_ARM_THICKNESS_X < bicep_belt_cover.WALL_THICKNESS
 
 
 def test_bicep_has_negative_x_pulley_side_clearance_planes() -> None:
@@ -325,13 +342,127 @@ def test_forearm_has_single_pulley_side_wrist_motor_mount() -> None:
         < forearm_link.LINK_THICKNESS_X / 2
     )
 
+    mount_face_center_x = forearm_link.WRIST_ASSEMBLY_OFFSET_X + mount_face_center_x
+    upper_hole_y = forearm_link.BYJ48_EAR_SPACING / 2
+    hole_edge_y = upper_hole_y + forearm_link.BYJ48_MOUNT_HOLE / 2 - 0.05
+    assert not model.is_inside(
+        (mount_face_center_x, hole_edge_y, forearm_link.MOTOR_SHAFT_Z),
+        tolerance=1e-6,
+    )
 
-def test_forearm_elbow_hub_has_pulley_side_m3_countersinks() -> None:
+
+def test_forearm_wrist_drive_fits_htd_342_3m_belt() -> None:
     from models import forearm_link
+    from models.common import (
+        HTD_342_3M_PITCH_LENGTH,
+        WRIST_DRIVER_TEETH,
+        WRIST_DRIVEN_TEETH,
+        open_belt_pitch_length,
+    )
+
+    nominal_pitch_length = open_belt_pitch_length(
+        WRIST_DRIVER_TEETH,
+        WRIST_DRIVEN_TEETH,
+        forearm_link.WRIST_BELT_CENTER_DISTANCE,
+    )
+
+    assert nominal_pitch_length == pytest.approx(HTD_342_3M_PITCH_LENGTH)
+    assert forearm_link.MOTOR_SLOT_TRAVEL == pytest.approx(6.0)
+
+
+def test_wrist_belt_runs_outside_connected_bicep_style_clevis() -> None:
+    from build123d import Pos, Rot
+    from models import forearm_link
+    from models.transmission_components import (
+        HTD_BELT_VISUAL_THICKNESS,
+        HTD_BELT_VISUAL_TOOTH_HEIGHT,
+        build_wrist_htd_belt,
+    )
+
+    forearm = forearm_link.build_model()
+    belt = build_wrist_htd_belt().moved(
+        Pos(
+            forearm_link.WRIST_BELT_CHANNEL_CENTER_X,
+            0,
+            forearm_link.MOTOR_SHAFT_Z,
+        )
+        * Rot(0, 90, 90)
+    )
+
+    assert all(forearm.intersect(solid) is None for solid in belt.solids())
+    connected_web_z = (
+        forearm_link.TOP_WRIST_PIVOT_Z
+        - forearm_link.WRIST_CLEVIS_CLEARANCE_Z / 2
+        - 5.0
+    )
+    assert len(forearm.solids()) == 1
+    assert forearm.is_inside(
+        (forearm_link.WRIST_BELT_CHANNEL_CENTER_X, 0, connected_web_z),
+        tolerance=1e-6,
+    )
+    assert forearm.is_inside(
+        (
+            forearm_link.WRIST_OFFSET_EAR_OUTER_X + 4.0,
+            0,
+            forearm_link.WRIST_OFFSET_EAR_GUSSET_FULL_Z - 3.0,
+        ),
+        tolerance=1e-6,
+    )
+    driven_pitch_radius = (
+        forearm_link.WRIST_DRIVEN_TEETH * forearm_link.HTD_3M_PITCH / (2 * pi)
+    )
+    belt_inner_radius = (
+        driven_pitch_radius
+        - HTD_BELT_VISUAL_THICKNESS / 2
+        - HTD_BELT_VISUAL_TOOTH_HEIGHT
+    )
+    assert belt_inner_radius > forearm_link.CLEVIS_WIDTH_Y / 2
+
+
+def test_28byj_motor_and_uln_carrier_hole_patterns_match_reference_dimensions() -> None:
+    from models import electronics_mounts
+    from models.common import BYJ48_EAR_SPACING
+
+    uln_x = [point[0] for point in electronics_mounts.ULN2003_HOLE_POINTS]
+    uln_y = [point[1] for point in electronics_mounts.ULN2003_HOLE_POINTS]
+
+    assert BYJ48_EAR_SPACING == pytest.approx(35.0)
+    assert max(uln_x) - min(uln_x) == pytest.approx(29.5)
+    assert max(uln_y) - min(uln_y) == pytest.approx(27.0)
+
+
+def test_electronics_carriers_are_low_profile_with_external_attachment_ears() -> None:
+    from models import electronics_mounts
+
+    trays = (
+        electronics_mounts.build_arduino_uno_r4_minima_tray(),
+        electronics_mounts.build_nema17_driver_board_tray(),
+        electronics_mounts.build_28byj_uln_board_tray(),
+    )
+
+    assert electronics_mounts.BASE_THICKNESS == pytest.approx(2.0)
+    assert electronics_mounts.STANDOFF_HEIGHT == pytest.approx(2.0)
+    assert all(tray.bounding_box().size.Z <= 4.0 for tray in trays)
+    assert electronics_mounts.build_nema17_driver_board_tray().bounding_box().size.Y > (
+        electronics_mounts.STEPSTICK_BOARD_Y + 2 * electronics_mounts.BOARD_CLEARANCE
+    )
+
+
+def test_forearm_elbow_hub_has_flush_pulley_side_m3_counterbores() -> None:
+    from models import forearm_link
+    from models.common import M3_COUNTERBORE_DEPTH
 
     assert forearm_link.ELBOW_BOLT_HEAD_SIDE_SIGN == -1
-    assert forearm_link.ELBOW_M3_COUNTERSINK_DIAMETER > forearm_link.M3_CLEARANCE
-    assert 0 < forearm_link.ELBOW_M3_COUNTERSINK_DEPTH < forearm_link.BOTTOM_HUB_THICKNESS / 2
+    assert forearm_link.ELBOW_M3_COUNTERBORE_DIAMETER > forearm_link.M3_CLEARANCE
+    assert forearm_link.ELBOW_M3_COUNTERBORE_DEPTH == pytest.approx(M3_COUNTERBORE_DEPTH)
+    assert forearm_link.ELBOW_M3_COUNTERBORE_DEPTH < forearm_link.BOTTOM_HUB_THICKNESS / 2
+
+
+def test_elbow_pulley_uses_tight_m3_thread_pilots() -> None:
+    from models import transmission_components
+    from models.common import M3_TAP_HOLE
+
+    assert 0 < transmission_components.ELBOW_PULLEY_M3_THREAD_PILOT < M3_TAP_HOLE
 
 
 def test_forearm_wrist_clevis_clears_gripper_base_pivot_boss() -> None:
@@ -483,8 +614,7 @@ def test_forearm_wrist_belt_has_installation_relief() -> None:
     assert forearm_link.WRIST_PULLEY_RELIEF_CENTER_X == pytest.approx(
         forearm_link.WRIST_BELT_CHANNEL_CENTER_X
     )
-    assert forearm_link.WRIST_BELT_ENTRY_WIDTH_YZ > forearm_link.WRIST_BELT_CHANNEL_SLOT_WIDTH_YZ
-    assert 0 < forearm_link.WRIST_BELT_ENTRY_RUN_FRACTION < 1
+    assert forearm_link.WRIST_BELT_CHANNEL_SLOT_WIDTH_YZ <= 5.0
 
 
 def test_wrist_pulley_has_m3_counterbores_for_gripper_base() -> None:
@@ -556,17 +686,33 @@ def test_azimuth_turntable_uses_separate_center_shaft() -> None:
     )
 
 
-def test_master_assembly_excludes_electronics_and_wire_guides() -> None:
+def test_master_assembly_localizes_motor_drivers_and_excludes_loose_wire_guides() -> None:
     from models.master_assembly import build_model
 
     assembly = build_model()
-    labels = {child.label for child in assembly.children}
+    children_by_label = {child.label: child for child in assembly.children}
+    labels = set(children_by_label)
 
     assert "arduino_uno_r4_minima_tray" not in labels
-    assert "base_nema17_driver_board_tray" not in labels
-    assert "shoulder_nema17_driver_board_tray" not in labels
-    assert "elbow_nema17_driver_board_tray" not in labels
-    assert "wrist_28byj_uln2003_board_tray" not in labels
+    assert "base_nema17_driver_board_tray" in labels
+    assert "shoulder_nema17_driver_board_tray" in labels
+    assert "elbow_nema17_driver_board_tray" in labels
+    assert "wrist_28byj_uln2003_board_tray" in labels
+
+    motor_driver_pairs = (
+        ("base_nema17_stepper_motor", "base_nema17_driver_board_tray"),
+        ("shoulder_nema17_stepper_motor", "shoulder_nema17_driver_board_tray"),
+        ("elbow_nema17_stepper_motor", "elbow_nema17_driver_board_tray"),
+        ("wrist_28BYJ-48_stepper_motor", "wrist_28byj_uln2003_board_tray"),
+    )
+    for motor_label, driver_label in motor_driver_pairs:
+        motor_box = children_by_label[motor_label].bounding_box()
+        driver_box = children_by_label[driver_label].bounding_box()
+        x_gap = max(motor_box.min.X - driver_box.max.X, driver_box.min.X - motor_box.max.X, 0.0)
+        y_gap = max(motor_box.min.Y - driver_box.max.Y, driver_box.min.Y - motor_box.max.Y, 0.0)
+        z_gap = max(motor_box.min.Z - driver_box.max.Z, driver_box.min.Z - motor_box.max.Z, 0.0)
+        assert (x_gap * x_gap + y_gap * y_gap + z_gap * z_gap) ** 0.5 <= 12.0
+
     assert "base_cable_entry_strain_relief_guide" not in labels
     assert "base_azimuth_service_loop_guard" not in labels
     assert "shoulder_service_loop_anchor" not in labels
