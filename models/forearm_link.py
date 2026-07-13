@@ -77,6 +77,10 @@ TOP_WRIST_PIVOT_Z = MOTOR_SHAFT_Z + WRIST_BELT_CENTER_DISTANCE
 MOTOR_SLOT_TRAVEL = 6.0
 MOTOR_BODY_POCKET_DEPTH = 2.8
 MOTOR_BODY_POCKET_CLEARANCE = 0.35
+# Leaves a 3.6 mm (nine 0.4 mm extrusion widths) mounting floor while giving
+# the short motor shaft 0.4 mm of positive reach through the driver pulley.
+MOTOR_MOUNT_RECESS_DEPTH_X = 1.4
+MOTOR_MOUNT_RECESS_SLOT_WIDTH_YZ = 10.0
 MOTOR_SHAFT_CLEARANCE = 10.0
 MOTOR_SUPPORT_RIB_THICKNESS_Y = 5.0
 MOTOR_SUPPORT_RIB_DEPTH_X = 12.0
@@ -117,7 +121,9 @@ ELBOW_M3_COUNTERBORE_DEPTH = M3_COUNTERBORE_DEPTH
 CLEVIS_GAP_X = 29.0
 WRIST_CLEVIS_GAP_CENTER_X = WRIST_ASSEMBLY_OFFSET_X + 2.0
 CLEVIS_EAR_THICKNESS_X = 6.0
-CLEVIS_WIDTH_Y = 26.0
+# Keeps a 4.525 mm radial bearing wall while increasing the toothed belt's
+# minimum running clearance around the outside of the clevis to about 1.33 mm.
+CLEVIS_WIDTH_Y = 25.2
 CLEVIS_HEIGHT_Z = 36.0
 CLEVIS_BRIDGE_HEIGHT_Z = 10.0
 WRIST_CLEVIS_CLEARANCE_Z = 50.0
@@ -423,6 +429,20 @@ def build_model():
                     LINK_RIB_THICKNESS_Z,
                     align=(Align.CENTER, Align.CENTER, Align.CENTER),
                 )
+
+        # Recess the motor ears so the short 28BYJ shaft reaches through the
+        # complete driver pulley.  The 4 mm-thick pocket floors remain as rigid
+        # mounting rings around the two through-slots.
+        motor_mount_outer_x = face_x - MOTOR_FACE_THICKNESS_X / 2
+        for y in (-BYJ48_EAR_SPACING / 2, BYJ48_EAR_SPACING / 2):
+            _vertical_slot_along_x(
+                y,
+                MOTOR_SHAFT_Z,
+                MOTOR_SLOT_TRAVEL,
+                MOTOR_MOUNT_RECESS_SLOT_WIDTH_YZ,
+                x_start=motor_mount_outer_x,
+                depth=MOTOR_MOUNT_RECESS_DEPTH_X,
+            )
 
         pocket_center_x = WRIST_ASSEMBLY_OFFSET_X + WRIST_MOTOR_SIDE_SIGN * (
             LINK_THICKNESS_X / 2 + MOTOR_FACE_THICKNESS_X - MOTOR_BODY_POCKET_DEPTH / 2

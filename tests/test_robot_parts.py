@@ -292,9 +292,15 @@ def test_master_assembly_includes_single_wrist_motor() -> None:
     children_by_label = {child.label: child for child in assembly.children}
 
     wrist_motor = children_by_label["wrist_28BYJ-48_stepper_motor"]
+    wrist_driver = children_by_label[
+        "wrist_driver_20T_HTD3M_5mm_double_D_shaft"
+    ]
 
     wrist_bbox = wrist_motor.bounding_box()
     wrist_center_x = (wrist_bbox.min.X + wrist_bbox.max.X) / 2
+    wrist_driver_bbox = wrist_driver.bounding_box()
+    shaft_protrusion = wrist_bbox.max.X - wrist_driver_bbox.max.X
+    assert 0.25 <= shaft_protrusion <= 0.5
 
     forearm_x = (
         -bicep_arm_link.ELBOW_CLEVIS_GAP_X / 2
@@ -348,6 +354,31 @@ def test_forearm_has_single_pulley_side_wrist_motor_mount() -> None:
     assert not model.is_inside(
         (mount_face_center_x, hole_edge_y, forearm_link.MOTOR_SHAFT_Z),
         tolerance=1e-6,
+    )
+    motor_mount_outer_x = (
+        mount_face_center_x - forearm_link.MOTOR_FACE_THICKNESS_X / 2
+    )
+    mounting_ring_y = upper_hole_y + 3.5
+    assert not model.is_inside(
+        (
+            motor_mount_outer_x + forearm_link.MOTOR_MOUNT_RECESS_DEPTH_X / 2,
+            mounting_ring_y,
+            forearm_link.MOTOR_SHAFT_Z,
+        ),
+        tolerance=1e-6,
+    )
+    assert model.is_inside(
+        (
+            motor_mount_outer_x + forearm_link.MOTOR_MOUNT_RECESS_DEPTH_X + 0.5,
+            mounting_ring_y,
+            forearm_link.MOTOR_SHAFT_Z,
+        ),
+        tolerance=1e-6,
+    )
+    assert (
+        forearm_link.MOTOR_FACE_THICKNESS_X
+        - forearm_link.MOTOR_MOUNT_RECESS_DEPTH_X
+        >= 3.6
     )
 
 
@@ -438,7 +469,7 @@ def test_wrist_belt_runs_outside_connected_bicep_style_clevis() -> None:
         - HTD_BELT_VISUAL_THICKNESS / 2
         - HTD_BELT_VISUAL_TOOTH_HEIGHT
     )
-    assert belt_inner_radius > forearm_link.CLEVIS_WIDTH_Y / 2
+    assert belt_inner_radius - forearm_link.CLEVIS_WIDTH_Y / 2 >= 1.25
 
 
 def test_28byj_motor_and_uln_carrier_hole_patterns_match_reference_dimensions() -> None:

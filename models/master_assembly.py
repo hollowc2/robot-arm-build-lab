@@ -320,7 +320,10 @@ def build_model(configuration: str = "mechanical") -> Compound:
     wrist_motor_face_x = forearm_model.LINK_THICKNESS_X / 2 + forearm_model.MOTOR_FACE_THICKNESS_X
     wrist_motor = build_byj48().moved(
         Pos(
-            forearm_x + forearm_model.WRIST_ASSEMBLY_OFFSET_X - wrist_motor_face_x,
+            forearm_x
+            + forearm_model.WRIST_ASSEMBLY_OFFSET_X
+            - wrist_motor_face_x
+            + forearm_model.MOTOR_MOUNT_RECESS_DEPTH_X,
             0,
             elbow_pivot_z + forearm_model.MOTOR_SHAFT_Z,
         )
