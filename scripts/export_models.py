@@ -62,7 +62,7 @@ def main() -> None:
                 "simulator_elbow_belt": ("elbow_16T_to_60T_HTD3M_open_belt_visual",),
                 "simulator_elbow_driven": ("elbow_60T_HTD3M_16p15_4xM3_25BC",),
                 "simulator_wrist_driver": (
-                    "wrist_keyed_28byj_shaft_to_pulley_adapter", "wrist_driver_20T_HTD3M_5mm_D_shaft",
+                    "wrist_keyed_28byj_shaft_to_pulley_adapter", "wrist_driver_20T_HTD3M_5mm_double_D_shaft",
                 ),
                 "simulator_wrist_belt": ("wrist_20T_to_32T_HTD3M_open_belt_visual",),
                 "simulator_wrist_driven": ("wrist_32T_HTD3M_16p15_4xM3_20BC",),

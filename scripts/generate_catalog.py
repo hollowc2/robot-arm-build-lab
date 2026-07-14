@@ -17,11 +17,6 @@ GENERATED_DIR = ROOT / "site" / "public" / "generated"
 
 VIEWER_PARTS = (
     ("electronics_enclosure", [-98, -94, -58], [98, 94, 3], "draft"),
-    ("base_drive_guard", [-78, -78, 8], [78, 78, 30], "draft"),
-    ("shoulder_belt_guard", [-27, -52, 62], [-10, 52, 171], "draft"),
-    ("elbow_belt_guard", [-31, -42, 214], [-14, 42, 388], "draft"),
-    ("wrist_belt_guard", [-29, -30, 390], [-12, 30, 548], "draft"),
-    ("gripper_linkage_guard", [-10, 25, 505], [50, 83, 508], "draft"),
     ("geared_base_stator", [-82, -82, 0], [82, 82, 20], "active"),
     ("arduino_uno_r4_minima_tray", [-45, -132, 20], [45, -94, 28], "active"),
     ("base_nema17_driver_board_tray", [48, 42, 20], [92, 78, 28], "active"),
@@ -39,7 +34,6 @@ VIEWER_PARTS = (
     ("shoulder_16T_to_80T_HTD3M_open_belt_visual", [-76, -52, 70], [-54, 52, 82], "active"),
     ("shoulder_pivot_8mm_shaft", [-38, -4, 70], [38, 4, 78], "active"),
     ("bicep_arm_link", [-12, -23, 72], [34, 23, 176], "active"),
-    ("bicep_elbow_belt_snap_cover", [-25.587, -34.155, 104], [-8.6, 34.155, 270.35], "draft"),
     ("bicep_harness_channel_marker", [0, -8, 130], [12, 8, 170], "draft"),
     ("shoulder_pivot_8mm_spacer", [8, -10, 70], [20, 10, 82], "active"),
     ("elbow_nema17_stepper_motor", [24, -22, 142], [66, 22, 184], "active"),
@@ -106,12 +100,6 @@ def _viewer_children() -> list[dict[str, object]]:
 
 
 def _matching_children(entry_name: str, children: list[dict[str, object]]) -> list[dict[str, object]]:
-    if entry_name == "safety_guards":
-        return [child for child in children if "guard" in child["name"]]
-    if entry_name == "electronics_enclosure":
-        return [child for child in children if child["name"] == "electronics_enclosure"]
-    if entry_name == "belt_base_candidate":
-        return [child for child in children if child["name"] in {"geared_base_stator", "base_drive_guard"}]
     if entry_name == "electronics_mounts":
         return [child for child in children if "tray" in child["name"] or "board" in child["name"]]
     if entry_name == "wire_management":

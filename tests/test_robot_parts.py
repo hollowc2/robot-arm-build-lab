@@ -8,7 +8,6 @@ PART_MODULES = [
     "models.geared_base_stator",
     "models.azimuth_turntable_shoulder_cleat",
     "models.bicep_arm_link",
-    "models.bicep_belt_cover",
     "models.forearm_link",
     "models.electronics_mounts",
     "models.wire_management",
@@ -18,8 +17,6 @@ PART_MODULES = [
     "models.byj48_stepper_motor",
     "models.nema17_stepper_motor",
     "models.transmission_components",
-    "models.belt_base_candidate",
-    "models.safety_guards",
     "models.electronics_enclosure",
     "models.wrist_keyed_shaft_adapter",
     "models.master_assembly",
@@ -38,7 +35,7 @@ def test_master_assembly_has_all_major_children() -> None:
 
     assembly = build_model()
 
-    assert len(assembly.children) == 67
+    assert len(assembly.children) == 66
     assert assembly.volume > 0
 
 
@@ -122,21 +119,6 @@ def test_bicep_motor_mount_is_compact_and_motor_side_facing() -> None:
     )
 
 
-def test_bicep_belt_cover_is_open_backed_and_has_two_snap_pairs() -> None:
-    from models import bicep_belt_cover
-
-    cover = bicep_belt_cover.build_model()
-    bbox = cover.bounding_box()
-
-    assert cover.label == "bicep_elbow_belt_snap_cover"
-    assert bbox.min.Z == pytest.approx(bicep_belt_cover.COVER_BOTTOM_Z)
-    assert bbox.max.Z == pytest.approx(bicep_belt_cover.COVER_TOP_Z)
-    # Smooth lofting may bow a few tenths beyond the nominal section width.
-    assert bbox.size.Y == pytest.approx(bicep_belt_cover.UPPER_OUTER_WIDTH_Y, abs=0.5)
-    assert bicep_belt_cover.COVER_FRONT_X_UPPER < bicep_belt_cover.COVER_FRONT_X_LOWER
-    assert bicep_belt_cover.COVER_REAR_X_UPPER < bicep_belt_cover.COVER_REAR_X_LOWER
-    assert bicep_belt_cover.SNAP_HOOK_PROJECTION_X > bicep_belt_cover.SNAP_FIT_CLEARANCE
-    assert bicep_belt_cover.SNAP_ARM_THICKNESS_X < bicep_belt_cover.WALL_THICKNESS
 
 
 def test_bicep_has_negative_x_pulley_side_clearance_planes() -> None:

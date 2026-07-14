@@ -31,7 +31,6 @@ def build_model(configuration: str = "mechanical") -> Compound:
     try:
         from models import azimuth_turntable_shoulder_cleat as turntable_model
         from models import bicep_arm_link as bicep_model
-        from models.bicep_belt_cover import build_model as build_bicep_belt_cover
         from models import forearm_link as forearm_model
         from models import geared_base_stator as stator_model
         from models.joint_shafts import (
@@ -76,7 +75,6 @@ def build_model(configuration: str = "mechanical") -> Compound:
     except ModuleNotFoundError:
         import azimuth_turntable_shoulder_cleat as turntable_model
         import bicep_arm_link as bicep_model
-        from bicep_belt_cover import build_model as build_bicep_belt_cover
         import forearm_link as forearm_model
         import geared_base_stator as stator_model
         from joint_shafts import (
@@ -518,9 +516,6 @@ def build_model(configuration: str = "mechanical") -> Compound:
             wrist_pulley,
         ]
 
-    # Service mode leaves the fitted snap cover off for drivetrain access.
-    if configuration == "mechanical":
-        children.append(build_bicep_belt_cover().moved(Pos(0, 0, shoulder_pivot_z)))
 
     if configuration == "service":
         base_cable_guide = build_base_cable_entry_strain_relief_guide().moved(

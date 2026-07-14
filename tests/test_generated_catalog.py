@@ -17,16 +17,15 @@ def test_viewer_model_contains_labeled_parts() -> None:
     assert "geared_base_stator" in names
     assert "bicep_arm_link" in names
     assert "forearm_link" in names
-    assert "base_drive_guard" in names
     assert "electronics_enclosure" in names
     assert len(viewer_model["parts"]) >= 30
 
 
-def test_catalog_includes_safety_and_print_metadata() -> None:
+def test_catalog_includes_electronics_enclosure_metadata() -> None:
     catalog = build_catalog()
-    snap_cover = next(
-        part for part in catalog["parts"] if part["name"] == "bicep_elbow_belt_snap_cover"
+    enclosure = next(
+        part for part in catalog["parts"] if part["name"] == "electronics_enclosure"
     )
 
-    assert snap_cover["material"] == "PETG"
-    assert snap_cover["validation"] == "fit-test-required"
+    assert enclosure["material"] == "PETG"
+    assert enclosure["validation"] == "fit-test-required"

@@ -9,19 +9,6 @@ import pytest
 ROOT = Path(__file__).resolve().parents[1]
 
 
-def test_342_3m_base_candidate_preserves_ratio_and_belt_length() -> None:
-    from models import belt_base_candidate
-    from models.common import HTD_342_3M_PITCH_LENGTH, open_belt_pitch_length
-
-    assert belt_base_candidate.REDUCTION_RATIO == pytest.approx(6.0)
-    assert open_belt_pitch_length(
-        belt_base_candidate.DRIVER_TEETH,
-        belt_base_candidate.DRIVEN_TEETH,
-        belt_base_candidate.BELT_CENTER_DISTANCE,
-    ) == pytest.approx(HTD_342_3M_PITCH_LENGTH)
-    assert belt_base_candidate.TENSION_TRAVEL >= 6.0
-    assert belt_base_candidate.PLATE_X <= 256.0
-    assert belt_base_candidate.PLATE_Y <= 256.0
 
 
 def test_impossible_20t_120t_pair_is_rejected_for_342_belt() -> None:
@@ -31,12 +18,9 @@ def test_impossible_20t_120t_pair_is_rejected_for_342_belt() -> None:
         solve_open_belt_center_distance(20, 120, HTD_342_3M_PITCH_LENGTH)
 
 
-def test_guard_and_enclosure_safety_parameters() -> None:
-    from models import electronics_enclosure, safety_guards
+def test_electronics_enclosure_safety_parameters() -> None:
+    from models import electronics_enclosure
 
-    assert safety_guards.WALL_THICKNESS >= 2.4
-    assert safety_guards.MOVING_CLEARANCE >= 3.0
-    assert safety_guards.FINGER_EXCLUSION_OPENING < 5.0
     assert electronics_enclosure.WALL >= 2.4
     assert electronics_enclosure.VENT_WIDTH < 5.0
 
