@@ -14,7 +14,6 @@ from build123d import (
     Mode,
     Part,
     Plane,
-    RectangleRounded,
     SlotCenterToCenter,
     extrude,
 )
@@ -79,9 +78,13 @@ SHAFT_CLEARANCE = BEARING_608_ID + 0.5
 
 MOTOR_PILOT_CLEARANCE = NEMA17_PILOT + 0.6
 MOTOR_SHAFT_CLEARANCE = NEMA17_SHAFT + 3.0
-MOTOR_TAB_SIZE = NEMA17_BODY + 12.0
-MOTOR_FRAME_WALL_THICKNESS = 1.6  # Four 0.4 mm extrusion widths
-MOTOR_FRAME_CORNER_RADIUS = 7.0
+MOTOR_SUPPORT_OD = 6.4  # Sixteen 0.4 mm extrusion widths
+MOTOR_SUPPORT_CLEARANCE = 0.6
+MOTOR_SUPPORT_OFFSET = NEMA17_BODY / 2 + MOTOR_SUPPORT_OD / 2 + MOTOR_SUPPORT_CLEARANCE
+MOTOR_SPIDER_ARM_WIDTH = 8.0
+MOTOR_DIAGONAL_ARM_WIDTH = 8.0
+MOTOR_PILOT_REINFORCEMENT_OD = 34.0
+MOTOR_MOUNT_BOSS_OD = 9.6
 
 MOTOR_BOTTOM_CLEARANCE = 2.0
 BASE_MOTOR_FACE_Z = 0.0  # Motor mounts directly to the bottom face
@@ -105,6 +108,19 @@ def build_model() -> Part:
     boss_top_z = top_z + BEARING_BOSS_HEIGHT
     corner_offset = CORNER_HOLE_SPACING / 2
     corner_distance = hypot(corner_offset, corner_offset)
+    motor_hole_offset = NEMA17_HOLE_SPACING / 2
+    motor_holes = (
+        (motor_x - motor_hole_offset, -motor_hole_offset),
+        (motor_x - motor_hole_offset, motor_hole_offset),
+        (motor_x + motor_hole_offset, -motor_hole_offset),
+        (motor_x + motor_hole_offset, motor_hole_offset),
+    )
+    motor_supports = (
+        (motor_x - MOTOR_SUPPORT_OFFSET, 0),
+        (motor_x + MOTOR_SUPPORT_OFFSET, 0),
+        (motor_x, -MOTOR_SUPPORT_OFFSET),
+        (motor_x, MOTOR_SUPPORT_OFFSET),
+    )
 
     assert_printable_extent((BASE_SIZE, BASE_SIZE, FOOT_HEIGHT + boss_top_z))
 
@@ -128,20 +144,9 @@ def build_model() -> Part:
                     ):
                         SlotCenterToCenter(corner_distance, FRAME_RIB_WIDTH)
 
-            # A thin perimeter tower carries the motor deck continuously while
-            # preserving a generous, support-free NEMA17 body envelope.
-            with Locations((motor_x, 0)):
-                RectangleRounded(
-                    MOTOR_TAB_SIZE,
-                    MOTOR_TAB_SIZE,
-                    radius=MOTOR_FRAME_CORNER_RADIUS,
-                )
-                RectangleRounded(
-                    MOTOR_TAB_SIZE - 2 * MOTOR_FRAME_WALL_THICKNESS,
-                    MOTOR_TAB_SIZE - 2 * MOTOR_FRAME_WALL_THICKNESS,
-                    radius=MOTOR_FRAME_CORNER_RADIUS - MOTOR_FRAME_WALL_THICKNESS,
-                    mode=Mode.SUBTRACT,
-                )
+            # Four slim bed-supported posts leave every motor side open to air.
+            with Locations(*motor_supports):
+                Circle(MOTOR_SUPPORT_OD / 2)
         extrude(amount=FOOT_HEIGHT + 0.2)
 
         # Solid top caps distribute each desk fastener into its hollow foot.
@@ -152,21 +157,40 @@ def build_model() -> Part:
                 align=(Align.CENTER, Align.CENTER, Align.MIN),
             )
 
-        # An annular thrust deck, a compact bearing deck, and the motor face
-        # replace the former 160 x 160 mm solid plate.
+        # An annular thrust deck and compact bearing deck replace the former
+        # 160 x 160 mm slab.
         with BuildSketch(Plane.XY):
             Circle(HUB_DECK_OD / 2)
             Circle(HUB_DECK_ID / 2, mode=Mode.SUBTRACT)
             Circle(CENTER_DECK_OD / 2)
         extrude(amount=BASE_THICKNESS)
 
+        # An open spider mounts the NEMA17. Its axial arms bridge between the
+        # four support posts; short diagonal arms carry the bolt bosses.
         with BuildSketch(Plane.XY):
             with Locations((motor_x, 0)):
-                RectangleRounded(
-                    MOTOR_TAB_SIZE,
-                    MOTOR_TAB_SIZE,
-                    radius=MOTOR_FRAME_CORNER_RADIUS,
+                Circle(MOTOR_PILOT_REINFORCEMENT_OD / 2)
+                SlotCenterToCenter(
+                    2 * MOTOR_SUPPORT_OFFSET,
+                    MOTOR_SPIDER_ARM_WIDTH,
                 )
+                SlotCenterToCenter(
+                    2 * MOTOR_SUPPORT_OFFSET,
+                    MOTOR_SPIDER_ARM_WIDTH,
+                    rotation=90,
+                )
+                SlotCenterToCenter(
+                    hypot(NEMA17_HOLE_SPACING, NEMA17_HOLE_SPACING),
+                    MOTOR_DIAGONAL_ARM_WIDTH,
+                    rotation=45,
+                )
+                SlotCenterToCenter(
+                    hypot(NEMA17_HOLE_SPACING, NEMA17_HOLE_SPACING),
+                    MOTOR_DIAGONAL_ARM_WIDTH,
+                    rotation=135,
+                )
+            with Locations(*motor_holes):
+                Circle(MOTOR_MOUNT_BOSS_OD / 2)
         extrude(amount=BASE_THICKNESS)
 
         # Bottom-open cavities keep washer-bearing top caps over each foot.
@@ -237,13 +261,6 @@ def build_model() -> Part:
                 mode=Mode.SUBTRACT,
             )
 
-        motor_hole_offset = NEMA17_HOLE_SPACING / 2
-        motor_holes = (
-            (motor_x - motor_hole_offset, -motor_hole_offset),
-            (motor_x - motor_hole_offset, motor_hole_offset),
-            (motor_x + motor_hole_offset, -motor_hole_offset),
-            (motor_x + motor_hole_offset, motor_hole_offset),
-        )
         with BuildSketch(Plane.XY.offset(top_z + 0.1)):
             with Locations(*motor_holes):
                 Circle(M3_CLEARANCE / 2)

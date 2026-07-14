@@ -40,7 +40,7 @@ def test_base_and_turntable_are_lightweight_single_prints() -> None:
     assert len(stator.solids()) == 1
     assert len(turntable.solids()) == 1
     # Caps catch regressions back to the former solid slab and disk designs.
-    assert stator.volume < 270_000
+    assert stator.volume < 255_000
     assert turntable.volume < 275_000
     assert geared_base_stator.FOOT_CAVITY_OD > DESK_MOUNT_CLEARANCE
     assert azimuth_turntable_shoulder_cleat.OUTER_RIM_THICKNESS < (
@@ -48,10 +48,39 @@ def test_base_and_turntable_are_lightweight_single_prints() -> None:
     )
     for wall_width in (
         geared_base_stator.FRAME_RIB_WIDTH,
-        geared_base_stator.MOTOR_FRAME_WALL_THICKNESS,
+        geared_base_stator.MOTOR_SUPPORT_OD,
+        geared_base_stator.MOTOR_SPIDER_ARM_WIDTH,
+        geared_base_stator.MOTOR_DIAGONAL_ARM_WIDTH,
         azimuth_turntable_shoulder_cleat.ELBOW_MOTOR_RELIEF_BACK_SKIN,
     ):
         assert wall_width / 0.4 == pytest.approx(round(wall_width / 0.4))
+    motor_x = geared_base_stator.BASE_GEAR_CENTER_DISTANCE
+    support_offset = geared_base_stator.MOTOR_SUPPORT_OFFSET
+    support_z = -geared_base_stator.FOOT_HEIGHT / 2
+    support_points = (
+        (motor_x - support_offset, 0, support_z),
+        (motor_x + support_offset, 0, support_z),
+        (motor_x, -support_offset, support_z),
+        (motor_x, support_offset, support_z),
+    )
+    assert all(stator.is_inside(point, tolerance=1e-6) for point in support_points)
+    open_side_points = (
+        (motor_x + support_offset, 10.0, support_z),
+        (motor_x + support_offset, -10.0, support_z),
+        (motor_x - support_offset, 10.0, support_z),
+        (motor_x - support_offset, -10.0, support_z),
+        (motor_x + 10.0, support_offset, support_z),
+        (motor_x - 10.0, support_offset, support_z),
+        (motor_x + 10.0, -support_offset, support_z),
+        (motor_x - 10.0, -support_offset, support_z),
+    )
+    assert all(
+        not stator.is_inside(point, tolerance=1e-6) for point in open_side_points
+    )
+    bridge_span = 2 * (support_offset - geared_base_stator.MOTOR_SUPPORT_OD / 2)
+    assert bridge_span == pytest.approx(
+        geared_base_stator.NEMA17_BODY + 2 * geared_base_stator.MOTOR_SUPPORT_CLEARANCE
+    )
     assert not turntable.is_inside(
         (
             azimuth_turntable_shoulder_cleat.LEFT_OUTER_X - 0.1,
