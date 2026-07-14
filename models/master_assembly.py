@@ -451,7 +451,7 @@ def build_model(configuration: str = "mechanical") -> Compound:
     # arm-mounted carriers stand on edge outside the motor or clevis envelope
     # so their thin attachment ears can fasten directly to the adjacent wall.
     base_driver_tray = build_nema17_driver_board_tray().moved(
-        Pos(stator_model.BASE_GEAR_CENTER_DISTANCE, -30, stator_model.BASE_THICKNESS)
+        Pos(stator_model.BASE_GEAR_CENTER_DISTANCE, -18, stator_model.BASE_THICKNESS)
     )
     base_driver_tray.label = "base_nema17_driver_board_tray"
     shoulder_driver_tray = build_nema17_driver_board_tray(attachment_side="right")
