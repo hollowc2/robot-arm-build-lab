@@ -42,7 +42,12 @@ def build_model(configuration: str = "mechanical") -> Compound:
             build_wrist_pivot_shaft,
         )
         from models.geared_base_stator import build_model as build_stator
-        from models.hardware import build_608_bearing, build_625_bearing, build_m3_socket_screw, build_sg90_servo
+        from models.hardware import (
+            build_608_bearing,
+            build_625_bearing,
+            build_m3_socket_screw,
+            build_sg90_servo,
+        )
         from models.byj48_stepper_motor import build_model as build_byj48
         from models.nema17_stepper_motor import build_model as build_nema17
         from models.electronics_mounts import (
@@ -86,7 +91,12 @@ def build_model(configuration: str = "mechanical") -> Compound:
             build_wrist_pivot_shaft,
         )
         from geared_base_stator import build_model as build_stator
-        from hardware import build_608_bearing, build_625_bearing, build_m3_socket_screw, build_sg90_servo
+        from hardware import (
+            build_608_bearing,
+            build_625_bearing,
+            build_m3_socket_screw,
+            build_sg90_servo,
+        )
         from byj48_stepper_motor import build_model as build_byj48
         from nema17_stepper_motor import build_model as build_nema17
         from electronics_mounts import (
@@ -122,7 +132,9 @@ def build_model(configuration: str = "mechanical") -> Compound:
     wrist_pivot_z = elbow_pivot_z + forearm_model.TOP_WRIST_PIVOT_Z
 
     shoulder_pulley_x = -(
-        bicep_model.LINK_X_THICKNESS / 2 + PULLEY_TOTAL_HEIGHT / 2 + PULLEY_SIDE_CLEARANCE
+        bicep_model.LINK_X_THICKNESS / 2
+        + PULLEY_TOTAL_HEIGHT / 2
+        + PULLEY_SIDE_CLEARANCE
     )
     shoulder_stack_width = (
         PULLEY_TOTAL_HEIGHT
@@ -146,7 +158,9 @@ def build_model(configuration: str = "mechanical") -> Compound:
         - PULLEY_SIDE_CLEARANCE
     ) / 2
     if elbow_stack_side_clearance < PULLEY_SIDE_CLEARANCE:
-        raise ValueError("Elbow clevis gap must fit the forearm hub, 60T pulley, and side clearances.")
+        raise ValueError(
+            "Elbow clevis gap must fit the forearm hub, 60T pulley, and side clearances."
+        )
     elbow_pulley_x = (
         -bicep_model.ELBOW_CLEVIS_GAP_X / 2
         + elbow_stack_side_clearance
@@ -158,10 +172,14 @@ def build_model(configuration: str = "mechanical") -> Compound:
         + PULLEY_SIDE_CLEARANCE
         + forearm_model.BOTTOM_HUB_THICKNESS / 2
     )
-    wrist_pulley_x = forearm_x + forearm_model.WRIST_ASSEMBLY_OFFSET_X - (
-        forearm_model.LINK_THICKNESS_X / 2
-        + forearm_model.MOTOR_FACE_THICKNESS_X
-        - PULLEY_TOTAL_HEIGHT / 2
+    wrist_pulley_x = (
+        forearm_x
+        + forearm_model.WRIST_ASSEMBLY_OFFSET_X
+        - (
+            forearm_model.LINK_THICKNESS_X / 2
+            + forearm_model.MOTOR_FACE_THICKNESS_X
+            - PULLEY_TOTAL_HEIGHT / 2
+        )
     )
     wrist_gripper_x = (
         wrist_pulley_x
@@ -179,9 +197,13 @@ def build_model(configuration: str = "mechanical") -> Compound:
         wrist_stack_min_x < wrist_clevis_min_x + WRIST_STACK_CLEARANCE
         or wrist_stack_max_x > wrist_clevis_max_x - WRIST_STACK_CLEARANCE
     ):
-        raise ValueError("Wrist clevis gap must fit the driven pulley, gripper tongue, and side clearances.")
+        raise ValueError(
+            "Wrist clevis gap must fit the driven pulley, gripper tongue, and side clearances."
+        )
     if abs(wrist_gripper_x) > 1e-9:
-        raise ValueError("Wrist offset must keep the gripper centered over the robot base.")
+        raise ValueError(
+            "Wrist offset must keep the gripper centered over the robot base."
+        )
 
     stator = build_stator()
     stator.label = "geared_base_stator"
@@ -198,7 +220,9 @@ def build_model(configuration: str = "mechanical") -> Compound:
     bicep.label = "bicep_arm_link"
     forearm = forearm_model.build_model().moved(Pos(forearm_x, 0, elbow_pivot_z))
     forearm.label = "forearm_link"
-    gripper = build_gripper().moved(Pos(wrist_gripper_x, 0, wrist_pivot_z) * Rot(0, 0, 0))
+    gripper = build_gripper().moved(
+        Pos(wrist_gripper_x, 0, wrist_pivot_z) * Rot(0, 0, 0)
+    )
     gripper.label = gripper_model.MODEL_NAME
     shoulder_shaft = build_shoulder_pivot_shaft().moved(Pos(0, 0, shoulder_pivot_z))
     elbow_shaft = build_elbow_pivot_shaft().moved(Pos(0, 0, elbow_pivot_z))
@@ -209,8 +233,7 @@ def build_model(configuration: str = "mechanical") -> Compound:
 
     # Purchased hardware: bearing positions match the pockets cut into each joint.
     base_bearings = [
-        build_608_bearing(axis="z").moved(Pos(0, 0, z))
-        for z in (30.5, 23.5)
+        build_608_bearing(axis="z").moved(Pos(0, 0, z)) for z in (30.5, 23.5)
     ]
     shoulder_bearings = [
         build_608_bearing().moved(Pos(x, 0, shoulder_pivot_z)) for x in (-30.0, 30.0)
@@ -223,8 +246,14 @@ def build_model(configuration: str = "mechanical") -> Compound:
     wrist_bearings = [
         build_625_bearing().moved(Pos(forearm_x + x, 0, wrist_pivot_z))
         for x in (
-            forearm_model.WRIST_CLEVIS_GAP_CENTER_X - forearm_model.CLEVIS_GAP_X / 2 - forearm_model.CLEVIS_EAR_THICKNESS_X + 2.5,
-            forearm_model.WRIST_CLEVIS_GAP_CENTER_X + forearm_model.CLEVIS_GAP_X / 2 + forearm_model.CLEVIS_EAR_THICKNESS_X - 2.5,
+            forearm_model.WRIST_CLEVIS_GAP_CENTER_X
+            - forearm_model.CLEVIS_GAP_X / 2
+            - forearm_model.CLEVIS_EAR_THICKNESS_X
+            + 2.5,
+            forearm_model.WRIST_CLEVIS_GAP_CENTER_X
+            + forearm_model.CLEVIS_GAP_X / 2
+            + forearm_model.CLEVIS_EAR_THICKNESS_X
+            - 2.5,
         )
     ]
     gripper_bearings = [
@@ -233,23 +262,47 @@ def build_model(configuration: str = "mechanical") -> Compound:
     ]
     sg90_servos = [
         build_sg90_servo().moved(
-            Pos(wrist_gripper_x + x, gripper_base_model.SERVO_CENTER_Y, wrist_pivot_z + gripper_base_model.PLATE_THICKNESS / 2)
+            Pos(
+                wrist_gripper_x + x,
+                gripper_base_model.SERVO_CENTER_Y,
+                wrist_pivot_z + gripper_base_model.PLATE_THICKNESS / 2,
+            )
         )
         for x in (-gripper_base_model.SERVO_CENTER_X, gripper_base_model.SERVO_CENTER_X)
     ]
-    for index, part in enumerate((*base_bearings, *shoulder_bearings, *elbow_bearings, *wrist_bearings, *gripper_bearings), 1):
+    for index, part in enumerate(
+        (
+            *base_bearings,
+            *shoulder_bearings,
+            *elbow_bearings,
+            *wrist_bearings,
+            *gripper_bearings,
+        ),
+        1,
+    ):
         part.label = f"installed_bearing_{index:02d}_{part.label}"
     for index, part in enumerate(sg90_servos, 1):
         part.label = f"installed_sg90_micro_servo_{index}"
 
     # Visible fasteners at the gripper: four servo tabs, two jaw pivots, and wrist pulley bolts.
     servo_fasteners = [
-        build_m3_socket_screw(8.0, axis="z").moved(Pos(wrist_gripper_x + x, y, wrist_pivot_z + 5.0))
+        build_m3_socket_screw(8.0, axis="z").moved(
+            Pos(wrist_gripper_x + x, y, wrist_pivot_z + 5.0)
+        )
         for x in (-gripper_base_model.SERVO_CENTER_X, gripper_base_model.SERVO_CENTER_X)
-        for y in (gripper_base_model.SERVO_CENTER_Y - 16.0, gripper_base_model.SERVO_CENTER_Y + 16.0)
+        for y in (
+            gripper_base_model.SERVO_CENTER_Y - 16.0,
+            gripper_base_model.SERVO_CENTER_Y + 16.0,
+        )
     ]
     jaw_fasteners = [
-        build_m3_socket_screw(18.0, axis="z").moved(Pos(wrist_gripper_x + x, gripper_base_model.GRIPPER_POST_Y, wrist_pivot_z + 11.0))
+        build_m3_socket_screw(18.0, axis="z").moved(
+            Pos(
+                wrist_gripper_x + x,
+                gripper_base_model.GRIPPER_POST_Y,
+                wrist_pivot_z + 11.0,
+            )
+        )
         for x in (-gripper_base_model.SERVO_CENTER_X, gripper_base_model.SERVO_CENTER_X)
     ]
     wrist_pulley_fasteners = [
@@ -259,10 +312,14 @@ def build_model(configuration: str = "mechanical") -> Compound:
     # The remaining defined driveline bolt circles use the same M3 preview hardware.
     base_gear_fasteners = [
         build_m3_socket_screw(16.0, axis="z").moved(Pos(x, y, base_gear_z))
-        for x, y in circle_points(6, BASE_GEAR_BOLT_CIRCLE, start_angle=BASE_GEAR_BOLT_START_ANGLE)
+        for x, y in circle_points(
+            6, BASE_GEAR_BOLT_CIRCLE, start_angle=BASE_GEAR_BOLT_START_ANGLE
+        )
     ]
     shoulder_pulley_fasteners = [
-        build_m3_socket_screw(30.0).moved(Pos(shoulder_pulley_x, y, shoulder_pivot_z + z))
+        build_m3_socket_screw(30.0).moved(
+            Pos(shoulder_pulley_x, y, shoulder_pivot_z + z)
+        )
         for y, z in circle_points(4, SHOULDER_PULLEY_BOLT_CIRCLE, start_angle=45.0)
     ]
     elbow_pulley_fasteners = [
@@ -303,7 +360,7 @@ def build_model(configuration: str = "mechanical") -> Compound:
     base_motor.label = "base_nema17_stepper_motor"
     shoulder_motor = build_nema17().moved(
         Pos(
-            turntable_model.LEFT_OUTER_X - turntable_model.MOTOR_PAD_THICKNESS,
+            turntable_model.LEFT_OUTER_X,
             0,
             AZIMUTH_TURNTABLE_Z + turntable_model.MOTOR_SHAFT_Z,
         )
@@ -319,7 +376,9 @@ def build_model(configuration: str = "mechanical") -> Compound:
         * Rot(0, -90, 0)
     )
     elbow_motor.label = "elbow_nema17_stepper_motor"
-    wrist_motor_face_x = forearm_model.LINK_THICKNESS_X / 2 + forearm_model.MOTOR_FACE_THICKNESS_X
+    wrist_motor_face_x = (
+        forearm_model.LINK_THICKNESS_X / 2 + forearm_model.MOTOR_FACE_THICKNESS_X
+    )
     wrist_motor = build_byj48().moved(
         Pos(
             forearm_x
@@ -389,20 +448,18 @@ def build_model(configuration: str = "mechanical") -> Compound:
         * Rot(0, 90, 90)
     )
     # Keep each motor driver on the same structural stage as its motor.  The
-    # arm-mounted carriers stand on edge just outside the motor envelope so
-    # their thin attachment ears can fasten directly to the adjacent pad.
+    # arm-mounted carriers stand on edge outside the motor or clevis envelope
+    # so their thin attachment ears can fasten directly to the adjacent wall.
     base_driver_tray = build_nema17_driver_board_tray().moved(
         Pos(stator_model.BASE_GEAR_CENTER_DISTANCE, -30, stator_model.BASE_THICKNESS)
     )
     base_driver_tray.label = "base_nema17_driver_board_tray"
     shoulder_driver_tray = build_nema17_driver_board_tray(attachment_side="right")
-    shoulder_driver_tab_x = (
-        turntable_model.LEFT_OUTER_X - turntable_model.MOTOR_PAD_THICKNESS / 2
-    )
+    shoulder_driver_tab_x = turntable_model.LEFT_OUTER_X
     shoulder_driver_tray = shoulder_driver_tray.moved(
         Pos(
             shoulder_driver_tab_x - shoulder_driver_tray.bounding_box().max.X,
-            -turntable_model.MOTOR_PAD_FACE / 2,
+            -turntable_model.CLEVIS_DEPTH / 2,
             AZIMUTH_TURNTABLE_Z + turntable_model.MOTOR_SHAFT_Z,
         )
         * Rot(90, 0, 0)
@@ -419,8 +476,13 @@ def build_model(configuration: str = "mechanical") -> Compound:
     )
     elbow_driver_tray.label = "elbow_nema17_driver_board_tray"
     wrist_driver_tray = build_28byj_uln_board_tray(attachment_side="right")
-    wrist_driver_tab_x = forearm_x + forearm_model.WRIST_ASSEMBLY_OFFSET_X - (
-        forearm_model.LINK_THICKNESS_X / 2 + forearm_model.MOTOR_FACE_THICKNESS_X / 2
+    wrist_driver_tab_x = (
+        forearm_x
+        + forearm_model.WRIST_ASSEMBLY_OFFSET_X
+        - (
+            forearm_model.LINK_THICKNESS_X / 2
+            + forearm_model.MOTOR_FACE_THICKNESS_X / 2
+        )
     )
     wrist_driver_tray = wrist_driver_tray.moved(
         Pos(
@@ -472,61 +534,68 @@ def build_model(configuration: str = "mechanical") -> Compound:
     # )
 
     children = [
-            stator,
-            base_motor,
-            base_driver_tray,
-            base_gear,
-            base_pinion,
-            base_shaft,
-            *base_bearings,
-            *base_gear_fasteners,
-            turntable,
-            shoulder_motor,
-            shoulder_driver_tray,
-            shoulder_driver_pulley,
-            shoulder_belt,
-            shoulder_shaft,
-            *shoulder_bearings,
-            *shoulder_pulley_fasteners,
-            bicep,
-            shoulder_spacer,
-            elbow_motor,
-            elbow_driver_tray,
-            elbow_driver_pulley,
-            elbow_belt,
-            shoulder_pulley,
-            elbow_shaft,
-            *elbow_bearings,
-            *elbow_pulley_fasteners,
-            forearm,
-            elbow_pulley,
-            wrist_motor,
-            wrist_driver_tray,
-            wrist_shaft_adapter,
-            wrist_driver_pulley,
-            wrist_belt,
-            wrist_shaft,
-            *wrist_bearings,
-            gripper,
-            *gripper_bearings,
-            *sg90_servos,
-            *servo_fasteners,
-            *jaw_fasteners,
-            *wrist_pulley_fasteners,
-            wrist_pulley,
-        ]
-
+        stator,
+        base_motor,
+        base_driver_tray,
+        base_gear,
+        base_pinion,
+        base_shaft,
+        *base_bearings,
+        *base_gear_fasteners,
+        turntable,
+        shoulder_motor,
+        shoulder_driver_tray,
+        shoulder_driver_pulley,
+        shoulder_belt,
+        shoulder_shaft,
+        *shoulder_bearings,
+        *shoulder_pulley_fasteners,
+        bicep,
+        shoulder_spacer,
+        elbow_motor,
+        elbow_driver_tray,
+        elbow_driver_pulley,
+        elbow_belt,
+        shoulder_pulley,
+        elbow_shaft,
+        *elbow_bearings,
+        *elbow_pulley_fasteners,
+        forearm,
+        elbow_pulley,
+        wrist_motor,
+        wrist_driver_tray,
+        wrist_shaft_adapter,
+        wrist_driver_pulley,
+        wrist_belt,
+        wrist_shaft,
+        *wrist_bearings,
+        gripper,
+        *gripper_bearings,
+        *sg90_servos,
+        *servo_fasteners,
+        *jaw_fasteners,
+        *wrist_pulley_fasteners,
+        wrist_pulley,
+    ]
 
     if configuration == "service":
         base_cable_guide = build_base_cable_entry_strain_relief_guide().moved(
             Pos(0, -98, stator_model.BASE_THICKNESS)
         )
         base_service_loop_guard = build_base_azimuth_service_loop_guard().moved(
-            Pos(0, 0, stator_model.BASE_THICKNESS + stator_model.THRUST_RING_HEIGHT + 0.4)
+            Pos(
+                0,
+                0,
+                stator_model.BASE_THICKNESS + stator_model.THRUST_RING_HEIGHT + 0.4,
+            )
         )
         children.extend((base_cable_guide, base_service_loop_guard))
 
-    label = "robot_arm_master_assembly" if configuration == "mechanical" else f"robot_arm_{configuration}_assembly"
+    label = (
+        "robot_arm_master_assembly"
+        if configuration == "mechanical"
+        else f"robot_arm_{configuration}_assembly"
+    )
     return Compound(children=children, label=label)
 
 

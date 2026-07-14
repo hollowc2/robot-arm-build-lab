@@ -1,22 +1,22 @@
 from __future__ import annotations
+from math import cos, radians, sin
 
 from build123d import (
     Align,
     Box,
-    BuildLine,
     BuildPart,
     BuildSketch,
+    Circle,
     Cylinder,
     Location,
     Locations,
     Mode,
     Plane,
-    Polygon,
-    Polyline,
-    ThreePointArc,
+    RectangleRounded,
+    SlotCenterToCenter,
     add,
     extrude,
-    make_face,
+    loft,
 )
 
 try:
@@ -34,6 +34,13 @@ try:
         circle_points,
         export_model,
     )
+    from models.electronics_mounts import (
+        STANDOFF_DIAMETER as ARDUINO_STANDOFF_DIAMETER,
+        STANDOFF_PILOT as ARDUINO_STANDOFF_PILOT,
+        UNO_BOARD_X,
+        UNO_BOARD_Y,
+        UNO_HOLE_POINTS,
+    )
 except ModuleNotFoundError:
     from common import (
         BASE_GEAR_BOLT_CIRCLE,
@@ -49,12 +56,23 @@ except ModuleNotFoundError:
         circle_points,
         export_model,
     )
+    from electronics_mounts import (
+        STANDOFF_DIAMETER as ARDUINO_STANDOFF_DIAMETER,
+        STANDOFF_PILOT as ARDUINO_STANDOFF_PILOT,
+        UNO_BOARD_X,
+        UNO_BOARD_Y,
+        UNO_HOLE_POINTS,
+    )
 
 
 MODEL_NAME = "azimuth_turntable_shoulder_cleat"
 
 PLATE_RADIUS = 72.0
 PLATE_THICKNESS = 12.0
+OUTER_RIM_WIDTH = 8.0
+OUTER_RIM_THICKNESS = 6.0
+GEAR_HUB_RADIUS = 40.0
+DECK_SPOKE_WIDTH = 8.0
 CENTER_SHAFT_CLEARANCE = BEARING_608_ID + 0.5
 STATOR_BOSS_RELIEF_DIAMETER = 49.0
 STATOR_BOSS_RELIEF_DEPTH = 7.0
@@ -63,15 +81,17 @@ BASE_GEAR_THREAD_DEPTH = 9.0
 
 CLEVIS_CLEAR_GAP = 43.0
 CLEVIS_WALL_THICKNESS = 12.0
-CLEVIS_DEPTH = 90.0  # Widened to provide solid pillars around the motor swing relief
+CLEVIS_ROOT_THICKNESS = 18.0
+CLEVIS_DEPTH = 90.0
+CLEVIS_ROOT_DEPTH = 102.0
 CLEVIS_TOP_RADIUS = 25.0
 
 MOTOR_SHAFT_Z = 40.0
 PIVOT_Z = MOTOR_SHAFT_Z + SHOULDER_BELT_CENTER_DISTANCE
 
-MOTOR_PAD_THICKNESS = 4.0
-MOTOR_PAD_FACE = 54.0
 MOTOR_SLOT_TRAVEL = 4.0
+CLEVIS_TAPER_MID_Z = MOTOR_SHAFT_Z + 35.0
+CLEVIS_TAPER_MID_DEPTH = 78.0
 
 OUTER_CLEVIS_WIDTH = CLEVIS_CLEAR_GAP + 2 * CLEVIS_WALL_THICKNESS
 LEFT_WALL_X = -(CLEVIS_CLEAR_GAP / 2 + CLEVIS_WALL_THICKNESS / 2)
@@ -79,71 +99,148 @@ RIGHT_WALL_X = -LEFT_WALL_X
 LEFT_OUTER_X = -OUTER_CLEVIS_WIDTH / 2
 RIGHT_OUTER_X = OUTER_CLEVIS_WIDTH / 2
 
-ELBOW_MOTOR_RELIEF_SIDE_CLEARANCE = 8.0
 ELBOW_MOTOR_RELIEF_Y = 70.0
 ELBOW_MOTOR_RELIEF_TOP_MARGIN = 25.0
 ELBOW_MOTOR_RELIEF_Z_MIN = PLATE_THICKNESS + 4.0
 ELBOW_MOTOR_RELIEF_Z_MAX = PIVOT_Z - ELBOW_MOTOR_RELIEF_TOP_MARGIN
+ELBOW_MOTOR_RELIEF_BACK_SKIN = 3.2  # Eight 0.4 mm extrusion widths
+ELBOW_MOTOR_RELIEF_BOTTOM_RADIUS = 10.0
+ELBOW_MOTOR_RELIEF_TOP_RADIUS = 28.0
+ARDUINO_STANDOFF_HEIGHT = 4.0
+ARDUINO_BOARD_BOTTOM_CLEARANCE = 0.5
+# Keep the board low: a bare PCB only reaches the elbow motor at the nominal
+# +/-130 degree endpoints. Revalidate limits with the populated board installed.
+ARDUINO_BOARD_CENTER_Z = (
+    ELBOW_MOTOR_RELIEF_Z_MIN + UNO_BOARD_X / 2 + ARDUINO_BOARD_BOTTOM_CLEARANCE
+)
+ARDUINO_STANDOFF_POINTS_YZ = tuple(
+    (board_y, ARDUINO_BOARD_CENTER_Z + board_x) for board_x, board_y in UNO_HOLE_POINTS
+)
+UPPER_WINDOW_WIDTH_Y = 24.0
+UPPER_WINDOW_HEIGHT_Z = 28.0
+UPPER_WINDOW_CENTER_Z = 91.0
 
 
-def _build_clevis_wall():
-    """Build one shaft-holder side plate, tapering to a smaller circular top."""
-    base_radius = CLEVIS_DEPTH / 2
-    top_radius = CLEVIS_TOP_RADIUS
+def _build_clevis_wall(side_sign: float):
+    """Loft one rounded, outward-flared monocoque clevis wall."""
+    wall_x = side_sign * (CLEVIS_CLEAR_GAP / 2 + CLEVIS_WALL_THICKNESS / 2)
+    root_x = side_sign * (CLEVIS_CLEAR_GAP / 2 + CLEVIS_ROOT_THICKNESS / 2)
+    root_top_z = PLATE_THICKNESS + (CLEVIS_ROOT_THICKNESS - CLEVIS_WALL_THICKNESS)
+    taper_mid_z = CLEVIS_TAPER_MID_Z
 
     with BuildPart() as wall:
-        with BuildSketch(Plane.YZ):
-            with BuildLine():
-                Polyline(
-                    (-base_radius, PLATE_THICKNESS),
-                    (base_radius, PLATE_THICKNESS),
-                    (top_radius, PIVOT_Z),
+        # A six-millimeter-high 45-degree root flare prints without supports.
+        with BuildSketch(Plane.XY.offset(PLATE_THICKNESS)):
+            with Locations((root_x, 0)):
+                RectangleRounded(
+                    CLEVIS_ROOT_THICKNESS,
+                    CLEVIS_ROOT_DEPTH,
+                    radius=7.0,
                 )
-                # ThreePointArc forces the bulge upwards through the exact top-center
-                ThreePointArc(
-                    (top_radius, PIVOT_Z),
-                    (0, PIVOT_Z + top_radius),
-                    (-top_radius, PIVOT_Z),
+        with BuildSketch(Plane.XY.offset(root_top_z)):
+            with Locations((wall_x, 0)):
+                RectangleRounded(
+                    CLEVIS_WALL_THICKNESS,
+                    CLEVIS_DEPTH,
+                    radius=5.0,
                 )
-                Polyline(
-                    (-top_radius, PIVOT_Z),
-                    (-base_radius, PLATE_THICKNESS),
+        loft()
+
+        with BuildSketch(Plane.XY.offset(root_top_z)):
+            with Locations((wall_x, 0)):
+                RectangleRounded(
+                    CLEVIS_WALL_THICKNESS,
+                    CLEVIS_DEPTH,
+                    radius=5.0,
                 )
-            make_face()
-        extrude(amount=CLEVIS_WALL_THICKNESS / 2, both=True)
+        with BuildSketch(Plane.XY.offset(taper_mid_z)):
+            with Locations((wall_x, 0)):
+                RectangleRounded(
+                    CLEVIS_WALL_THICKNESS,
+                    CLEVIS_TAPER_MID_DEPTH,
+                    radius=5.0,
+                )
+        loft()
+
+        with BuildSketch(Plane.XY.offset(taper_mid_z)):
+            with Locations((wall_x, 0)):
+                RectangleRounded(
+                    CLEVIS_WALL_THICKNESS,
+                    CLEVIS_TAPER_MID_DEPTH,
+                    radius=5.0,
+                )
+        with BuildSketch(Plane.XY.offset(PIVOT_Z)):
+            with Locations((wall_x, 0)):
+                RectangleRounded(
+                    CLEVIS_WALL_THICKNESS,
+                    2 * CLEVIS_TOP_RADIUS,
+                    radius=5.0,
+                )
+        loft()
+
+        with Locations((wall_x, 0, PIVOT_Z)):
+            Cylinder(
+                CLEVIS_TOP_RADIUS,
+                CLEVIS_WALL_THICKNESS,
+                rotation=(0, 90, 0),
+                align=(Align.CENTER, Align.CENTER, Align.CENTER),
+            )
+
     return wall.part
 
 
 def _add_clevis_walls() -> None:
-    """Add both shaft-holder side plates without narrowing the 43 mm gap."""
-    wall = _build_clevis_wall()
-    for wall_x in (LEFT_WALL_X, RIGHT_WALL_X):
-        add(wall.moved(Location((wall_x, 0, 0))))
+    """Add mirrored walls while preserving the 43 mm shoulder stack gap."""
+    for side_sign in (-1.0, 1.0):
+        add(_build_clevis_wall(side_sign))
 
 
-def _add_right_wall_gussets() -> None:
-    """Add small, clean structural triangular gussets to the thin right wall pillars."""
-    gusset_height = PLATE_THICKNESS + 25.0
-    gusset_ext_x = RIGHT_OUTER_X + 12.0
-    # Start 2mm inside the wall to guarantee a perfect manifold union
-    gusset_start_x = RIGHT_OUTER_X - 2.0
+def _add_lightweight_turntable_deck() -> None:
+    """Build an open rim-and-spoke deck around the full-depth gear hub."""
+    with BuildSketch(Plane.XY) as rim:
+        Circle(PLATE_RADIUS)
+        Circle(PLATE_RADIUS - OUTER_RIM_WIDTH, mode=Mode.SUBTRACT)
+    extrude(rim.sketch, amount=OUTER_RIM_THICKNESS)
 
-    with BuildPart() as rib:
-        with BuildSketch(Plane.XZ):
-            Polygon([
-                (gusset_start_x, PLATE_THICKNESS),
-                (gusset_start_x, gusset_height),
-                (gusset_ext_x, PLATE_THICKNESS),
-            ])
-        # Extrude 4mm both ways to make an 8mm wide rib that sits clean on the 10mm pillar
-        extrude(amount=4.0, both=True)
+    Cylinder(
+        GEAR_HUB_RADIUS,
+        PLATE_THICKNESS,
+        align=(Align.CENTER, Align.CENTER, Align.MIN),
+    )
 
-    # Place the ribs centered on the solid pillars outside the 70mm relief window
-    for y_offset in (-40.0, 40.0):
-        add(rib.part.moved(Location((0, y_offset, 0))))
+    spoke_center_radius = (GEAR_HUB_RADIUS + PLATE_RADIUS - OUTER_RIM_WIDTH / 2) / 2
+    spoke_center_distance = PLATE_RADIUS - OUTER_RIM_WIDTH / 2 - GEAR_HUB_RADIUS
+    with BuildSketch(Plane.XY) as spokes:
+        for angle in range(0, 360, 60):
+            angle_radians = radians(angle)
+            with Locations(
+                Location(
+                    (
+                        spoke_center_radius * cos(angle_radians),
+                        spoke_center_radius * sin(angle_radians),
+                        0,
+                    ),
+                    (0, 0, angle),
+                )
+            ):
+                SlotCenterToCenter(spoke_center_distance, DECK_SPOKE_WIDTH)
+    extrude(spokes.sketch, amount=OUTER_RIM_THICKNESS)
+
+    # Full-depth rounded rails directly support the two clevis roots.
+    root_x = CLEVIS_CLEAR_GAP / 2 + CLEVIS_ROOT_THICKNESS / 2
+    with BuildSketch(Plane.XY) as rails:
+        with Locations((-root_x, 0), (root_x, 0)):
+            RectangleRounded(
+                CLEVIS_ROOT_THICKNESS,
+                CLEVIS_ROOT_DEPTH,
+                radius=7.0,
+            )
+    extrude(rails.sketch, amount=PLATE_THICKNESS)
 
 
-def _add_vertical_m3_slot_through_x(x: float, y: float, z: float, through_length: float) -> None:
+def _add_vertical_m3_slot_through_x(
+    x: float, y: float, z: float, through_length: float
+) -> None:
     """Cut one M3 vertical adjustment slot and an inside recess for flush bolt heads."""
     with Locations((x, y, z)):
         Box(
@@ -185,7 +282,9 @@ def _add_vertical_m3_slot_through_x(x: float, y: float, z: float, through_length
             )
 
 
-def _cut_nema17_horizontal_face_mount(x: float, z: float, through_length: float) -> None:
+def _cut_nema17_horizontal_face_mount(
+    x: float, z: float, through_length: float
+) -> None:
     """Cut NEMA17 pilot and vertically slotted mount holes along the X axis."""
     with Locations((x, 0, z)):
         Cylinder(
@@ -228,35 +327,92 @@ def _cut_608_pivot_pockets() -> None:
 
 
 def _cut_right_elbow_motor_swing_relief() -> None:
-    """Open the right clevis side below the shoulder pivot for the elbow motor body."""
+    """Open a large radiused motor-swing window through the right wall."""
     relief_height = ELBOW_MOTOR_RELIEF_Z_MAX - ELBOW_MOTOR_RELIEF_Z_MIN
     if relief_height <= 0:
         raise ValueError("Elbow motor relief window collapsed.")
 
-    relief_x = RIGHT_OUTER_X + ELBOW_MOTOR_RELIEF_SIDE_CLEARANCE / 2
-    relief_width = CLEVIS_WALL_THICKNESS + ELBOW_MOTOR_RELIEF_SIDE_CLEARANCE + 0.2
     relief_z = ELBOW_MOTOR_RELIEF_Z_MIN + relief_height / 2
+    lower_relief_height = relief_height / 2
+    lower_relief_z = ELBOW_MOTOR_RELIEF_Z_MIN + lower_relief_height / 2
+    relief_start_x = CLEVIS_CLEAR_GAP / 2 + ELBOW_MOTOR_RELIEF_BACK_SKIN
+    with BuildSketch(Plane.YZ.offset(relief_start_x)) as relief:
+        with Locations((0, relief_z)):
+            RectangleRounded(
+                ELBOW_MOTOR_RELIEF_Y,
+                relief_height,
+                radius=ELBOW_MOTOR_RELIEF_TOP_RADIUS,
+            )
+        # Expand only the lower corners back to the original 10 mm radius.
+        # The larger upper radius fills the two small gaps without new ribs.
+        with Locations((0, lower_relief_z)):
+            RectangleRounded(
+                ELBOW_MOTOR_RELIEF_Y,
+                lower_relief_height,
+                radius=ELBOW_MOTOR_RELIEF_BOTTOM_RADIUS,
+            )
+    extrude(
+        relief.sketch,
+        amount=CLEVIS_ROOT_THICKNESS - ELBOW_MOTOR_RELIEF_BACK_SKIN + 0.2,
+        mode=Mode.SUBTRACT,
+    )
 
-    with Locations((relief_x, 0, relief_z)):
-        Box(
-            relief_width,
-            ELBOW_MOTOR_RELIEF_Y,
-            relief_height,
-            align=(Align.CENTER, Align.CENTER, Align.CENTER),
-            mode=Mode.SUBTRACT,
-        )
+
+def _add_arduino_uno_standoffs() -> None:
+    """Add four recessed, M3-tapped Arduino Uno R4 mounting bosses."""
+    relief_floor_x = CLEVIS_CLEAR_GAP / 2 + ELBOW_MOTOR_RELIEF_BACK_SKIN
+    boss_center_x = relief_floor_x + ARDUINO_STANDOFF_HEIGHT / 2 - 0.2
+    for y, z in ARDUINO_STANDOFF_POINTS_YZ:
+        with Locations((boss_center_x, y, z)):
+            Cylinder(
+                ARDUINO_STANDOFF_DIAMETER / 2,
+                ARDUINO_STANDOFF_HEIGHT,
+                rotation=(0, 90, 0),
+                align=(Align.CENTER, Align.CENTER, Align.CENTER),
+            )
+            Cylinder(
+                ARDUINO_STANDOFF_PILOT / 2,
+                ARDUINO_STANDOFF_HEIGHT + 0.8,
+                rotation=(0, 90, 0),
+                align=(Align.CENTER, Align.CENTER, Align.CENTER),
+                mode=Mode.SUBTRACT,
+            )
+
+
+def _cut_left_upper_lightening_window() -> None:
+    """Remove low-stress web above the shoulder motor with rounded ends."""
+    window_start_x = LEFT_OUTER_X - 0.1
+    with BuildSketch(Plane.YZ.offset(window_start_x)) as window:
+        with Locations((0, UPPER_WINDOW_CENTER_Z)):
+            RectangleRounded(
+                UPPER_WINDOW_WIDTH_Y,
+                UPPER_WINDOW_HEIGHT_Z,
+                radius=8.0,
+            )
+    extrude(
+        window.sketch,
+        amount=CLEVIS_WALL_THICKNESS + 0.2,
+        mode=Mode.SUBTRACT,
+    )
 
 
 def build_model():
     if abs((PIVOT_Z - MOTOR_SHAFT_Z) - SHOULDER_BELT_CENTER_DISTANCE) > 1e-9:
         raise ValueError("Shoulder NEMA17 shaft to pivot center distance drifted.")
+    if UNO_BOARD_Y > ELBOW_MOTOR_RELIEF_Y:
+        raise ValueError("Arduino Uno is too wide for the recessed clevis face.")
+    board_z_min = ARDUINO_BOARD_CENTER_Z - UNO_BOARD_X / 2
+    board_z_max = ARDUINO_BOARD_CENTER_Z + UNO_BOARD_X / 2
+    if not (
+        ELBOW_MOTOR_RELIEF_Z_MIN <= board_z_min
+        and board_z_max <= ELBOW_MOTOR_RELIEF_Z_MAX
+    ):
+        raise ValueError(
+            "Arduino Uno does not fit vertically inside the clevis recess."
+        )
 
     with BuildPart() as part:
-        Cylinder(
-            PLATE_RADIUS,
-            PLATE_THICKNESS,
-            align=(Align.CENTER, Align.CENTER, Align.MIN),
-        )
+        _add_lightweight_turntable_deck()
 
         with Locations((0, 0, STATOR_BOSS_RELIEF_DEPTH / 2 - 0.1)):
             Cylinder(
@@ -276,25 +432,6 @@ def build_model():
 
         _add_clevis_walls()
 
-        motor_pad_x = LEFT_OUTER_X - MOTOR_PAD_THICKNESS / 2
-        with Locations((motor_pad_x, 0, MOTOR_SHAFT_Z)):
-            Box(
-                MOTOR_PAD_THICKNESS,
-                MOTOR_PAD_FACE,
-                MOTOR_PAD_FACE,
-                align=(Align.CENTER, Align.CENTER, Align.CENTER),
-            )
-
-        # Internal foot on the right side to keep the outside clean and remain hidden.
-        foot_z = PLATE_THICKNESS + 5.0
-        with Locations((CLEVIS_CLEAR_GAP / 2, 0, foot_z)):
-            Box(
-                8.0,
-                CLEVIS_DEPTH,
-                10.0,
-                align=(Align.MAX, Align.CENTER, Align.CENTER),
-            )
-
         for hole_x, hole_y in circle_points(6, BASE_GEAR_BOLT_CIRCLE, start_angle=30.0):
             with Locations((hole_x, hole_y, BASE_GEAR_THREAD_DEPTH / 2 - 0.1)):
                 Cylinder(
@@ -305,15 +442,14 @@ def build_model():
                 )
 
         _cut_nema17_horizontal_face_mount(
-            x=LEFT_OUTER_X - MOTOR_PAD_THICKNESS / 2,
+            x=LEFT_OUTER_X,
             z=MOTOR_SHAFT_Z,
-            through_length=MOTOR_PAD_THICKNESS + CLEVIS_WALL_THICKNESS + 20.0,
+            through_length=CLEVIS_WALL_THICKNESS + 20.0,
         )
         _cut_right_elbow_motor_swing_relief()
+        _cut_left_upper_lightening_window()
         _cut_608_pivot_pockets()
-
-        # Add the structural gussets last so they cleanly join the finished wall
-        _add_right_wall_gussets()
+        _add_arduino_uno_standoffs()
 
     model = part.part
     size = model.bounding_box().size

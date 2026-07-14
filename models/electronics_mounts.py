@@ -5,7 +5,12 @@ from dataclasses import dataclass
 from build123d import Align, Box, BuildPart, Compound, Cylinder, Locations, Mode, Part
 
 try:
-    from models.common import M3_CLEARANCE, M3_TAP_HOLE, assert_printable_extent, export_model
+    from models.common import (
+        M3_CLEARANCE,
+        M3_TAP_HOLE,
+        assert_printable_extent,
+        export_model,
+    )
 except ModuleNotFoundError:
     from common import M3_CLEARANCE, M3_TAP_HOLE, assert_printable_extent, export_model
 
@@ -28,13 +33,15 @@ ATTACHMENT_TAB_RADIUS = 5.0
 ATTACHMENT_TAB_REACH = 5.0
 ATTACHMENT_TAB_EDGE_INSET = 6.0
 
-UNO_BOARD_X = 68.6
-UNO_BOARD_Y = 53.4
+UNO_BOARD_X = 68.58
+UNO_BOARD_Y = 53.34
+# Official ABX00080 non-plated 3.2 mm drill centers, translated from the
+# 68.58 x 53.34 mm board-outline origin to the board center.
 UNO_HOLE_POINTS = (
-    (-31.5, -24.1),
-    (19.3, -24.1),
-    (-30.2, 23.9),
-    (31.8, 20.6),
+    (-20.32, -24.13),
+    (31.75, -19.05),
+    (31.75, 8.89),
+    (-19.05, 24.13),
 )
 
 STEPSTICK_BOARD_X = 20.5
@@ -82,12 +89,20 @@ class BoardTraySpec:
 
     @property
     def footprint_x(self) -> float:
-        extra = 2 * ATTACHMENT_TAB_REACH if self.base_mounts and self.attachment_side in ("left", "right") else 0.0
+        extra = (
+            2 * ATTACHMENT_TAB_REACH
+            if self.base_mounts and self.attachment_side in ("left", "right")
+            else 0.0
+        )
         return self.tray_x + extra
 
     @property
     def footprint_y(self) -> float:
-        extra = 2 * ATTACHMENT_TAB_REACH if self.base_mounts and self.attachment_side in ("front", "back") else 0.0
+        extra = (
+            2 * ATTACHMENT_TAB_REACH
+            if self.base_mounts and self.attachment_side in ("front", "back")
+            else 0.0
+        )
         return self.tray_y + extra
 
 
@@ -103,13 +118,21 @@ def _add_rail(x: float, y: float, size_x: float, size_y: float) -> None:
 
 def _add_split_rail(side: str, tray_x: float, tray_y: float) -> None:
     if side in ("front", "back"):
-        y = -tray_y / 2 + WALL_THICKNESS / 2 if side == "front" else tray_y / 2 - WALL_THICKNESS / 2
+        y = (
+            -tray_y / 2 + WALL_THICKNESS / 2
+            if side == "front"
+            else tray_y / 2 - WALL_THICKNESS / 2
+        )
         rail_x = (tray_x - CABLE_GAP_WIDTH) / 2
         for x in (-(CABLE_GAP_WIDTH + rail_x) / 2, (CABLE_GAP_WIDTH + rail_x) / 2):
             _add_rail(x, y, rail_x, WALL_THICKNESS)
         return
 
-    x = -tray_x / 2 + WALL_THICKNESS / 2 if side == "left" else tray_x / 2 - WALL_THICKNESS / 2
+    x = (
+        -tray_x / 2 + WALL_THICKNESS / 2
+        if side == "left"
+        else tray_x / 2 - WALL_THICKNESS / 2
+    )
     rail_y = (tray_y - CABLE_GAP_WIDTH) / 2
     for y in (-(CABLE_GAP_WIDTH + rail_y) / 2, (CABLE_GAP_WIDTH + rail_y) / 2):
         _add_rail(x, y, WALL_THICKNESS, rail_y)
@@ -122,10 +145,18 @@ def _add_perimeter_lips(spec: BoardTraySpec) -> None:
         if side in spec.wall_gap_sides:
             _add_split_rail(side, tray_x, tray_y)
         elif side in ("front", "back"):
-            y = -tray_y / 2 + WALL_THICKNESS / 2 if side == "front" else tray_y / 2 - WALL_THICKNESS / 2
+            y = (
+                -tray_y / 2 + WALL_THICKNESS / 2
+                if side == "front"
+                else tray_y / 2 - WALL_THICKNESS / 2
+            )
             _add_rail(0, y, tray_x, WALL_THICKNESS)
         else:
-            x = -tray_x / 2 + WALL_THICKNESS / 2 if side == "left" else tray_x / 2 - WALL_THICKNESS / 2
+            x = (
+                -tray_x / 2 + WALL_THICKNESS / 2
+                if side == "left"
+                else tray_x / 2 - WALL_THICKNESS / 2
+            )
             _add_rail(x, 0, WALL_THICKNESS, tray_y)
 
 
@@ -239,7 +270,9 @@ def build_arduino_uno_r4_minima_tray() -> Part:
     )
 
 
-def build_nema17_driver_board_tray(driver_count: int = 1, attachment_side: str = "back") -> Part:
+def build_nema17_driver_board_tray(
+    driver_count: int = 1, attachment_side: str = "back"
+) -> Part:
     """Build a tray for one or more StepStick-style NEMA17 driver carrier boards."""
     if driver_count < 1:
         raise ValueError("driver_count must be at least 1")
@@ -249,10 +282,17 @@ def build_nema17_driver_board_tray(driver_count: int = 1, attachment_side: str =
     standoffs: list[tuple[float, float]] = []
     for index in range(driver_count):
         center_x = x0 + index * STEPSTICK_SPACING_X
-        for y in (-STEPSTICK_BOARD_Y / 2 + STEPSTICK_HOLE_INSET, STEPSTICK_BOARD_Y / 2 - STEPSTICK_HOLE_INSET):
+        for y in (
+            -STEPSTICK_BOARD_Y / 2 + STEPSTICK_HOLE_INSET,
+            STEPSTICK_BOARD_Y / 2 - STEPSTICK_HOLE_INSET,
+        ):
             standoffs.append((center_x, y))
 
-    label = NEMA17_DRIVER_TRAY_NAME if driver_count == 1 else f"{driver_count}x_{NEMA17_DRIVER_TRAY_NAME}"
+    label = (
+        NEMA17_DRIVER_TRAY_NAME
+        if driver_count == 1
+        else f"{driver_count}x_{NEMA17_DRIVER_TRAY_NAME}"
+    )
     return build_board_tray(
         BoardTraySpec(
             label=label,
