@@ -526,7 +526,7 @@ def build_base_belt_driver_pulley() -> Part:
     return _build_motor_pulley(
         teeth=18,
         label="base_driver_18T_HTD3M_5mm_round_shaft",
-        keyed=False,
+        shaft_profile="round",
     )
 
 
