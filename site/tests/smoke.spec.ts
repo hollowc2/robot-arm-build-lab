@@ -1,30 +1,43 @@
 import { expect, type Locator, test } from "@playwright/test";
 
-test("dashboard loads a non-empty viewer", async ({ page }) => {
+test("landing page runs the simulator and part viewer", async ({ page }) => {
+  // Loads ~12 MB of meshes and runs physics on software WebGL in CI.
+  test.setTimeout(90_000);
   await page.goto("/");
-  await expect(page.getByRole("heading", { name: "Billy Bitcoin's Robot Arm" })).toBeVisible();
-  await expect(page.getByRole("heading", { name: "Robot Arm Master Assembly" })).toBeVisible();
-  const canvas = page.locator("canvas").first();
-  await expect(canvas).toBeVisible();
-  await expect(page.getByText("STL loaded").first()).toBeVisible();
+  await expect(page.getByRole("heading", { level: 1, name: /Robot Arm/ })).toBeVisible();
 
-  const renderedPixels = await countRenderedPixels(canvas);
-  expect(renderedPixels).toBeGreaterThan(0);
+  const hero = page.locator("#simulator");
+  await expect(hero).toHaveAttribute("data-meshes", "17", { timeout: 30_000 });
+  await expect(hero).toHaveAttribute("data-mode", "autopilot");
 
-  await page.getByRole("button", { name: /Geared Base Stator/ }).first().click();
-  await expect(page.getByRole("heading", { name: "Geared Base Stator" })).toBeVisible();
-  await expect(page.getByText("STL loaded").first()).toBeVisible();
-  await expect.poll(() => countRenderedPixels(canvas)).toBeGreaterThan(0);
-
-  await page.getByRole("link", { name: "Open Simulator" }).click();
-  await expect(page.getByRole("heading", { name: "Master Assembly Simulator" })).toBeVisible();
-  await expect(page.getByText("17/17 CAD and drivetrain meshes loaded")).toBeVisible({ timeout: 30_000 });
-  await expect(page.getByText(/5 physics objects ready/)).toBeVisible();
-  await page.getByRole("button", { name: "Reset physics objects" }).click();
+  const readouts = hero.locator(".joint-readout");
+  await hero.getByRole("button", { name: "Home" }).click();
+  await expect(hero).toHaveAttribute("data-mode", "manual");
+  await expect(readouts.nth(1)).toHaveText("0°", { timeout: 15_000 });
+  await expect(readouts.nth(2)).toHaveText("0°", { timeout: 15_000 });
   await page.getByLabel("Shoulder").fill("45");
-  await expect(page.getByText("45°")).toBeVisible();
-  await page.getByRole("button", { name: "Demo" }).click();
-  await expect(page.getByText("Demo: opening gripper")).toBeVisible();
+  await expect(readouts.nth(1)).toHaveText("45°", { timeout: 10_000 });
+
+  await hero.getByRole("button", { name: "Reset blocks" }).click();
+  await hero.getByRole("button", { name: "Run autopilot" }).click();
+  await expect(hero).toHaveAttribute("data-mode", "autopilot");
+  await expect(hero.getByText("Opening the gripper")).toBeVisible();
+
+  const parts = page.locator("#parts");
+  await parts.scrollIntoViewIfNeeded();
+  const stage = parts.locator(".part-stage");
+  await expect(stage).toHaveAttribute("data-state", "stl", { timeout: 15_000 });
+  await expect.poll(() => countRenderedPixels(parts.locator("canvas"))).toBeGreaterThan(0);
+
+  await parts.getByRole("button", { name: /SG90 Parallel Gripper/ }).click();
+  await expect(parts.getByRole("heading", { name: "SG90 Parallel Gripper" })).toBeVisible();
+  await expect(stage).toHaveAttribute("data-state", "stl", { timeout: 15_000 });
+});
+
+test("old simulator URL lands on the main page", async ({ page }) => {
+  await page.goto("simulator/");
+  await expect(page).toHaveURL(/\/robot-arm\/#simulator$/);
+  await expect(page.locator("#simulator")).toBeVisible();
 });
 
 async function countRenderedPixels(canvas: Locator) {
@@ -46,10 +59,10 @@ async function countRenderedPixels(canvas: Locator) {
       pixels,
     );
 
-    let nonBlack = 0;
+    let lit = 0;
     for (let index = 0; index < pixels.length; index += 4) {
-      if (pixels[index] + pixels[index + 1] + pixels[index + 2] > 12) nonBlack += 1;
+      if (pixels[index] + pixels[index + 1] + pixels[index + 2] > 60) lit += 1;
     }
-    return nonBlack;
+    return lit;
   });
 }

@@ -1,6 +1,6 @@
 # Billy Bitcoin's Robot Arm Build Lab
 
-Public monorepo for the robot arm CAD source, build notes, automation, and static workshop dashboard deployed at `/robot-arm/`.
+Public monorepo for the robot arm CAD source, build notes, automation, and the static landing page deployed at `/robot-arm/`.
 
 This repository root is `robot-arm-build-lab/`. If there is a sibling
 `../models/` directory under `RobotArm/`, treat it as legacy scratch/archive
@@ -12,7 +12,7 @@ content; the canonical CAD source lives in this repo's `models/` directory.
 - `tests/`: CAD regression tests and generated metadata checks.
 - `scripts/`: local and CI automation for CAD exports, catalog generation, and public progress feeds.
 - `content/`: build logs, design decisions, print logs, photos, and pipeline notes.
-- `site/`: Vite + React + TypeScript static dashboard with a Three.js model viewer.
+- `site/`: Vite + React + TypeScript single-page site: a live Three.js/cannon-es simulator as the hero, plus anatomy, part viewer, process, and build log sections.
 - `.github/workflows/`: CI for CAD/test/site build and deployment scaffolding.
 
 Generated STEP/STL/glTF/render files are not committed by default. CI regenerates them from source, uploads heavyweight files as Actions artifacts, and copies small JSON/web assets into the static site build.
@@ -26,7 +26,7 @@ uv run python scripts/generate_catalog.py
 uv run python scripts/export_models.py
 ```
 
-`scripts/generate_catalog.py` writes `site/public/generated/catalog.json` and `site/public/generated/viewer-model.json` for the dashboard. `scripts/export_models.py` writes STEP/STL exports to `models/out/`.
+`scripts/generate_catalog.py` writes `site/public/generated/catalog.json` (the part list on the site) and `site/public/generated/viewer-model.json`. `scripts/export_models.py` writes STEP/STL exports to `models/out/`.
 
 To rebuild only the full arm assembly:
 
@@ -46,7 +46,7 @@ uv run python scripts/publish_web_models.py
 cd site && npm run build
 ```
 
-The export also creates the rigid-link meshes used by `/robot-arm/simulator/`.
+The export also creates the rigid-link `simulator_*` meshes used by the simulator at the top of `/robot-arm/`. The old `/robot-arm/simulator/` URL redirects there.
 
 ## Current CAD Notes
 
