@@ -23,6 +23,14 @@ test("landing page runs the simulator and part viewer", async ({ page }) => {
   await expect(hero).toHaveAttribute("data-mode", "autopilot");
   await expect(hero.getByText("Opening the gripper")).toBeVisible();
 
+  await expect(hero).toHaveAttribute("data-held", "orange block", { timeout: 45_000 });
+  await hero.getByRole("button", { name: "Pause autopilot" }).click();
+  await page.getByLabel("Grip", { exact: true }).fill("0");
+  await expect.poll(async () => Number.parseFloat(await readouts.nth(4).innerText())).toBeGreaterThan(10);
+  await expect(hero).toHaveAttribute("data-held", "orange block");
+  await page.getByLabel("Grip", { exact: true }).fill("40");
+  await expect(hero).toHaveAttribute("data-held", "", { timeout: 10_000 });
+
   const parts = page.locator("#parts");
   await parts.scrollIntoViewIfNeeded();
   const stage = parts.locator(".part-stage");

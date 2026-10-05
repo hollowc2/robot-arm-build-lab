@@ -78,6 +78,10 @@ jobs:
         working-directory: site
         run: npm run build
 
+      - name: Test joint motion and CAD grasp contact
+        working-directory: site
+        run: npm run test:motion
+
       - name: Smoke test site
         working-directory: site
         run: npm run smoke

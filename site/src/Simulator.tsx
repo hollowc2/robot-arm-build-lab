@@ -5,6 +5,7 @@ import { OrbitControls } from "three/examples/jsm/controls/OrbitControls.js";
 import { STLLoader } from "three/examples/jsm/loaders/STLLoader.js";
 import { toCreasedNormals } from "three/examples/jsm/utils/BufferGeometryUtils.js";
 import { advanceMotion } from "./motion";
+import { graspTravel, type GraspShape, type JawSurface } from "./grasp";
 import {
   disposeObject,
   generatedBase,
@@ -31,7 +32,7 @@ const jointLimits: Record<JointName, [number, number]> = {
   shoulder: [-130, 130],
   elbow: [-135, 135],
   wrist: [-150, 18],
-  gripper: [0, 24],
+  gripper: [0, 40],
 };
 // Real hardware will vary; keep these two limits per joint easy to calibrate.
 const jointMotion: Record<JointName, { maxSpeed: number; acceleration: number }> = {
@@ -152,9 +153,13 @@ export function Simulator({ children, facts }: { children: React.ReactNode; fact
     world.broadphase = new CANNON.SAPBroadphase(world);
     world.defaultContactMaterial.friction = 0.55;
     world.defaultContactMaterial.restitution = 0.18;
-    (world.solver as CANNON.GSSolver).iterations = 12;
+    // Resolve the extra simultaneous contacts in a stack without accumulating sideways drift.
+    (world.solver as CANNON.GSSolver).iterations = 40;
     world.addBody(new CANNON.Body({ mass: 0, shape: new CANNON.Plane() }));
 
+    const robotRoot = new THREE.Group();
+    scene.add(robotRoot);
+    const jawSurfaces: JawSurface[] = [];
     const base = new THREE.Group();
     const shoulder = new THREE.Group();
     const elbow = new THREE.Group();
@@ -164,7 +169,7 @@ export function Simulator({ children, facts }: { children: React.ReactNode; fact
     shoulder.position.set(0, 0, 162.03);
     elbow.position.set(0, 0, 175.35);
     wrist.position.set(-6, 0, 167.33);
-    scene.add(base);
+    robotRoot.add(base);
     base.add(shoulder);
     shoulder.add(elbow);
     elbow.add(wrist);
@@ -203,6 +208,7 @@ export function Simulator({ children, facts }: { children: React.ReactNode; fact
         setLoaded(loadedCount);
         if (loadedCount === meshCount) {
           setMode(autopilot ? "autopilot" : "manual");
+          updateReach();
           if (autopilot) startDemo();
         }
       });
@@ -210,7 +216,8 @@ export function Simulator({ children, facts }: { children: React.ReactNode; fact
     const addMesh = (mesh: THREE.Mesh, parent: THREE.Object3D) => {
       mesh.castShadow = true;
       parent.add(mesh);
-      if (parent !== scene && parent !== base) movingMeshes.push(mesh);
+      if (parent !== robotRoot && parent !== base) movingMeshes.push(mesh);
+      if (parent === leftJaw || parent === rightJaw) jawSurfaces.push({ geometry: mesh.geometry, side: parent === leftJaw ? -1 : 1 });
     };
     const load = (name: string, parent: THREE.Object3D, offset: [number, number, number], material: string | THREE.Material = palette.arm) => {
       loadGeometry(name, (geometry) => {
@@ -244,7 +251,13 @@ export function Simulator({ children, facts }: { children: React.ReactNode; fact
       }));
       return phase;
     };
-    load("simulator_base_fixed", scene, [0, 0, 0], palette.frame);
+    loadGeometry("simulator_base_fixed", (geometry) => {
+      // The assembly origin is above the feet. Move the entire mechanism and IK model
+      // together so the lowest grey support rests on the same z=0 floor as the props.
+      robotRoot.position.z = -geometry.boundingBox!.min.z;
+      demoBase.position.z = robotRoot.position.z;
+      addMesh(new THREE.Mesh(geometry, new THREE.MeshStandardMaterial({ color: palette.frame, roughness: 0.56, metalness: 0.06 })), robotRoot);
+    });
     load("simulator_base_yaw", base, [0, 0, 0]);
     load("simulator_upper_arm", shoulder, [0, 0, -162.03]);
     load("simulator_forearm", elbow, [0, 0, -337.38]);
@@ -268,15 +281,16 @@ export function Simulator({ children, facts }: { children: React.ReactNode; fact
       marker.position.set(...position);
       parent.add(marker);
       const body = new CANNON.Body({ mass: 0, type: CANNON.Body.KINEMATIC, shape });
+      body.collisionFilterGroup = 2;
       world.addBody(body);
       robotColliders.push({ marker, body });
     };
-    addRobotCollider(scene, [0, 0, 70], new CANNON.Cylinder(65, 65, 140, 16));
+    addRobotCollider(robotRoot, [0, 0, 70], new CANNON.Cylinder(65, 65, 140, 16));
     addRobotCollider(shoulder, [0, 0, 88], new CANNON.Box(new CANNON.Vec3(28, 24, 88)));
     addRobotCollider(elbow, [0, 0, 84], new CANNON.Box(new CANNON.Vec3(24, 22, 84)));
     addRobotCollider(wrist, [0, 28, 4], new CANNON.Box(new CANNON.Vec3(20, 38, 17)));
-    addRobotCollider(leftJaw, [-7, 105, 14], new CANNON.Box(new CANNON.Vec3(3, 31, 6)));
-    addRobotCollider(rightJaw, [7, 105, 14], new CANNON.Box(new CANNON.Vec3(3, 31, 6)));
+    addRobotCollider(leftJaw, [-7.7, 128.5, 14.5], new CANNON.Box(new CANNON.Vec3(1.2, 7, 4)));
+    addRobotCollider(rightJaw, [7.7, 128.5, 14.5], new CANNON.Box(new CANNON.Vec3(1.2, 7, 4)));
 
     type PhysicsProp = {
       name: string;
@@ -284,6 +298,7 @@ export function Simulator({ children, facts }: { children: React.ReactNode; fact
       body: CANNON.Body;
       mass: number;
       start: [number, number, number];
+      graspShape: GraspShape;
     };
     const props: PhysicsProp[] = [];
     const addProp = (
@@ -306,7 +321,10 @@ export function Simulator({ children, facts }: { children: React.ReactNode; fact
       body.sleepSpeedLimit = 3;
       body.sleepTimeLimit = 0.5;
       world.addBody(body);
-      props.push({ name, mesh, body, mass, start });
+      const graspShape: GraspShape = shape instanceof CANNON.Box
+        ? { halfExtents: new THREE.Vector3(shape.halfExtents.x, shape.halfExtents.y, shape.halfExtents.z) }
+        : { radius: (shape as CANNON.Sphere).radius };
+      props.push({ name, mesh, body, mass, start, graspShape });
     };
     const cubeShape = new CANNON.Box(new CANNON.Vec3(12, 11, 11));
     addProp("orange block", new THREE.BoxGeometry(24, 22, 22), cubeShape, [90, 145, 11], "#f28c5a");
@@ -316,6 +334,15 @@ export function Simulator({ children, facts }: { children: React.ReactNode; fact
     addProp("red ball", new THREE.SphereGeometry(9, 24, 16), new CANNON.Sphere(9), [150, -40, 9], "#ee6055", 0.04);
 
     let held: PhysicsProp | null = null;
+    let heldTravel = 0;
+    const heldPosition = new THREE.Vector3();
+    const heldQuaternion = new THREE.Quaternion();
+    const localPosition = new THREE.Vector3();
+    const localQuaternion = new THREE.Quaternion();
+    const inverseWrist = new THREE.Quaternion();
+    const wristPosition = new THREE.Vector3();
+    const carriedPosition = new THREE.Vector3();
+    const carriedQuaternion = new THREE.Quaternion();
     const gripPosition = new THREE.Vector3();
     const previousGripPosition = new THREE.Vector3();
     const gripQuaternion = new THREE.Quaternion();
@@ -329,6 +356,7 @@ export function Simulator({ children, facts }: { children: React.ReactNode; fact
     let finishedAt = 0;
     const release = () => {
       if (!held) return;
+      held.body.collisionFilterMask = -1;
       held.body.type = CANNON.Body.DYNAMIC;
       held.body.mass = held.mass;
       held.body.updateMassProperties();
@@ -372,7 +400,7 @@ export function Simulator({ children, facts }: { children: React.ReactNode; fact
       const tilt = ((-pose.shoulder + pose.elbow - pose.wrist + 90 + 540) % 360) - 180;
       const elbowClearance = Math.max(0, 90 - probeJoint.setFromMatrixPosition(demoElbow.matrixWorld).z);
       const wristClearance = Math.max(0, 90 - probeJoint.setFromMatrixPosition(demoWrist.matrixWorld).z);
-      return { error, cost: error + 0.05 * tilt ** 2 + elbowClearance ** 2 + wristClearance ** 2 };
+      return { error, cost: error + 2 * tilt ** 2 + elbowClearance ** 2 + wristClearance ** 2 };
     };
     // Seed from the previous pose and, among accurate solutions, prefer the one with the least
     // joint travel so consecutive steps stay on the same elbow branch instead of flipping.
@@ -408,47 +436,50 @@ export function Simulator({ children, facts }: { children: React.ReactNode; fact
       return (accurate.length ? accurate : solutions).reduce((best, solution) => (rank(solution) < rank(best) ? solution : best)).pose;
     };
 
-    let maxReach = 0;
-    for (let s = -130; s <= 130; s += 5) {
-      for (let e = -135; e <= 135; e += 5) {
-        for (let w = -150; w <= 18; w += 12) {
-          const tip = probe({ base: 0, shoulder: s, elbow: e, wrist: w, gripper: 0 });
-          if (tip.z >= 0) maxReach = Math.max(maxReach, Math.hypot(tip.x, tip.y));
+    const updateReach = () => {
+      let maxReach = 0;
+      for (let s = -130; s <= 130; s += 5) {
+        for (let e = -135; e <= 135; e += 5) {
+          for (let w = -150; w <= 18; w += 12) {
+            const tip = probe({ base: 0, shoulder: s, elbow: e, wrist: w, gripper: 0 });
+            if (tip.z >= 0) maxReach = Math.max(maxReach, Math.hypot(tip.x, tip.y));
+          }
         }
       }
-    }
-    setReach(Math.round(maxReach / 10) * 10);
-    const reachRing = new THREE.Group();
-    reachRing.add(new THREE.Mesh(
-      new THREE.RingGeometry(maxReach - 1.2, maxReach + 1.2, 180),
-      new THREE.MeshBasicMaterial({ color: "#ff7a45", transparent: true, opacity: 0.55, depthWrite: false }),
-    ));
-    const tickPoints: number[] = [];
-    for (let degrees = 0; degrees < 360; degrees += 10) {
-      const angle = THREE.MathUtils.degToRad(degrees);
-      const length = degrees % 90 === 0 ? 34 : degrees % 30 === 0 ? 18 : 9;
-      tickPoints.push(
-        Math.cos(angle) * maxReach, Math.sin(angle) * maxReach, 0,
-        Math.cos(angle) * (maxReach - length), Math.sin(angle) * (maxReach - length), 0,
-      );
-    }
-    const ticks = new THREE.BufferGeometry();
-    ticks.setAttribute("position", new THREE.Float32BufferAttribute(tickPoints, 3));
-    reachRing.add(new THREE.LineSegments(ticks, new THREE.LineBasicMaterial({ color: "#ff7a45", transparent: true, opacity: 0.45 })));
-    reachRing.position.z = 0.4;
-    scene.add(reachRing);
+
+      const reachRing = new THREE.Group();
+      reachRing.add(new THREE.Mesh(
+        new THREE.RingGeometry(maxReach - 1.2, maxReach + 1.2, 180),
+        new THREE.MeshBasicMaterial({ color: "#ff7a45", transparent: true, opacity: 0.55, depthWrite: false }),
+      ));
+      const tickPoints: number[] = [];
+      for (let degrees = 0; degrees < 360; degrees += 10) {
+        const angle = THREE.MathUtils.degToRad(degrees);
+        const length = degrees % 90 === 0 ? 34 : degrees % 30 === 0 ? 18 : 9;
+        tickPoints.push(
+          Math.cos(angle) * maxReach, Math.sin(angle) * maxReach, 0,
+          Math.cos(angle) * (maxReach - length), Math.sin(angle) * (maxReach - length), 0,
+        );
+      }
+      const ticks = new THREE.BufferGeometry();
+      ticks.setAttribute("position", new THREE.Float32BufferAttribute(tickPoints, 3));
+      reachRing.add(new THREE.LineSegments(ticks, new THREE.LineBasicMaterial({ color: "#ff7a45", transparent: true, opacity: 0.45 })));
+      reachRing.position.z = 0.4;
+      scene.add(reachRing);
+      setReach(Math.round(maxReach / 10) * 10);
+    };
 
     const atTarget = (pose: JointAngles, target: JointAngles) => jointNames.every((name) => {
       const difference = name === "base"
         ? Math.abs(((pose.base - target.base + 540) % 360) - 180)
-        : Math.abs(pose[name] - target[name]);
+        : Math.abs(pose[name] - (name === "gripper" && held ? Math.max(target[name], heldTravel) : target[name]));
       return difference < 1.2;
     });
     const stack: [number, number] = [0, 150];
     const buildDemoSteps = () => {
       const blocks = props.filter((prop) => prop.name.endsWith("block"));
       const steps: DemoStep[] = [
-        { label: "Opening the gripper", target: { ...homePose, gripper: 24 }, pause: 500 },
+        { label: "Opening the gripper", target: { ...homePose, gripper: 40 }, pause: 500 },
       ];
       const makeDemoStep = (label: string, point: [number, number, number], gripper: number, pause = 220): DemoStep => ({
         label,
@@ -457,29 +488,29 @@ export function Simulator({ children, facts }: { children: React.ReactNode; fact
       });
       blocks.forEach((block, index) => {
         const [x, y] = block.start;
-        // Blocks rest at 11 mm per layer; the first is let go a few mm up so the jaw tips clear the table.
-        const height = Math.max(18, 12 + index * 22);
-        steps.push(makeDemoStep(`Reaching for the ${block.name}`, [x, y, 88], 24));
-        steps.push(makeDemoStep(`Lowering onto the ${block.name}`, [x, y, 18], 24));
+        // Preserve the pickup offset and release each block a few millimetres above its layer.
+        const height = 20 + index * 22;
+        steps.push(makeDemoStep(`Reaching for the ${block.name}`, [x, y, 88], 40));
+        steps.push(makeDemoStep(`Lowering onto the ${block.name}`, [x, y, 18], 40));
         steps.push(makeDemoStep(`Gripping the ${block.name}`, [x, y, 18], 0, 650));
         steps.push(makeDemoStep(`Lifting the ${block.name}`, [x, y, 88], 0));
         steps.push(makeDemoStep(`Carrying the ${block.name} over`, [stack[0], stack[1], height + 70], 0));
         steps.push(makeDemoStep(`Placing the ${block.name}`, [stack[0], stack[1], height], 0, 280));
-        steps.push(makeDemoStep(`Releasing the ${block.name}`, [stack[0], stack[1], height], 24, 900));
+        steps.push(makeDemoStep(`Releasing the ${block.name}`, [stack[0], stack[1], height], 40, 900));
         // Lift straight off before moving on; sliding sideways would drag the open jaws through the stack.
-        steps.push(makeDemoStep("Backing away", [stack[0], stack[1], height + 70], 24, 120));
+        steps.push(makeDemoStep("Backing away", [stack[0], stack[1], height + 70], 40, 120));
       });
       const ball = props.find((prop) => prop.name === "red ball")!;
       const [ballX, ballY] = ball.start;
-      steps.push(makeDemoStep("Reaching for the red ball", [ballX, ballY, 88], 24));
-      steps.push(makeDemoStep("Lowering onto the red ball", [ballX, ballY, 18], 24));
+      steps.push(makeDemoStep("Reaching for the red ball", [ballX, ballY, 88], 40));
+      steps.push(makeDemoStep("Lowering onto the red ball", [ballX, ballY, 18], 40));
       steps.push(makeDemoStep("Gripping the red ball", [ballX, ballY, 18], 0, 650));
       steps.push(makeDemoStep("Lifting the red ball", [ballX, ballY, 170], 0));
       steps.push(makeDemoStep("Carrying the red ball over", [stack[0], stack[1], 170], 0));
-      // The jaw tips reach ~12 mm below the ball's center; hold it high enough that they clear the top block.
-      steps.push(makeDemoStep("Balancing the red ball", [stack[0], stack[1], 103], 0, 300));
-      steps.push(makeDemoStep("Letting go", [stack[0], stack[1], 103], 24, 1400));
-      steps.push(makeDemoStep("Backing away", [stack[0], stack[1], 220], 24, 400));
+      // Keep the ball and finger tips clear of the completed stack before releasing.
+      steps.push(makeDemoStep("Balancing the red ball", [stack[0], stack[1], 110], 0, 300));
+      steps.push(makeDemoStep("Letting go", [stack[0], stack[1], 110], 40, 1400));
+      steps.push(makeDemoStep("Backing away", [stack[0], stack[1], 220], 40, 400));
       return steps;
     };
     const describeStack = () => {
@@ -635,30 +666,44 @@ export function Simulator({ children, facts }: { children: React.ReactNode; fact
       gripPoint.getWorldQuaternion(gripQuaternion);
       gripVelocity.copy(gripPosition).sub(previousGripPosition).divideScalar(Math.max(elapsed, 1 / 120));
       previousGripPosition.copy(gripPosition);
-      if (pose.gripper > 12) release();
-      if (!held && pose.gripper <= 8) {
-        let nearest: PhysicsProp | null = null;
-        let nearestDistance = 34;
+      wrist.getWorldPosition(wristPosition);
+      inverseWrist.copy(gripQuaternion).invert();
+      if (held && pose.gripper > heldTravel + 2) release();
+      if (!held && targetsRef.current.gripper < previousPose.gripper && pose.gripper < previousPose.gripper) {
         for (const prop of props) {
           if (prop.body.type !== CANNON.Body.DYNAMIC) continue;
-          const distance = gripPosition.distanceTo(prop.mesh.position);
-          if (distance < nearestDistance) {
-            nearest = prop;
-            nearestDistance = distance;
-          }
-        }
-        if (nearest) {
-          held = nearest;
+          localPosition.set(prop.body.position.x, prop.body.position.y, prop.body.position.z)
+            .sub(wristPosition).applyQuaternion(inverseWrist);
+          // Require the solid to be inside the mouth; proximity alone is not a grasp.
+          if (Math.abs(localPosition.x) > 6 || Math.abs(localPosition.y - 124) > 18 || Math.abs(localPosition.z - 14) > 10) continue;
+          localQuaternion.set(prop.body.quaternion.x, prop.body.quaternion.y, prop.body.quaternion.z, prop.body.quaternion.w)
+            .premultiply(inverseWrist);
+          const contact = graspTravel(jawSurfaces, localPosition, localQuaternion, prop.graspShape, jointLimits.gripper[1]);
+          if (contact === null || pose.gripper > contact || targetsRef.current.gripper > contact) continue;
+          held = prop;
+          heldTravel = contact;
+          heldPosition.copy(localPosition);
+          heldQuaternion.copy(localQuaternion);
           held.body.type = CANNON.Body.KINEMATIC;
           held.body.mass = 0;
+          held.body.collisionFilterMask = 1; // The carried solid must not collide with its own fingers.
           held.body.updateMassProperties();
+          held.body.angularVelocity.setZero();
           held.body.wakeUp();
           setHeldName(held.name);
+          break;
         }
       }
       if (held) {
-        held.body.position.set(gripPosition.x, gripPosition.y, gripPosition.z);
-        held.body.quaternion.set(gripQuaternion.x, gripQuaternion.y, gripQuaternion.z, gripQuaternion.w);
+        if (pose.gripper < heldTravel) {
+          pose.gripper = heldTravel;
+          velocities.gripper = 0;
+          applyPose(pose);
+        }
+        carriedPosition.copy(heldPosition).applyQuaternion(gripQuaternion).add(wristPosition);
+        carriedQuaternion.copy(gripQuaternion).multiply(heldQuaternion);
+        held.body.position.set(carriedPosition.x, carriedPosition.y, carriedPosition.z);
+        held.body.quaternion.set(carriedQuaternion.x, carriedQuaternion.y, carriedQuaternion.z, carriedQuaternion.w);
         held.body.velocity.set(gripVelocity.x, gripVelocity.y, gripVelocity.z);
       }
       robotColliders.forEach(({ marker, body }) => {
@@ -676,7 +721,10 @@ export function Simulator({ children, facts }: { children: React.ReactNode; fact
         if (robotColliders.some((collider) => collider.body.aabb.overlaps(body.aabb))) body.wakeUp();
       });
       world.step(1 / 60, elapsed, 5);
-      if (held) held.body.position.set(gripPosition.x, gripPosition.y, gripPosition.z);
+      if (held) {
+        held.body.position.set(carriedPosition.x, carriedPosition.y, carriedPosition.z);
+        held.body.quaternion.set(carriedQuaternion.x, carriedQuaternion.y, carriedQuaternion.z, carriedQuaternion.w);
+      }
       props.forEach(({ mesh, body }) => {
         mesh.position.set(body.position.x, body.position.y, body.position.z);
         mesh.quaternion.set(body.quaternion.x, body.quaternion.y, body.quaternion.z, body.quaternion.w);
@@ -749,7 +797,7 @@ export function Simulator({ children, facts }: { children: React.ReactNode; fact
         : "Manual control";
 
   return (
-    <section className="hero" id="simulator" data-meshes={loaded} data-mode={mode}>
+    <section className="hero" id="simulator" data-meshes={loaded} data-mode={mode} data-held={heldName ?? ""}>
       <div className="hero-stage" ref={mountRef} aria-label="Interactive robot arm simulator" />
       {!ready && (
         <div className="hero-loader" aria-hidden="true">
