@@ -2,12 +2,12 @@ import { expect, type Locator, test } from "@playwright/test";
 
 test("landing page runs the simulator and part viewer", async ({ page }) => {
   // Loads ~12 MB of meshes and runs physics on software WebGL in CI.
-  test.setTimeout(90_000);
+  test.setTimeout(150_000);
   await page.goto("/");
   await expect(page.getByRole("heading", { level: 1, name: /Robot Arm/ })).toBeVisible();
 
   const hero = page.locator("#simulator");
-  await expect(hero).toHaveAttribute("data-meshes", "17", { timeout: 30_000 });
+  await expect(hero).toHaveAttribute("data-meshes", "35", { timeout: 30_000 });
   await expect(hero).toHaveAttribute("data-mode", "autopilot");
 
   const readouts = hero.locator(".joint-readout");
@@ -16,14 +16,14 @@ test("landing page runs the simulator and part viewer", async ({ page }) => {
   await expect(readouts.nth(1)).toHaveText("0°", { timeout: 15_000 });
   await expect(readouts.nth(2)).toHaveText("0°", { timeout: 15_000 });
   await page.getByLabel("Shoulder").fill("45");
-  await expect(readouts.nth(1)).toHaveText("45°", { timeout: 10_000 });
+  await expect(readouts.nth(1)).toHaveText("45°", { timeout: 15_000 });
 
   await hero.getByRole("button", { name: "Reset blocks" }).click();
   await hero.getByRole("button", { name: "Run autopilot" }).click();
   await expect(hero).toHaveAttribute("data-mode", "autopilot");
   await expect(hero.getByText("Opening the gripper")).toBeVisible();
 
-  await expect(hero).toHaveAttribute("data-held", "orange block", { timeout: 45_000 });
+  await expect(hero).toHaveAttribute("data-held", "orange block", { timeout: 75_000 });
   await hero.getByRole("button", { name: "Pause autopilot" }).click();
   await page.getByLabel("Grip", { exact: true }).fill("0");
   await expect.poll(async () => Number.parseFloat(await readouts.nth(4).innerText())).toBeGreaterThan(10);

@@ -1,4 +1,5 @@
 import * as THREE from "three";
+import { jawMatrix } from "./gripper.ts";
 
 export type GraspShape = { halfExtents: THREE.Vector3 } | { radius: number };
 export type JawSurface = { geometry: THREE.BufferGeometry; side: -1 | 1 };
@@ -19,13 +20,14 @@ export function graspTravel(
     ? new THREE.Box3(shape.halfExtents.clone().negate(), shape.halfExtents)
     : null;
   const intersects = (travel: number) => jaws.some(({ geometry, side }) => {
+    const transform = jawMatrix(travel, side);
     const vertices = geometry.getAttribute("position");
     const indices = geometry.index;
     const count = indices?.count ?? vertices.count;
     for (let index = 0; index < count; index += 3) {
       [triangle.a, triangle.b, triangle.c].forEach((vertex, corner) => {
         vertex.fromBufferAttribute(vertices, indices ? indices.getX(index + corner) : index + corner);
-        vertex.x += side * travel / 2;
+        vertex.applyMatrix4(transform);
         vertex.sub(position).applyQuaternion(inverse);
       });
       if (box ? box.intersectsTriangle(triangle)

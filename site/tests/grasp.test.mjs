@@ -3,6 +3,7 @@ import fs from "node:fs";
 import test from "node:test";
 import * as THREE from "three";
 import { STLLoader } from "three/examples/jsm/loaders/STLLoader.js";
+import { jawMatrix, jawPivotX, jawPivotY, linkagePose, releaseTravel } from "../src/gripper.ts";
 import { graspTravel } from "../src/grasp.ts";
 import { elbowPivotZ, wristPosition, wristMeshOffset } from "../src/assembly.ts";
 
@@ -26,7 +27,7 @@ test("CAD fingers stop on both a block and a ball, with different openings", () 
     for (const { geometry, side } of jaws) {
       const vertices = geometry.attributes.position;
       for (let i = 0; i < vertices.count; i += 3) {
-        const points = [0, 1, 2].map((offset) => new THREE.Vector3().fromBufferAttribute(vertices, i + offset).add(new THREE.Vector3(side * travel / 2, 0, 0)).sub(position));
+        const points = [0, 1, 2].map((offset) => new THREE.Vector3().fromBufferAttribute(vertices, i + offset).applyMatrix4(jawMatrix(travel, side)).sub(position));
         const triangle = new THREE.Triangle(...points);
         if ("radius" in shape) assert.ok(triangle.closestPointToPoint(new THREE.Vector3(), new THREE.Vector3()).length() > shape.radius);
         else assert.equal(bounds.intersectsTriangle(triangle), false);
@@ -39,7 +40,9 @@ test("contact accounts for block rotation and rejects objects outside the mouth"
   const position = new THREE.Vector3(0, 131, 14);
   const straight = graspTravel(jaws, position, new THREE.Quaternion(), block, 40);
   const rotated = graspTravel(jaws, position, new THREE.Quaternion().setFromAxisAngle(new THREE.Vector3(0, 0, 1), Math.PI / 4), block, 40);
-  assert.ok(rotated > straight);
+  assert.ok(straight !== null && rotated !== null);
+  // Pivoting changes the contact angle as well as the mouth width.
+  assert.ok(Math.abs(rotated - straight) > 0.5);
   assert.equal(graspTravel(jaws, new THREE.Vector3(0, 180, 14), new THREE.Quaternion(), ball, 40), null);
   assert.equal(graspTravel(jaws, position, new THREE.Quaternion(), { radius: 60 }, 40), null);
 });
@@ -71,4 +74,28 @@ test("wrist pulley and gripper stay on the CAD shaft throughout wrist rotation",
     assert.ok(Math.abs(rotatingAxis.y - wrist.position.y) < 0.001);
     assert.ok(Math.abs(rotatingAxis.z - wrist.position.z) < 0.001);
   }
+});
+
+
+test("fingers stay on fixed posts and rigid links remain attached throughout travel", () => {
+  for (const side of [-1, 1]) {
+    for (let travel = 0; travel <= 40; travel += 1) {
+      const transform = jawMatrix(travel, side);
+      const pivot = new THREE.Vector3(side * jawPivotX, jawPivotY, 0);
+      assert.ok(pivot.clone().applyMatrix4(transform).distanceTo(pivot) < 1e-9);
+      const { drive, hornEnd, hornAngle, rodAngle } = linkagePose(travel, side);
+      assert.ok(Math.abs(hornEnd.distanceTo(new THREE.Vector3(side * 11.5, 49.5, 0)) - Math.hypot(6, 15.5)) < 1e-9);
+      assert.ok(Math.abs(hornEnd.distanceTo(drive) - Math.hypot(2.5, 26.5)) < 1e-9);
+      const hornTip = new THREE.Vector3(side * 6, 15.5, 0).applyAxisAngle(new THREE.Vector3(0, 0, 1), hornAngle).add(new THREE.Vector3(side * 11.5, 49.5, 0));
+      const rodTip = new THREE.Vector3(-side * 2.5, 26.5, 0).applyAxisAngle(new THREE.Vector3(0, 0, 1), rodAngle).add(hornEnd);
+      assert.ok(hornTip.distanceTo(hornEnd) < 1e-9);
+      assert.ok(rodTip.distanceTo(drive) < 1e-9);
+    }
+  }
+});
+
+
+test("objects contacting near maximum opening can still be released", () => {
+  assert.equal(releaseTravel(39, 40), 40);
+  assert.equal(releaseTravel(20, 40), 22);
 });

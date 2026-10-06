@@ -5,6 +5,7 @@ import { OrbitControls } from "three/examples/jsm/controls/OrbitControls.js";
 import { RoomEnvironment } from "three/examples/jsm/environments/RoomEnvironment.js";
 import { STLLoader } from "three/examples/jsm/loaders/STLLoader.js";
 import { toCreasedNormals } from "three/examples/jsm/utils/BufferGeometryUtils.js";
+import { jawAngle, jawPivotX, jawPivotY, linkagePose, releaseTravel } from "./gripper";
 import { advanceMotion } from "./motion";
 import { wristPosition as wristJointPosition, wristMeshOffset } from "./assembly";
 import { graspTravel, type GraspShape, type JawSurface } from "./grasp";
@@ -52,7 +53,7 @@ const jointControls: { name: JointName; id: string; label: string; unit: string 
   { name: "wrist", id: "J4", label: "Wrist", unit: "°" },
   { name: "gripper", id: "J5", label: "Grip", unit: " mm" },
 ];
-const meshCount = 31;
+const meshCount = 35;
 const palette = {
   arm: "#e2743f",
   frame: "#4a535b",
@@ -186,6 +187,15 @@ export function Simulator({ children, facts }: { children: React.ReactNode; fact
     const wrist = new THREE.Group();
     const leftJaw = new THREE.Group();
     const rightJaw = new THREE.Group();
+    const jawLinks = ([-1, 1] as const).map((side) => {
+      const jaw = side < 0 ? leftJaw : rightJaw;
+      jaw.position.set(side * jawPivotX, jawPivotY, 0);
+      const horn = new THREE.Group();
+      horn.position.set(side * jawPivotX, 49.5, 0);
+      const rod = new THREE.Group();
+      wrist.add(horn, rod);
+      return { side, jaw, horn, rod };
+    });
     shoulder.position.set(0, 0, 162.03);
     elbow.position.set(0, 0, 175.35);
     wrist.position.set(...wristJointPosition);
@@ -291,8 +301,12 @@ export function Simulator({ children, facts }: { children: React.ReactNode; fact
     load("simulator_wrist_hardware", wrist, wristMeshOffset, palette.hardware);
     loadFinishes("simulator_wrist_hardware", wrist, wristMeshOffset, ["steel"]);
     load("simulator_gripper_base", wrist, [0, 0, 0], palette.gripper);
-    load("simulator_gripper_left", leftJaw, [0, 0, 0], palette.gripper);
-    load("simulator_gripper_right", rightJaw, [0, 0, 0], palette.gripper);
+    jawLinks.forEach(({ side, jaw, horn, rod }) => {
+      const name = side < 0 ? "left" : "right";
+      load(`simulator_gripper_${name}`, jaw, [-side * jawPivotX, -jawPivotY, 0], palette.gripper);
+      load(`simulator_gripper_${name}_horn`, horn, [-side * jawPivotX, -49.5, 0], palette.gripper);
+      load(`simulator_gripper_${name}_rod`, rod, [-side * 17.5, -65, 0], palette.gripper);
+    });
     const shoulderDriver = loadPulley("simulator_shoulder_driver", base, [0, 0, 0]);
     loadPulley("simulator_shoulder_driven", shoulder, [0, 0, -162.03]);
     const shoulderBelt = belt("simulator_shoulder_belt", base, [0, 0, 0]);
@@ -317,8 +331,8 @@ export function Simulator({ children, facts }: { children: React.ReactNode; fact
     addRobotCollider(shoulder, [0, 0, 88], new CANNON.Box(new CANNON.Vec3(28, 24, 88)));
     addRobotCollider(elbow, [0, 0, 84], new CANNON.Box(new CANNON.Vec3(24, 22, 84)));
     addRobotCollider(wrist, [0, 28, 4], new CANNON.Box(new CANNON.Vec3(20, 38, 17)));
-    addRobotCollider(leftJaw, [-7.7, 128.5, 14.5], new CANNON.Box(new CANNON.Vec3(1.2, 7, 4)));
-    addRobotCollider(rightJaw, [7.7, 128.5, 14.5], new CANNON.Box(new CANNON.Vec3(1.2, 7, 4)));
+    addRobotCollider(leftJaw, [3.8, 54, 14.5], new CANNON.Box(new CANNON.Vec3(1.2, 7, 4)));
+    addRobotCollider(rightJaw, [-3.8, 54, 14.5], new CANNON.Box(new CANNON.Vec3(1.2, 7, 4)));
 
     type PhysicsProp = {
       name: string;
@@ -596,8 +610,13 @@ export function Simulator({ children, facts }: { children: React.ReactNode; fact
       shoulderBelt.value = -pose.shoulder * 16 / 360;
       elbowBelt.value = pose.elbow * 16 / 360;
       wristBelt.value = -pose.wrist * 20 / 360;
-      leftJaw.position.x = -pose.gripper / 2;
-      rightJaw.position.x = pose.gripper / 2;
+      jawLinks.forEach(({ side, jaw, horn, rod }) => {
+        jaw.rotation.z = jawAngle(pose.gripper, side);
+        const linkage = linkagePose(pose.gripper, side);
+        horn.rotation.z = linkage.hornAngle;
+        rod.position.copy(linkage.hornEnd);
+        rod.rotation.z = linkage.rodAngle;
+      });
       scene.updateMatrixWorld(true);
     };
 
@@ -696,7 +715,7 @@ export function Simulator({ children, facts }: { children: React.ReactNode; fact
       previousGripPosition.copy(gripPosition);
       wrist.getWorldPosition(wristPosition);
       inverseWrist.copy(gripQuaternion).invert();
-      if (held && pose.gripper > heldTravel + 2) release();
+      if (held && pose.gripper >= releaseTravel(heldTravel, jointLimits.gripper[1])) release();
       if (!held && targetsRef.current.gripper < previousPose.gripper && pose.gripper < previousPose.gripper) {
         for (const prop of props) {
           if (prop.body.type !== CANNON.Body.DYNAMIC) continue;

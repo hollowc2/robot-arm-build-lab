@@ -121,11 +121,15 @@ def main() -> None:
 
             for name, labels in {
                 "simulator_gripper_base": ("sg90_gripper_base",),
+                "simulator_gripper_left_horn": ("left_sg90_servo_horn_adapter",),
+                "simulator_gripper_right_horn": ("right_sg90_servo_horn_adapter",),
+                "simulator_gripper_left_rod": ("left_sg90_gripper_pushrod",),
+                "simulator_gripper_right_rod": ("right_sg90_gripper_pushrod",),
                 "simulator_gripper_left": (
-                    "left_sg90_gripper_jaw", "left_sg90_servo_horn_adapter", "left_sg90_gripper_pushrod",
+                    "left_sg90_gripper_jaw",
                 ),
                 "simulator_gripper_right": (
-                    "right_sg90_gripper_jaw", "right_sg90_servo_horn_adapter", "right_sg90_gripper_pushrod",
+                    "right_sg90_gripper_jaw",
                 ),
             }.items():
                 export_stl(Compound(children=[gripper_children[label] for label in labels]), OUT_DIR / f"{name}.stl")
