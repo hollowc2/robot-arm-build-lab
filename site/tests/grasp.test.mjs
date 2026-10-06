@@ -4,6 +4,7 @@ import test from "node:test";
 import * as THREE from "three";
 import { STLLoader } from "three/examples/jsm/loaders/STLLoader.js";
 import { graspTravel } from "../src/grasp.ts";
+import { elbowPivotZ, wristPosition, wristMeshOffset } from "../src/assembly.ts";
 
 const loader = new STLLoader();
 const load = (name) => {
@@ -49,4 +50,25 @@ test("the full assembly can be grounded from the fixed CAD support's lowest poin
   const lift = -fixed.boundingBox.min.z;
   assert.equal(lift, 46);
   assert.equal(fixed.boundingBox.clone().translate(new THREE.Vector3(0, 0, lift)).min.z, 0);
+});
+
+
+test("wrist pulley and gripper stay on the CAD shaft throughout wrist rotation", () => {
+  const pulley = load("wrist_driven");
+  pulley.computeBoundingBox();
+  const cadAxis = pulley.boundingBox.getCenter(new THREE.Vector3());
+  // X is the shaft axis; the pulley sits beside the centered gripper tongue.
+  const localAxis = cadAxis.clone().add(new THREE.Vector3(...wristMeshOffset));
+  assert.ok(Math.abs(localAxis.y) < 0.001);
+  assert.ok(Math.abs(localAxis.z) < 0.001, `pulley is ${localAxis.z} mm off the wrist pivot`);
+  assert.ok(Math.abs(elbowPivotZ + wristPosition[2] - cadAxis.z) < 0.001);
+  for (const degrees of [-150, -90, -45, 0, 18]) {
+    const wrist = new THREE.Group();
+    wrist.position.set(...wristPosition);
+    wrist.rotation.x = THREE.MathUtils.degToRad(-degrees);
+    wrist.updateMatrixWorld(true);
+    const rotatingAxis = wrist.localToWorld(localAxis.clone());
+    assert.ok(Math.abs(rotatingAxis.y - wrist.position.y) < 0.001);
+    assert.ok(Math.abs(rotatingAxis.z - wrist.position.z) < 0.001);
+  }
 });

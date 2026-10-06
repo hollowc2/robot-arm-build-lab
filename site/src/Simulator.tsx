@@ -5,6 +5,7 @@ import { OrbitControls } from "three/examples/jsm/controls/OrbitControls.js";
 import { STLLoader } from "three/examples/jsm/loaders/STLLoader.js";
 import { toCreasedNormals } from "three/examples/jsm/utils/BufferGeometryUtils.js";
 import { advanceMotion } from "./motion";
+import { wristPosition as wristJointPosition, wristMeshOffset } from "./assembly";
 import { graspTravel, type GraspShape, type JawSurface } from "./grasp";
 import {
   disposeObject,
@@ -168,7 +169,7 @@ export function Simulator({ children, facts }: { children: React.ReactNode; fact
     const rightJaw = new THREE.Group();
     shoulder.position.set(0, 0, 162.03);
     elbow.position.set(0, 0, 175.35);
-    wrist.position.set(-6, 0, 167.33);
+    wrist.position.set(...wristJointPosition);
     robotRoot.add(base);
     base.add(shoulder);
     shoulder.add(elbow);
@@ -261,7 +262,7 @@ export function Simulator({ children, facts }: { children: React.ReactNode; fact
     load("simulator_base_yaw", base, [0, 0, 0]);
     load("simulator_upper_arm", shoulder, [0, 0, -162.03]);
     load("simulator_forearm", elbow, [0, 0, -337.38]);
-    load("simulator_wrist_hardware", wrist, [6, 0, -504.71], palette.hardware);
+    load("simulator_wrist_hardware", wrist, wristMeshOffset, palette.hardware);
     load("simulator_gripper_base", wrist, [0, 0, 0], palette.gripper);
     load("simulator_gripper_left", leftJaw, [0, 0, 0], palette.gripper);
     load("simulator_gripper_right", rightJaw, [0, 0, 0], palette.gripper);
@@ -272,7 +273,7 @@ export function Simulator({ children, facts }: { children: React.ReactNode; fact
     loadPulley("simulator_elbow_driven", elbow, [0, 0, -337.38]);
     const elbowBelt = belt("simulator_elbow_belt", shoulder, [0, 0, -162.03]);
     const wristDriver = loadPulley("simulator_wrist_driver", elbow, [0, 0, -337.38]);
-    loadPulley("simulator_wrist_driven", wrist, [6, 0, -504.71]);
+    loadPulley("simulator_wrist_driven", wrist, wristMeshOffset);
     const wristBelt = belt("simulator_wrist_belt", elbow, [0, 0, -337.38]);
 
     const robotColliders: { marker: THREE.Object3D; body: CANNON.Body }[] = [];
