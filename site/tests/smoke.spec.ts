@@ -1,33 +1,71 @@
 import { expect, type Locator, test } from "@playwright/test";
 
-test("landing page runs the simulator and part viewer", async ({ page }) => {
+test("landing page runs the brick builder and part viewer", async ({ page }) => {
   // Loads ~12 MB of meshes and runs physics on software WebGL in CI.
-  test.setTimeout(150_000);
+  test.setTimeout(180_000);
   await page.goto("/");
   await expect(page.getByRole("heading", { level: 1, name: /Robot Arm/ })).toBeVisible();
 
   const hero = page.locator("#simulator");
   await expect(hero).toHaveAttribute("data-meshes", "35", { timeout: 30_000 });
   await expect(hero).toHaveAttribute("data-mode", "autopilot");
+  await expect(hero).toHaveAttribute("data-build", "running");
+  await expect(hero.locator(".build-headline")).toHaveText("Placing brick 1 of 13");
+  await expect(hero.getByRole("radio", { name: /Little house/ })).toHaveAttribute("aria-checked", "true");
 
-  const readouts = hero.locator(".joint-readout");
+  // Manual takeover stops the automated build cleanly.
+  const readouts = hero.locator("#dock-panel-joints .joint-readout");
+  await hero.getByRole("tab", { name: "Joints" }).click();
   await hero.getByRole("button", { name: "Home" }).click();
   await expect(hero).toHaveAttribute("data-mode", "manual");
+  await expect(hero).toHaveAttribute("data-build", "stopped");
   await expect(readouts.nth(1)).toHaveText("0°", { timeout: 15_000 });
   await expect(readouts.nth(2)).toHaveText("0°", { timeout: 15_000 });
   await page.getByLabel("Shoulder").fill("45");
   await expect(readouts.nth(1)).toHaveText("45°", { timeout: 15_000 });
 
-  await hero.getByRole("button", { name: "Reset blocks" }).click();
-  await hero.getByRole("button", { name: "Run autopilot" }).click();
-  await expect(hero).toHaveAttribute("data-mode", "autopilot");
-  await expect(hero.getByText("Opening the gripper")).toBeVisible();
+  // Switching structures resets to the new build, ready to start.
+  await hero.getByRole("tab", { name: "Build" }).click();
+  await hero.getByRole("radio", { name: /Pyramid/ }).click();
+  await expect(hero).toHaveAttribute("data-preset", "pyramid");
+  await expect(hero).toHaveAttribute("data-build", "idle");
+  await expect(hero).toHaveAttribute("data-placed", "0");
+  await expect(hero.locator(".build-headline")).toHaveText("Ready to build");
 
-  await expect(hero).toHaveAttribute("data-held", "orange block", { timeout: 75_000 });
-  await hero.getByRole("button", { name: "Pause autopilot" }).click();
-  await page.getByLabel("Grip", { exact: true }).fill("0");
+  await page.getByLabel("Simulation speed").fill("4");
+  await expect(hero).toHaveAttribute("data-speed", "4");
+  await hero.getByRole("button", { name: "Start" }).click();
+  await expect(hero).toHaveAttribute("data-mode", "autopilot");
+  await expect(hero).toHaveAttribute("data-held", "tan 2×4", { timeout: 60_000 });
+
+  // Pause freezes the arm with the brick still in the jaws.
+  await hero.getByRole("button", { name: "Pause" }).click();
+  await expect(hero).toHaveAttribute("data-paused", "true");
+  const frozen = { stage: await hero.getAttribute("data-stage"), joints: await readouts.allTextContents() };
+  await page.waitForTimeout(1500);
+  expect({ stage: await hero.getAttribute("data-stage"), joints: await readouts.allTextContents() }).toEqual(frozen);
+  await expect(hero).toHaveAttribute("data-held", "tan 2×4");
+  await hero.getByRole("button", { name: "Resume" }).click();
+  await expect(hero).toHaveAttribute("data-placed", "1", { timeout: 60_000 });
+
+  // Reset mid-build clears the structure and restores the supply.
+  await expect(hero).toHaveAttribute("data-held", "tan 2×2", { timeout: 60_000 });
+  await hero.getByRole("button", { name: "Reset" }).click();
+  await expect(hero).toHaveAttribute("data-build", "idle");
+  await expect(hero).toHaveAttribute("data-placed", "0");
+  await expect(hero).toHaveAttribute("data-held", "");
+
+  // Manual grip still stops on a held brick and opening drops it.
+  await hero.getByRole("button", { name: "Start" }).click();
+  await expect(hero).toHaveAttribute("data-held", "tan 2×4", { timeout: 60_000 });
+  await hero.getByRole("button", { name: "Pause" }).click();
+  await hero.getByRole("tab", { name: "Joints" }).click();
+  // The build's own grip target is already closed, so squeeze to a different value to take over.
+  await page.getByLabel("Grip", { exact: true }).fill("5");
+  await expect(hero).toHaveAttribute("data-paused", "false");
+  await expect(hero).toHaveAttribute("data-build", "stopped");
   await expect.poll(async () => Number.parseFloat(await readouts.nth(4).innerText())).toBeGreaterThan(10);
-  await expect(hero).toHaveAttribute("data-held", "orange block");
+  await expect(hero).toHaveAttribute("data-held", "tan 2×4");
   await page.getByLabel("Grip", { exact: true }).fill("40");
   await expect(hero).toHaveAttribute("data-held", "", { timeout: 10_000 });
 

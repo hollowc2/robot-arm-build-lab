@@ -48,6 +48,8 @@ cd site && npm run build
 
 The export also creates the rigid-link `simulator_*` meshes used by the simulator at the top of `/robot-arm/`. The old `/robot-arm/simulator/` URL redirects there.
 
+The simulator builds small interlocking-brick models. Presets are plain data in `site/src/bricks.ts` (brick type, color, grid cell, rotation, listed in assembly order); `site/src/buildPlan.ts` turns one into supply positions and arm waypoints and rejects layouts that are unsupported, out of reach, or would put the gripper through another brick. `npm run test:motion` (in `site/`) checks every preset headlessly at 0.5×, 1× and 4×; `BUILD_MATRIX=1 npx playwright test tests/build.spec.ts --project=desktop` runs the same builds in a GPU-backed browser.
+
 ## Current CAD Notes
 
 - The base drive uses a 120T module-1 herringbone gear driven by a 20T NEMA17 pinion at a 70 mm center distance.
