@@ -145,7 +145,7 @@ def test_master_assembly_has_all_major_children() -> None:
 
     assembly = build_model()
 
-    assert len(assembly.children) == 66
+    assert len(assembly.children) == 78
     assert assembly.volume > 0
 
 
@@ -356,7 +356,7 @@ def test_master_assembly_shows_installed_joint_hardware_and_flush_shafts() -> No
     assert len([label for label in labels if label.startswith("installed_sg90_")]) == 2
     assert (
         len([label for label in labels if label.startswith("installed_M3_fastener_")])
-        == 24
+        == 36
     )
     assert joint_shafts.SHOULDER_SHAFT_LENGTH == pytest.approx(67.0)
     assert joint_shafts.ELBOW_SHAFT_LENGTH == pytest.approx(44.0)

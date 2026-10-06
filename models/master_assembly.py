@@ -1,11 +1,12 @@
 from __future__ import annotations
 
-from build123d import Compound, Pos, Rot
+from build123d import Align, Compound, Cylinder, Location, Pos, Rot
 
 try:
     from models.common import (
         BASE_GEAR_BOLT_CIRCLE,
         ELBOW_PULLEY_BOLT_CIRCLE,
+        NEMA17_HOLE_SPACING,
         SHOULDER_PULLEY_BOLT_CIRCLE,
         circle_points,
         export_model,
@@ -14,6 +15,7 @@ except ModuleNotFoundError:
     from common import (
         BASE_GEAR_BOLT_CIRCLE,
         ELBOW_PULLEY_BOLT_CIRCLE,
+        NEMA17_HOLE_SPACING,
         SHOULDER_PULLEY_BOLT_CIRCLE,
         circle_points,
         export_model,
@@ -23,6 +25,37 @@ except ModuleNotFoundError:
 AZIMUTH_TURNTABLE_Z = 28.0
 PULLEY_SIDE_CLEARANCE = 0.75
 WRIST_STACK_CLEARANCE = 1.0
+M3_SCREW_LENGTHS = (6.0, 8.0, 10.0, 12.0, 14.0, 16.0, 18.0, 20.0, 25.0, 30.0)
+NEMA17_THREAD_DEPTH = 4.5
+
+
+def nema17_mount_screw_placements(
+    motor_location: Location, mount, hole_spacing: float
+) -> list[tuple[float, Location]]:
+    """Size and place the four M3 screws that clamp a NEMA17 through its printed mount.
+
+    Each hole is probed with an annulus just outside the clearance hole, so the
+    bolt head lands on the plate face, counterbore floor, or flush recess the
+    printed part actually provides.
+    """
+    probe_length = 40.0
+    half = hole_spacing / 2
+    placements = []
+    for x in (-half, half):
+        for y in (-half, half):
+            local = Location((x, y, 0))
+            probe = Cylinder(2.6, probe_length, align=(Align.CENTER, Align.CENTER, Align.MIN))
+            probe -= Cylinder(1.9, probe_length, align=(Align.CENTER, Align.CENTER, Align.MIN))
+            contact = mount & probe.moved(motor_location * local)
+            if contact.volume <= 0:
+                raise ValueError("NEMA17 mount screw probe found no printed material.")
+            seat = contact.moved(motor_location.inverse()).bounding_box().max.Z
+            length = max(length for length in M3_SCREW_LENGTHS if length <= seat + NEMA17_THREAD_DEPTH)
+            # The screw model's head is on local -Z; flip it so the head sits on the seat.
+            placements.append(
+                (length, motor_location * Location((x, y, seat - length / 2)) * Rot(180, 0, 0))
+            )
+    return placements
 
 
 def build_model(configuration: str = "mechanical") -> Compound:
@@ -49,7 +82,7 @@ def build_model(configuration: str = "mechanical") -> Compound:
             build_sg90_servo,
         )
         from models.byj48_stepper_motor import build_model as build_byj48
-        from models.nema17_stepper_motor import build_model as build_nema17
+        from models.nema17_stepper_motor import build_installed as build_nema17
         from models.electronics_mounts import (
             build_28byj_uln_board_tray,
             build_nema17_driver_board_tray,
@@ -98,7 +131,7 @@ def build_model(configuration: str = "mechanical") -> Compound:
             build_sg90_servo,
         )
         from byj48_stepper_motor import build_model as build_byj48
-        from nema17_stepper_motor import build_model as build_nema17
+        from nema17_stepper_motor import build_installed as build_nema17
         from electronics_mounts import (
             build_28byj_uln_board_tray,
             build_nema17_driver_board_tray,
@@ -326,7 +359,47 @@ def build_model(configuration: str = "mechanical") -> Compound:
         build_m3_socket_screw(30.0).moved(Pos(elbow_pulley_x, y, elbow_pivot_z + z))
         for y, z in circle_points(4, ELBOW_PULLEY_BOLT_CIRCLE, start_angle=45.0)
     ]
+    base_motor_location = Pos(
+        stator_model.BASE_GEAR_CENTER_DISTANCE,
+        0,
+        stator_model.BASE_MOTOR_FACE_Z,
+    )
+    base_motor = build_nema17(base_motor_location, "base_nema17_stepper_motor")
+    shoulder_motor_location = (
+        Pos(
+            turntable_model.LEFT_OUTER_X,
+            0,
+            AZIMUTH_TURNTABLE_Z + turntable_model.MOTOR_SHAFT_Z,
+        )
+        * Rot(0, 90, 0)
+    )
+    shoulder_motor = build_nema17(shoulder_motor_location, "shoulder_nema17_stepper_motor")
+    elbow_motor_location = (
+        Pos(
+            bicep_model.MOTOR_FACE_X,
+            0,
+            shoulder_pivot_z + bicep_model.MOTOR_SHAFT_Z,
+        )
+        * Rot(0, -90, 0)
+    )
+    elbow_motor = build_nema17(elbow_motor_location, "elbow_nema17_stepper_motor")
+    base_motor_fasteners, shoulder_motor_fasteners, elbow_motor_fasteners = (
+        [
+            build_m3_socket_screw(length, axis="z").moved(location)
+            for length, location in nema17_mount_screw_placements(
+                motor_location, mount, NEMA17_HOLE_SPACING
+            )
+        ]
+        for motor_location, mount in (
+            (base_motor_location, stator),
+            (shoulder_motor_location, turntable),
+            (elbow_motor_location, bicep),
+        )
+    )
     for group, fasteners in (
+        ("base_motor", base_motor_fasteners),
+        ("shoulder_motor", shoulder_motor_fasteners),
+        ("elbow_motor", elbow_motor_fasteners),
         ("base_gear", base_gear_fasteners),
         ("shoulder_pulley", shoulder_pulley_fasteners),
         ("elbow_pulley", elbow_pulley_fasteners),
@@ -350,32 +423,6 @@ def build_model(configuration: str = "mechanical") -> Compound:
         Pos(shoulder_spacer_x, 0, shoulder_pivot_z)
     )
 
-    base_motor = build_nema17().moved(
-        Pos(
-            stator_model.BASE_GEAR_CENTER_DISTANCE,
-            0,
-            stator_model.BASE_MOTOR_FACE_Z,
-        )
-    )
-    base_motor.label = "base_nema17_stepper_motor"
-    shoulder_motor = build_nema17().moved(
-        Pos(
-            turntable_model.LEFT_OUTER_X,
-            0,
-            AZIMUTH_TURNTABLE_Z + turntable_model.MOTOR_SHAFT_Z,
-        )
-        * Rot(0, 90, 0)
-    )
-    shoulder_motor.label = "shoulder_nema17_stepper_motor"
-    elbow_motor = build_nema17().moved(
-        Pos(
-            bicep_model.MOTOR_FACE_X,
-            0,
-            shoulder_pivot_z + bicep_model.MOTOR_SHAFT_Z,
-        )
-        * Rot(0, -90, 0)
-    )
-    elbow_motor.label = "elbow_nema17_stepper_motor"
     wrist_motor_face_x = (
         forearm_model.LINK_THICKNESS_X / 2 + forearm_model.MOTOR_FACE_THICKNESS_X
     )
@@ -536,6 +583,7 @@ def build_model(configuration: str = "mechanical") -> Compound:
     children = [
         stator,
         base_motor,
+        *base_motor_fasteners,
         base_driver_tray,
         base_gear,
         base_pinion,
@@ -544,6 +592,7 @@ def build_model(configuration: str = "mechanical") -> Compound:
         *base_gear_fasteners,
         turntable,
         shoulder_motor,
+        *shoulder_motor_fasteners,
         shoulder_driver_tray,
         shoulder_driver_pulley,
         shoulder_belt,
@@ -553,6 +602,7 @@ def build_model(configuration: str = "mechanical") -> Compound:
         bicep,
         shoulder_spacer,
         elbow_motor,
+        *elbow_motor_fasteners,
         elbow_driver_tray,
         elbow_driver_pulley,
         elbow_belt,

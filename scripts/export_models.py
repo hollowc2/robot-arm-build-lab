@@ -16,7 +16,14 @@ sys.path.insert(0, str(ROOT))
 
 def main() -> None:
     from build123d import Compound, export_stl
+    from OCP.BRepTools import BRepTools
     from models.common import OUT_DIR, export_model
+    from models.nema17_stepper_motor import (
+        CASE_LABEL as NEMA17_CASE_LABEL,
+        CONNECTOR_LABEL as NEMA17_CONNECTOR_LABEL,
+        STACK_LABEL as NEMA17_STACK_LABEL,
+        STEEL_LABEL as NEMA17_STEEL_LABEL,
+    )
 
     requested = set(sys.argv[1:])
     for entry in MODEL_REGISTRY:
@@ -68,19 +75,49 @@ def main() -> None:
                 "simulator_wrist_driven": ("wrist_32T_HTD3M_16p15_4xM3_20BC",),
             }
             fastener_groups = {
-                "simulator_base_yaw": ("installed_M3_fastener_base_gear_",),
-                "simulator_upper_arm": ("installed_M3_fastener_shoulder_pulley_",),
+                "simulator_base_fixed": ("installed_M3_fastener_base_motor_",),
+                "simulator_base_yaw": (
+                    "installed_M3_fastener_base_gear_", "installed_M3_fastener_shoulder_motor_",
+                ),
+                "simulator_upper_arm": (
+                    "installed_M3_fastener_shoulder_pulley_", "installed_M3_fastener_elbow_motor_",
+                ),
                 "simulator_forearm": ("installed_M3_fastener_elbow_pulley_",),
                 "simulator_wrist_hardware": (
                     "installed_M3_fastener_servo_", "installed_M3_fastener_jaw_",
                     "installed_M3_fastener_wrist_pulley_",
                 ),
             }
+            # Purchased parts get their own meshes so the simulator can give each a real finish.
+            motor_finishes = {
+                NEMA17_CASE_LABEL: "motor_case",
+                NEMA17_STACK_LABEL: "motor_stack",
+                NEMA17_STEEL_LABEL: "steel",
+                NEMA17_CONNECTOR_LABEL: "motor_connector",
+            }
             for name, labels in simulator_parts.items():
+                printed = []
+                finishes: dict[str, list] = {}
+                for label in labels:
+                    child = children_by_label[label]
+                    if label.endswith("nema17_stepper_motor"):
+                        for part in child.children:
+                            finishes.setdefault(motor_finishes[part.label], []).append(part)
+                    else:
+                        printed.append(child)
                 prefixes = fastener_groups.get(name, ())
-                parts = [children_by_label[label] for label in labels]
-                parts.extend(child for child in children if child.label.startswith(prefixes))
-                export_stl(Compound(children=parts), OUT_DIR / f"{name}.stl")
+                finishes.setdefault("steel", []).extend(
+                    child for child in children if prefixes and child.label.startswith(prefixes)
+                )
+                export_stl(Compound(children=printed), OUT_DIR / f"{name}.stl")
+                for finish, parts in finishes.items():
+                    if parts:
+                        # Small purchased parts do not need the printed parts' fine tessellation.
+                        # Drop the triangulation cached by the full-assembly export so OCC re-meshes.
+                        shape = Compound(children=parts)
+                        BRepTools.Clean_s(shape.wrapped)
+                        # Facets stay under the simulator's 30 degree crease angle, so heads shade round.
+                        export_stl(shape, OUT_DIR / f"{name}_{finish}.stl", tolerance=0.02, angular_tolerance=0.4)
 
             for name, labels in {
                 "simulator_gripper_base": ("sg90_gripper_base",),

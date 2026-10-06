@@ -2,6 +2,7 @@ import React, { useEffect, useRef, useState } from "react";
 import * as CANNON from "cannon-es";
 import * as THREE from "three";
 import { OrbitControls } from "three/examples/jsm/controls/OrbitControls.js";
+import { RoomEnvironment } from "three/examples/jsm/environments/RoomEnvironment.js";
 import { STLLoader } from "three/examples/jsm/loaders/STLLoader.js";
 import { toCreasedNormals } from "three/examples/jsm/utils/BufferGeometryUtils.js";
 import { advanceMotion } from "./motion";
@@ -51,7 +52,7 @@ const jointControls: { name: JointName; id: string; label: string; unit: string 
   { name: "wrist", id: "J4", label: "Wrist", unit: "°" },
   { name: "gripper", id: "J5", label: "Grip", unit: " mm" },
 ];
-const meshCount = 17;
+const meshCount = 31;
 const palette = {
   arm: "#e2743f",
   frame: "#4a535b",
@@ -59,6 +60,9 @@ const palette = {
   pulley: "#e7b84b",
   gripper: "#5fb3a9",
 };
+// Purchased-part finishes exported beside each rigid link as `${link}_${finish}.stl`.
+type Finish = "motor_case" | "motor_stack" | "motor_connector" | "steel";
+const nema17Finishes: Finish[] = ["motor_case", "motor_stack", "motor_connector", "steel"];
 
 function clampJoint(name: JointName, value: number) {
   const [min, max] = jointLimits[name];
@@ -122,6 +126,21 @@ export function Simulator({ children, facts }: { children: React.ReactNode; fact
     });
 
     scene.add(new THREE.HemisphereLight("#fff3e6", "#15181b", 1.7));
+    // Metals need something to reflect. Only the purchased-part finishes use it, so the
+    // printed plastic keeps its existing lighting.
+    const pmrem = new THREE.PMREMGenerator(renderer);
+    const reflections = pmrem.fromScene(new RoomEnvironment(), 0.04).texture;
+    pmrem.dispose();
+    const finishes: Record<Finish, THREE.MeshStandardMaterial> = {
+      // Black anodized aluminium end bells.
+      motor_case: new THREE.MeshStandardMaterial({ color: "#1c1e21", roughness: 0.42, metalness: 0.6, envMap: reflections, envMapIntensity: 0.7 }),
+      // Laminated silicon-steel stator stack.
+      motor_stack: new THREE.MeshStandardMaterial({ color: "#aeb3b8", roughness: 0.36, metalness: 0.9, envMap: reflections }),
+      // White JST-PH connector housing.
+      motor_connector: new THREE.MeshStandardMaterial({ color: "#eee8d8", roughness: 0.6, metalness: 0 }),
+      // Polished steel shafts and fasteners.
+      steel: new THREE.MeshStandardMaterial({ color: "#eef1f4", roughness: 0.16, metalness: 1, envMap: reflections, envMapIntensity: 1.2 }),
+    };
     const key = new THREE.DirectionalLight("#ffffff", 2.6);
     key.position.set(320, -420, 900);
     key.castShadow = true;
@@ -229,6 +248,9 @@ export function Simulator({ children, facts }: { children: React.ReactNode; fact
         addMesh(mesh, parent);
       });
     };
+    const loadFinishes = (name: string, parent: THREE.Object3D, offset: [number, number, number], kinds: Finish[]) => {
+      kinds.forEach((kind) => load(`${name}_${kind}`, parent, offset, finishes[kind]));
+    };
     const loadPulley = (name: string, parent: THREE.Object3D, offset: [number, number, number]) => {
       const pivot = new THREE.Group();
       parent.add(pivot);
@@ -259,10 +281,15 @@ export function Simulator({ children, facts }: { children: React.ReactNode; fact
       demoBase.position.z = robotRoot.position.z;
       addMesh(new THREE.Mesh(geometry, new THREE.MeshStandardMaterial({ color: palette.frame, roughness: 0.56, metalness: 0.06 })), robotRoot);
     });
+    loadFinishes("simulator_base_fixed", robotRoot, [0, 0, 0], nema17Finishes);
     load("simulator_base_yaw", base, [0, 0, 0]);
+    loadFinishes("simulator_base_yaw", base, [0, 0, 0], nema17Finishes);
     load("simulator_upper_arm", shoulder, [0, 0, -162.03]);
+    loadFinishes("simulator_upper_arm", shoulder, [0, 0, -162.03], nema17Finishes);
     load("simulator_forearm", elbow, [0, 0, -337.38]);
+    loadFinishes("simulator_forearm", elbow, [0, 0, -337.38], ["steel"]);
     load("simulator_wrist_hardware", wrist, wristMeshOffset, palette.hardware);
+    loadFinishes("simulator_wrist_hardware", wrist, wristMeshOffset, ["steel"]);
     load("simulator_gripper_base", wrist, [0, 0, 0], palette.gripper);
     load("simulator_gripper_left", leftJaw, [0, 0, 0], palette.gripper);
     load("simulator_gripper_right", rightJaw, [0, 0, 0], palette.gripper);
@@ -771,6 +798,7 @@ export function Simulator({ children, facts }: { children: React.ReactNode; fact
       controls.dispose();
       actionsRef.current = { takeManual: () => undefined, toggleAutopilot: () => undefined, resetBlocks: () => undefined };
       disposeObject(scene);
+      reflections.dispose();
       renderer.dispose();
       mount.removeChild(renderer.domElement);
     };

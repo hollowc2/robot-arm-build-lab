@@ -2,7 +2,7 @@
 
 from __future__ import annotations
 
-from build123d import Align, BuildPart, Cylinder, Mode, Part
+from build123d import Align, BuildPart, BuildSketch, Cylinder, Mode, Part, Plane
 
 try:
     from models.common import (
@@ -51,22 +51,28 @@ def build_sg90_servo() -> Part:
 
 
 def build_m3_socket_screw(length: float, axis: str = "x") -> Part:
-    """M3 socket-head cap screw, centered on its overall length."""
-    rotation = (0, 90, 0) if axis == "x" else (0, 0, 0)
+    """M3 socket-head cap screw (ISO 4762), centered on its shank length.
+
+    The head sits on the negative side of the chosen axis.
+    """
+    from build123d import Axis, Locations, RegularPolygon, Rot, extrude, fillet
+
     with BuildPart() as model:
-        Cylinder(1.5, length, rotation=rotation, align=(Align.CENTER,) * 3)
-        # 5.5 mm diameter x 3 mm high socket-cap head.
-        head_center = -(length / 2 + 1.5)
-        if axis == "x":
-            from build123d import Locations
-            with Locations((head_center, 0, 0)):
-                Cylinder(2.75, 3.0, rotation=rotation, align=(Align.CENTER,) * 3)
-        else:
-            from build123d import Locations
-            with Locations((0, 0, head_center)):
-                Cylinder(2.75, 3.0, rotation=rotation, align=(Align.CENTER,) * 3)
-    model.part.label = f"M3_socket_cap_screw_{length:g}mm"
-    return model.part
+        Cylinder(1.5, length, align=(Align.CENTER,) * 3)
+        # 5.5 mm diameter x 3 mm high head with a 2.5 mm hex socket.
+        head_bottom = -length / 2
+        with Locations((0, 0, head_bottom)):
+            Cylinder(2.75, 3.0, align=(Align.CENTER, Align.CENTER, Align.MAX))
+        crown = model.edges().filter_by(Axis.Z, reverse=True).sort_by(Axis.Z)[0]
+        fillet(crown, radius=0.4)
+        with BuildSketch(Plane.XY.offset(head_bottom - 3.0)):
+            RegularPolygon(2.5 / 3**0.5, 6)
+        extrude(amount=1.6, mode=Mode.SUBTRACT)
+    part = model.part
+    if axis == "x":
+        part = part.moved(Rot(0, 90, 0))
+    part.label = f"M3_socket_cap_screw_{length:g}mm"
+    return part
 
 
 def build_m3_nut(axis: str = "x") -> Part:
