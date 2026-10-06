@@ -12,7 +12,9 @@ from build123d import (
     Locations,
     Mode,
     Plane,
+    Pos,
     RectangleRounded,
+    Rot,
     SlotCenterToCenter,
     add,
     extrude,
@@ -27,6 +29,7 @@ try:
         BEARING_608_WIDTH,
         M3_CLEARANCE,
         M3_TAP_HOLE,
+        NEMA17_BODY,
         NEMA17_HOLE_SPACING,
         NEMA17_PILOT,
         SHOULDER_BELT_CENTER_DISTANCE,
@@ -35,11 +38,14 @@ try:
         export_model,
     )
     from models.electronics_mounts import (
+        ATTACHMENT_TAB_RADIUS,
         STANDOFF_DIAMETER as ARDUINO_STANDOFF_DIAMETER,
         STANDOFF_PILOT as ARDUINO_STANDOFF_PILOT,
         UNO_BOARD_X,
         UNO_BOARD_Y,
         UNO_HOLE_POINTS,
+        attachment_tab_centers,
+        nema17_driver_board_tray_spec,
     )
 except ModuleNotFoundError:
     from common import (
@@ -49,6 +55,7 @@ except ModuleNotFoundError:
         BEARING_608_WIDTH,
         M3_CLEARANCE,
         M3_TAP_HOLE,
+        NEMA17_BODY,
         NEMA17_HOLE_SPACING,
         NEMA17_PILOT,
         SHOULDER_BELT_CENTER_DISTANCE,
@@ -57,11 +64,14 @@ except ModuleNotFoundError:
         export_model,
     )
     from electronics_mounts import (
+        ATTACHMENT_TAB_RADIUS,
         STANDOFF_DIAMETER as ARDUINO_STANDOFF_DIAMETER,
         STANDOFF_PILOT as ARDUINO_STANDOFF_PILOT,
         UNO_BOARD_X,
         UNO_BOARD_Y,
         UNO_HOLE_POINTS,
+        attachment_tab_centers,
+        nema17_driver_board_tray_spec,
     )
 
 
@@ -85,6 +95,7 @@ CLEVIS_ROOT_THICKNESS = 18.0
 CLEVIS_DEPTH = 90.0
 CLEVIS_ROOT_DEPTH = 102.0
 CLEVIS_TOP_RADIUS = 25.0
+CLEVIS_ROOT_TOP_Z = PLATE_THICKNESS + (CLEVIS_ROOT_THICKNESS - CLEVIS_WALL_THICKNESS)
 
 MOTOR_SHAFT_Z = 40.0
 PIVOT_Z = MOTOR_SHAFT_Z + SHOULDER_BELT_CENTER_DISTANCE
@@ -116,6 +127,36 @@ ARDUINO_BOARD_CENTER_Z = (
 ARDUINO_STANDOFF_POINTS_YZ = tuple(
     (board_y, ARDUINO_BOARD_CENTER_Z + board_x) for board_x, board_y in UNO_HOLE_POINTS
 )
+# The shoulder StepStick tray lies flat on the left wall's outer face just
+# forward of the motor flange.  Its ears point down toward the deeper wall root
+# and screw into two blind M3 pilots, clear of the root flare below.
+SHOULDER_DRIVER_TRAY_ATTACHMENT_SIDE = "left"
+SHOULDER_DRIVER_TRAY_MOTOR_CLEARANCE = 1.0
+SHOULDER_DRIVER_TRAY_ROOT_CLEARANCE = 1.0
+SHOULDER_DRIVER_TRAY_THREAD_DEPTH = 8.0
+_SHOULDER_DRIVER_TRAY_SPEC = nema17_driver_board_tray_spec(
+    attachment_side=SHOULDER_DRIVER_TRAY_ATTACHMENT_SIDE
+)
+_SHOULDER_DRIVER_TRAY_EARS = attachment_tab_centers(_SHOULDER_DRIVER_TRAY_SPEC)
+SHOULDER_DRIVER_TRAY_CENTER_Y = -(
+    NEMA17_BODY / 2
+    + SHOULDER_DRIVER_TRAY_MOTOR_CLEARANCE
+    + _SHOULDER_DRIVER_TRAY_SPEC.tray_y / 2
+)
+SHOULDER_DRIVER_TRAY_CENTER_Z = (
+    CLEVIS_ROOT_TOP_Z
+    + SHOULDER_DRIVER_TRAY_ROOT_CLEARANCE
+    + abs(_SHOULDER_DRIVER_TRAY_EARS[0][0])
+    + ATTACHMENT_TAB_RADIUS
+)
+# Tray-local +Z faces outboard (-X); its left-side ears (-X local) point down.
+SHOULDER_DRIVER_TRAY_LOCATION = Pos(
+    LEFT_OUTER_X, SHOULDER_DRIVER_TRAY_CENTER_Y, SHOULDER_DRIVER_TRAY_CENTER_Z
+) * Rot(0, -90, 0)
+SHOULDER_DRIVER_TRAY_HOLE_POINTS_YZ = tuple(
+    (SHOULDER_DRIVER_TRAY_CENTER_Y + ear_y, SHOULDER_DRIVER_TRAY_CENTER_Z + ear_x)
+    for ear_x, ear_y in _SHOULDER_DRIVER_TRAY_EARS
+)
 UPPER_WINDOW_WIDTH_Y = 24.0
 UPPER_WINDOW_HEIGHT_Z = 28.0
 UPPER_WINDOW_CENTER_Z = 91.0
@@ -125,7 +166,7 @@ def _build_clevis_wall(side_sign: float):
     """Loft one rounded, outward-flared monocoque clevis wall."""
     wall_x = side_sign * (CLEVIS_CLEAR_GAP / 2 + CLEVIS_WALL_THICKNESS / 2)
     root_x = side_sign * (CLEVIS_CLEAR_GAP / 2 + CLEVIS_ROOT_THICKNESS / 2)
-    root_top_z = PLATE_THICKNESS + (CLEVIS_ROOT_THICKNESS - CLEVIS_WALL_THICKNESS)
+    root_top_z = CLEVIS_ROOT_TOP_Z
     taper_mid_z = CLEVIS_TAPER_MID_Z
 
     with BuildPart() as wall:
@@ -379,6 +420,19 @@ def _add_arduino_uno_standoffs() -> None:
             )
 
 
+def _cut_shoulder_driver_tray_pilots() -> None:
+    """Cut blind M3 pilots for the shoulder driver tray ears into the left wall."""
+    for y, z in SHOULDER_DRIVER_TRAY_HOLE_POINTS_YZ:
+        with Locations((LEFT_OUTER_X - 0.1, y, z)):
+            Cylinder(
+                M3_TAP_HOLE / 2,
+                SHOULDER_DRIVER_TRAY_THREAD_DEPTH + 0.1,
+                rotation=(0, 90, 0),
+                align=(Align.CENTER, Align.CENTER, Align.MIN),
+                mode=Mode.SUBTRACT,
+            )
+
+
 def _cut_left_upper_lightening_window() -> None:
     """Remove low-stress web above the shoulder motor with rounded ends."""
     window_start_x = LEFT_OUTER_X - 0.1
@@ -448,6 +502,7 @@ def build_model():
         )
         _cut_right_elbow_motor_swing_relief()
         _cut_left_upper_lightening_window()
+        _cut_shoulder_driver_tray_pilots()
         _cut_608_pivot_pockets()
         _add_arduino_uno_standoffs()
 

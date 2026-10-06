@@ -967,6 +967,67 @@ def test_azimuth_turntable_uses_separate_center_shaft() -> None:
     )
 
 
+def test_shoulder_driver_tray_screws_into_left_clevis_wall_pilots() -> None:
+    from build123d import Align, Cylinder, Pos, Vector
+
+    from models import azimuth_turntable_shoulder_cleat as turntable_model
+    from models.common import M3_TAP_HOLE, NEMA17_BODY
+    from models.electronics_mounts import (
+        attachment_tab_centers,
+        build_nema17_driver_board_tray,
+        nema17_driver_board_tray_spec,
+    )
+
+    turntable = turntable_model.build_model()
+    location = turntable_model.SHOULDER_DRIVER_TRAY_LOCATION
+    side = turntable_model.SHOULDER_DRIVER_TRAY_ATTACHMENT_SIDE
+    tray = build_nema17_driver_board_tray(attachment_side=side).moved(location)
+    tray_box = tray.bounding_box()
+
+    overlap = tray & turntable
+    assert overlap is None or overlap.volume < 1e-3
+    assert tray_box.max.X == pytest.approx(turntable_model.LEFT_OUTER_X)
+    assert tray_box.max.Y < -NEMA17_BODY / 2
+    assert tray_box.min.Z > turntable_model.CLEVIS_ROOT_TOP_Z
+
+    ears = attachment_tab_centers(nema17_driver_board_tray_spec(attachment_side=side))
+    for (ear_x, ear_y), (pilot_y, pilot_z) in zip(
+        ears, turntable_model.SHOULDER_DRIVER_TRAY_HOLE_POINTS_YZ
+    ):
+        ear = location * Pos(ear_x, ear_y, 0)
+        assert Vector(ear.position) == Vector(
+            turntable_model.LEFT_OUTER_X, pilot_y, pilot_z
+        )
+
+        probe_depth = turntable_model.SHOULDER_DRIVER_TRAY_THREAD_DEPTH - 0.5
+        pilot = Cylinder(
+            M3_TAP_HOLE / 2 - 0.1,
+            probe_depth,
+            rotation=(0, 90, 0),
+            align=(Align.CENTER, Align.CENTER, Align.MIN),
+        ).moved(Pos(turntable_model.LEFT_OUTER_X, pilot_y, pilot_z))
+        thread_wall = (
+            Cylinder(
+                3.0,
+                probe_depth,
+                rotation=(0, 90, 0),
+                align=(Align.CENTER, Align.CENTER, Align.MIN),
+            )
+            - Cylinder(
+                M3_TAP_HOLE / 2 + 0.1,
+                probe_depth,
+                rotation=(0, 90, 0),
+                align=(Align.CENTER, Align.CENTER, Align.MIN),
+            )
+        ).moved(Pos(turntable_model.LEFT_OUTER_X, pilot_y, pilot_z))
+
+        bore = turntable & pilot
+        assert bore is None or bore.volume < 1e-3
+        assert (turntable & thread_wall).volume == pytest.approx(
+            thread_wall.volume, rel=0.02
+        )
+
+
 def test_master_assembly_localizes_motor_drivers_and_excludes_loose_wire_guides() -> (
     None
 ):

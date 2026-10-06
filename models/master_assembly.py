@@ -495,21 +495,18 @@ def build_model(configuration: str = "mechanical") -> Compound:
         * Rot(0, 90, 90)
     )
     # Keep each motor driver on the same structural stage as its motor.  The
-    # arm-mounted carriers stand on edge outside the motor or clevis envelope
-    # so their thin attachment ears can fasten directly to the adjacent wall.
+    # elbow and wrist carriers stand on edge outside the motor envelope so
+    # their thin attachment ears can fasten directly to the adjacent wall.
     base_driver_tray = build_nema17_driver_board_tray().moved(
         Pos(stator_model.BASE_GEAR_CENTER_DISTANCE, -18, stator_model.BASE_THICKNESS)
     )
     base_driver_tray.label = "base_nema17_driver_board_tray"
-    shoulder_driver_tray = build_nema17_driver_board_tray(attachment_side="right")
-    shoulder_driver_tab_x = turntable_model.LEFT_OUTER_X
-    shoulder_driver_tray = shoulder_driver_tray.moved(
-        Pos(
-            shoulder_driver_tab_x - shoulder_driver_tray.bounding_box().max.X,
-            -turntable_model.CLEVIS_DEPTH / 2,
-            AZIMUTH_TURNTABLE_Z + turntable_model.MOTOR_SHAFT_Z,
-        )
-        * Rot(90, 0, 0)
+    # The shoulder carrier lies flat on the left clevis wall beside the motor
+    # flange, its ears screwed into pilots the turntable provides.
+    shoulder_driver_tray = build_nema17_driver_board_tray(
+        attachment_side=turntable_model.SHOULDER_DRIVER_TRAY_ATTACHMENT_SIDE
+    ).moved(
+        Pos(0, 0, AZIMUTH_TURNTABLE_Z) * turntable_model.SHOULDER_DRIVER_TRAY_LOCATION
     )
     shoulder_driver_tray.label = "shoulder_nema17_driver_board_tray"
     elbow_driver_tray = build_nema17_driver_board_tray(attachment_side="right")

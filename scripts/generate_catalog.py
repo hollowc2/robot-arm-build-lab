@@ -28,7 +28,7 @@ VIEWER_PARTS = (
     ("base_azimuth_8mm_shaft", [-4, -4, 8], [4, 4, 50], "active"),
     ("azimuth_turntable_shoulder_cleat", [-48, -46, 28], [48, 46, 94], "active"),
     ("shoulder_nema17_stepper_motor", [-86, -22, 52], [-44, 22, 94], "active"),
-    ("shoulder_nema17_driver_board_tray", [-86, -66, 54], [-42, -30, 62], "draft"),
+    ("shoulder_nema17_driver_board_tray", [-38, -45, 47], [-33, -22, 85], "draft"),
     ("shoulder_service_loop_anchor", [40, 16, 36], [72, 44, 54], "draft"),
     ("shoulder_driver_16T_HTD3M_5mm_D_shaft", [-70, -12, 70], [-58, 12, 82], "active"),
     ("shoulder_16T_to_80T_HTD3M_open_belt_visual", [-76, -52, 70], [-54, 52, 82], "active"),

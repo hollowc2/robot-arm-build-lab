@@ -160,12 +160,8 @@ def _add_perimeter_lips(spec: BoardTraySpec) -> None:
             _add_rail(x, 0, WALL_THICKNESS, tray_y)
 
 
-def _add_attachment_tabs(spec: BoardTraySpec) -> None:
-    """Add two flush ears outside the board footprint.
-
-    Keeping the attachment screws outside the PCB makes the carrier thinner
-    and lets its mounting edge sit directly against the associated motor pad.
-    """
+def attachment_tab_centers(spec: BoardTraySpec) -> tuple[tuple[float, float], ...]:
+    """Return the tray-local X/Y centers of the two attachment-ear screw holes."""
     side = spec.attachment_side
     if side not in ("front", "back", "left", "right"):
         raise ValueError(f"Unsupported attachment side: {side}")
@@ -173,21 +169,27 @@ def _add_attachment_tabs(spec: BoardTraySpec) -> None:
     if side in ("front", "back"):
         side_sign = -1.0 if side == "front" else 1.0
         tab_offset = min(spec.tray_x / 2 - ATTACHMENT_TAB_EDGE_INSET, 18.0)
-        centers = (
-            (-tab_offset, side_sign * (spec.tray_y / 2 + ATTACHMENT_TAB_REACH)),
-            (tab_offset, side_sign * (spec.tray_y / 2 + ATTACHMENT_TAB_REACH)),
-        )
+        tab_y = side_sign * (spec.tray_y / 2 + ATTACHMENT_TAB_REACH)
+        return ((-tab_offset, tab_y), (tab_offset, tab_y))
+
+    side_sign = -1.0 if side == "left" else 1.0
+    tab_offset = min(spec.tray_y / 2 - ATTACHMENT_TAB_EDGE_INSET, 18.0)
+    tab_x = side_sign * (spec.tray_x / 2 + ATTACHMENT_TAB_REACH)
+    return ((tab_x, -tab_offset), (tab_x, tab_offset))
+
+
+def _add_attachment_tabs(spec: BoardTraySpec) -> None:
+    """Add two flush ears outside the board footprint.
+
+    Keeping the attachment screws outside the PCB makes the carrier thinner
+    and lets its mounting edge sit directly against the associated motor pad.
+    """
+    if spec.attachment_side in ("front", "back"):
         neck_size = (2 * ATTACHMENT_TAB_RADIUS, 2 * ATTACHMENT_TAB_REACH)
     else:
-        side_sign = -1.0 if side == "left" else 1.0
-        tab_offset = min(spec.tray_y / 2 - ATTACHMENT_TAB_EDGE_INSET, 18.0)
-        centers = (
-            (side_sign * (spec.tray_x / 2 + ATTACHMENT_TAB_REACH), -tab_offset),
-            (side_sign * (spec.tray_x / 2 + ATTACHMENT_TAB_REACH), tab_offset),
-        )
         neck_size = (2 * ATTACHMENT_TAB_REACH, 2 * ATTACHMENT_TAB_RADIUS)
 
-    for x, y in centers:
+    for x, y in attachment_tab_centers(spec):
         with Locations((x, y, 0)):
             Cylinder(
                 ATTACHMENT_TAB_RADIUS,
@@ -270,10 +272,10 @@ def build_arduino_uno_r4_minima_tray() -> Part:
     )
 
 
-def build_nema17_driver_board_tray(
+def nema17_driver_board_tray_spec(
     driver_count: int = 1, attachment_side: str = "back"
-) -> Part:
-    """Build a tray for one or more StepStick-style NEMA17 driver carrier boards."""
+) -> BoardTraySpec:
+    """Return the tray spec for one or more StepStick-style NEMA17 driver boards."""
     if driver_count < 1:
         raise ValueError("driver_count must be at least 1")
 
@@ -293,15 +295,22 @@ def build_nema17_driver_board_tray(
         if driver_count == 1
         else f"{driver_count}x_{NEMA17_DRIVER_TRAY_NAME}"
     )
+    return BoardTraySpec(
+        label=label,
+        board_x=board_x,
+        board_y=STEPSTICK_BOARD_Y,
+        standoff_points=tuple(standoffs),
+        wall_gap_sides=("front", "back"),
+        attachment_side=attachment_side,
+    )
+
+
+def build_nema17_driver_board_tray(
+    driver_count: int = 1, attachment_side: str = "back"
+) -> Part:
+    """Build a tray for one or more StepStick-style NEMA17 driver carrier boards."""
     return build_board_tray(
-        BoardTraySpec(
-            label=label,
-            board_x=board_x,
-            board_y=STEPSTICK_BOARD_Y,
-            standoff_points=tuple(standoffs),
-            wall_gap_sides=("front", "back"),
-            attachment_side=attachment_side,
-        )
+        nema17_driver_board_tray_spec(driver_count, attachment_side)
     )
 
 
