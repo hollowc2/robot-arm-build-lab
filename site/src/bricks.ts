@@ -1,0 +1,154 @@
+// Interlocking-brick presets as plain data, plus the rules every layout has to satisfy.
+//
+// Bricks are 1.25x the classic toy-brick module so a two-stud brick (20 mm) fits the SG90
+// gripper's mouth with about 3 mm to spare on each side when the jaws are opened to 30 mm.
+
+export const studPitch = 10; // mm between stud centres
+export const brickHeight = 12; // mm, without studs
+export const studRadius = 3;
+export const studHeight = 2;
+// Real bricks are a hair under their nominal size so neighbours slide past each other.
+export const brickPlay = 0.1;
+// The jaws can only squeeze a brick across this many studs.
+export const maxGripStuds = 2;
+
+export type BrickType = "1x2" | "2x2" | "2x3" | "2x4";
+// Width (along the jaw axis) x length (along the build line) in studs at rotation 0.
+export const brickTypes: Record<BrickType, { width: number; length: number }> = {
+  "1x2": { width: 1, length: 2 },
+  "2x2": { width: 2, length: 2 },
+  "2x3": { width: 2, length: 3 },
+  "2x4": { width: 2, length: 4 },
+};
+
+export const brickColors = {
+  red: "#8f1209",
+  blue: "#0f4f9e",
+  yellow: "#e8b412",
+  green: "#1d6b37",
+  white: "#d9d8d2",
+  orange: "#d2600f",
+  tan: "#c2a66a",
+} as const;
+export type BrickColor = keyof typeof brickColors;
+
+export type PresetBrick = {
+  type: BrickType;
+  color: BrickColor;
+  // Grid cell of the brick's lowest corner: [along the build line, across it, layer].
+  cell: [u: number, v: number, layer: number];
+  // Quarter turns about the vertical axis; 90 swaps width and length.
+  rotation: 0 | 90;
+};
+
+export type BuildPreset = {
+  id: string;
+  name: string;
+  blurb: string;
+  // Listed in assembly order.
+  bricks: PresetBrick[];
+};
+
+const brick = (type: BrickType, color: BrickColor, u: number, layer: number, rotation: 0 | 90 = 0, v = 0): PresetBrick => ({
+  type, color, cell: [u, v, layer], rotation,
+});
+
+export const buildPresets: BuildPreset[] = [
+  {
+    id: "wall",
+    name: "Small wall",
+    blurb: "Running bond, four courses",
+    bricks: [
+      brick("2x4", "red", 0, 0), brick("2x4", "red", 4, 0),
+      brick("2x2", "orange", 0, 1), brick("2x4", "orange", 2, 1), brick("2x2", "orange", 6, 1),
+      brick("2x4", "red", 0, 2), brick("2x4", "red", 4, 2),
+      brick("2x2", "orange", 0, 3), brick("2x4", "orange", 2, 3), brick("2x2", "orange", 6, 3),
+    ],
+  },
+  {
+    id: "stairs",
+    name: "Staircase",
+    blurb: "Five steps up",
+    bricks: [
+      brick("2x4", "blue", 0, 0), brick("2x4", "blue", 4, 0), brick("2x2", "blue", 8, 0),
+      brick("2x4", "blue", 2, 1), brick("2x4", "blue", 6, 1),
+      brick("2x2", "blue", 4, 2), brick("2x4", "blue", 6, 2),
+      brick("2x4", "white", 6, 3),
+      brick("1x2", "white", 8, 4, 90), brick("1x2", "white", 9, 4, 90),
+    ],
+  },
+  {
+    id: "pyramid",
+    name: "Pyramid",
+    blurb: "Stepped, five layers",
+    bricks: [
+      brick("2x4", "tan", 0, 0), brick("2x2", "tan", 4, 0), brick("2x4", "tan", 6, 0),
+      brick("2x4", "yellow", 1, 1), brick("2x4", "yellow", 5, 1),
+      brick("2x3", "orange", 2, 2), brick("2x3", "orange", 5, 2),
+      brick("2x4", "red", 3, 3),
+      brick("2x2", "red", 4, 4),
+    ],
+  },
+  {
+    id: "house",
+    name: "Little house",
+    blurb: "Doorway, lintel and gable",
+    bricks: [
+      brick("2x4", "white", 0, 0), brick("2x4", "white", 6, 0),
+      brick("2x4", "white", 0, 1), brick("2x4", "white", 6, 1),
+      brick("2x3", "white", 0, 2), brick("2x4", "tan", 3, 2), brick("2x3", "white", 7, 2),
+      brick("2x4", "red", 1, 3), brick("2x4", "red", 5, 3),
+      brick("2x3", "red", 2, 4), brick("2x3", "red", 5, 4),
+      brick("2x4", "red", 3, 5),
+      brick("2x2", "green", 4, 6),
+    ],
+  },
+];
+
+// Studs along (u) and across (v) the build line once the rotation is applied.
+export function footprint({ type, rotation }: Pick<PresetBrick, "type" | "rotation">) {
+  const { width, length } = brickTypes[type];
+  return rotation === 90 ? { u: width, v: length } : { u: length, v: width };
+}
+
+export function brickLabel({ type, color }: Pick<PresetBrick, "type" | "color">) {
+  return `${color} ${type.replace("x", "×")}`;
+}
+
+export function brickCells(entry: PresetBrick) {
+  const { u, v } = footprint(entry);
+  const cells: string[] = [];
+  for (let du = 0; du < u; du += 1) {
+    for (let dv = 0; dv < v; dv += 1) cells.push(`${entry.cell[0] + du},${entry.cell[1] + dv},${entry.cell[2]}`);
+  }
+  return cells;
+}
+
+// Grid-level rules: whole studs, no overlaps, every brick clutches something placed before
+// it (or the baseplate), nothing is placed beneath an existing brick, and every brick can be
+// squeezed across the jaws. Reach and clearance depend on the arm and are checked by the planner.
+export function validateLayout(preset: BuildPreset): string[] {
+  const problems: string[] = [];
+  const occupied = new Map<string, number>();
+  preset.bricks.forEach((entry, index) => {
+    const name = `${preset.name} brick ${index + 1} (${brickLabel(entry)})`;
+    const [u, v, layer] = entry.cell;
+    if (!brickTypes[entry.type]) problems.push(`${name}: unknown brick type`);
+    if (![u, v, layer].every(Number.isInteger) || layer < 0) problems.push(`${name}: must sit on whole studs at layer 0 or above`);
+    if (footprint(entry).v > maxGripStuds) problems.push(`${name}: ${footprint(entry).v} studs across is wider than the gripper can squeeze`);
+    const cells = brickCells(entry);
+    for (const cell of cells) {
+      const other = occupied.get(cell);
+      if (other !== undefined) problems.push(`${name}: overlaps brick ${other + 1}`);
+    }
+    if (layer > 0) {
+      const below = cells.map((cell) => cell.replace(/,(\d+)$/, `,${layer - 1}`));
+      if (!below.some((cell) => occupied.has(cell))) problems.push(`${name}: nothing placed beneath it to clutch`);
+    }
+    const above = cells.map((cell) => cell.replace(/,(\d+)$/, `,${layer + 1}`));
+    const blocker = above.map((cell) => occupied.get(cell)).find((other) => other !== undefined);
+    if (blocker !== undefined) problems.push(`${name}: brick ${blocker + 1} above it was placed first`);
+    cells.forEach((cell) => occupied.set(cell, index));
+  });
+  return problems;
+}
