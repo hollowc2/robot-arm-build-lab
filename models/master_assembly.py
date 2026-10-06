@@ -79,9 +79,9 @@ def build_model(configuration: str = "mechanical") -> Compound:
             build_608_bearing,
             build_625_bearing,
             build_m3_socket_screw,
-            build_sg90_servo,
+            build_sg90_installed,
         )
-        from models.byj48_stepper_motor import build_model as build_byj48
+        from models.byj48_stepper_motor import build_installed as build_byj48
         from models.nema17_stepper_motor import build_installed as build_nema17
         from models.electronics_mounts import (
             build_28byj_uln_board_tray,
@@ -128,9 +128,9 @@ def build_model(configuration: str = "mechanical") -> Compound:
             build_608_bearing,
             build_625_bearing,
             build_m3_socket_screw,
-            build_sg90_servo,
+            build_sg90_installed,
         )
-        from byj48_stepper_motor import build_model as build_byj48
+        from byj48_stepper_motor import build_installed as build_byj48
         from nema17_stepper_motor import build_installed as build_nema17
         from electronics_mounts import (
             build_28byj_uln_board_tray,
@@ -294,12 +294,13 @@ def build_model(configuration: str = "mechanical") -> Compound:
         for x in (-6.3, 6.3)
     ]
     sg90_servos = [
-        build_sg90_servo().moved(
+        build_sg90_installed(
             Pos(
                 wrist_gripper_x + x,
                 gripper_base_model.SERVO_CENTER_Y,
                 wrist_pivot_z + gripper_base_model.PLATE_THICKNESS / 2,
-            )
+            ),
+            "SG90_micro_servo",
         )
         for x in (-gripper_base_model.SERVO_CENTER_X, gripper_base_model.SERVO_CENTER_X)
     ]
@@ -426,7 +427,7 @@ def build_model(configuration: str = "mechanical") -> Compound:
     wrist_motor_face_x = (
         forearm_model.LINK_THICKNESS_X / 2 + forearm_model.MOTOR_FACE_THICKNESS_X
     )
-    wrist_motor = build_byj48().moved(
+    wrist_motor = build_byj48(
         Pos(
             forearm_x
             + forearm_model.WRIST_ASSEMBLY_OFFSET_X
@@ -435,7 +436,8 @@ def build_model(configuration: str = "mechanical") -> Compound:
             0,
             elbow_pivot_z + forearm_model.MOTOR_SHAFT_Z,
         )
-        * Rot(0, 90, 0)
+        * Rot(0, 90, 0),
+        "wrist_28BYJ-48_stepper_motor",
     )
     wrist_motor.label = "wrist_28BYJ-48_stepper_motor"
     shoulder_driver_pulley = build_shoulder_driver_pulley().moved(

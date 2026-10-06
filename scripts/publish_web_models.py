@@ -27,8 +27,9 @@ def main() -> None:
             continue
         shutil.copy2(source, WEB_MODEL_DIR / source.name)
 
-    for source in OUT_DIR.glob("simulator_*.stl"):
-        shutil.copy2(source, WEB_MODEL_DIR / source.name)
+    for pattern in ("simulator_*.stl", "byj48_stepper_motor_*.stl", "nema17_stepper_motor_*.stl"):
+        for source in OUT_DIR.glob(pattern):
+            shutil.copy2(source, WEB_MODEL_DIR / source.name)
 
     if missing and not allow_missing:
         raise FileNotFoundError(

@@ -18,12 +18,7 @@ def main() -> None:
     from build123d import Compound, export_stl
     from OCP.BRepTools import BRepTools
     from models.common import OUT_DIR, export_model
-    from models.nema17_stepper_motor import (
-        CASE_LABEL as NEMA17_CASE_LABEL,
-        CONNECTOR_LABEL as NEMA17_CONNECTOR_LABEL,
-        STACK_LABEL as NEMA17_STACK_LABEL,
-        STEEL_LABEL as NEMA17_STEEL_LABEL,
-    )
+    from scripts.purchased_finishes import PURCHASED_FINISHES
 
     requested = set(sys.argv[1:])
     for entry in MODEL_REGISTRY:
@@ -89,20 +84,14 @@ def main() -> None:
                 ),
             }
             # Purchased parts get their own meshes so the simulator can give each a real finish.
-            motor_finishes = {
-                NEMA17_CASE_LABEL: "motor_case",
-                NEMA17_STACK_LABEL: "motor_stack",
-                NEMA17_STEEL_LABEL: "steel",
-                NEMA17_CONNECTOR_LABEL: "motor_connector",
-            }
             for name, labels in simulator_parts.items():
                 printed = []
                 finishes: dict[str, list] = {}
                 for label in labels:
                     child = children_by_label[label]
-                    if label.endswith("nema17_stepper_motor"):
+                    if label.endswith("stepper_motor") or label.startswith("installed_sg90_micro_servo_"):
                         for part in child.children:
-                            finishes.setdefault(motor_finishes[part.label], []).append(part)
+                            finishes.setdefault(PURCHASED_FINISHES[part.label], []).append(part)
                     else:
                         printed.append(child)
                 prefixes = fastener_groups.get(name, ())
@@ -135,6 +124,10 @@ def main() -> None:
                 export_stl(Compound(children=[gripper_children[label] for label in labels]), OUT_DIR / f"{name}.stl")
         else:
             export_model(model, entry.name)
+            if entry.name in {"byj48_stepper_motor", "nema17_stepper_motor"}:
+                for part in model.children:
+                    finish = PURCHASED_FINISHES[part.label]
+                    export_stl(part, OUT_DIR / f"{entry.name}_{finish}.stl", tolerance=0.02, angular_tolerance=0.4)
 
 
 if __name__ == "__main__":

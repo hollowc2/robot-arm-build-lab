@@ -2,7 +2,7 @@
 
 from __future__ import annotations
 
-from build123d import Align, BuildPart, BuildSketch, Cylinder, Mode, Part, Plane
+from build123d import Align, BuildPart, BuildSketch, Compound, Cylinder, Location, Mode, Part, Plane
 
 try:
     from models.common import (
@@ -36,18 +36,52 @@ def build_625_bearing(axis: str = "x") -> Part:
     return _bearing(outside=BEARING_625_OD, bore=BEARING_625_ID, width=BEARING_625_WIDTH, axis=axis, label="625-2RS_bearing")
 
 
-def build_sg90_servo() -> Part:
-    """Installed SG90 envelope: case, mounting ears, output boss and spline."""
-    with BuildPart() as model:
-        # The gripper pockets use X=12.2 and Y=23.0 at the deck plane.
-        from build123d import Box, Locations
+def build_sg90_servo_parts() -> tuple[Part, ...]:
+    """Blue case, nylon output spline, side labels and short three-wire lead.
+
+    Preserve the gripper's deck at Z=0 and output axis at Y=6.5, Z=3..8.
+    """
+    from build123d import Box, Locations, Pos
+
+    with BuildPart() as case:
         Box(SG90_BODY_Y, SG90_BODY_X, SG90_HEIGHT, align=(Align.CENTER, Align.CENTER, Align.MAX))
-        Box(SG90_BODY_Y + 3.0, SG90_BODY_X + 9.0, 2.0, align=(Align.CENTER, Align.CENTER, Align.MAX))
-        with Locations((0, 6.5, 3.0)):
-            Cylinder(5.8, 3.0, align=(Align.CENTER, Align.CENTER, Align.MIN))
-            Cylinder(2.4, 5.0, align=(Align.CENTER, Align.CENTER, Align.MIN))
-    model.part.label = "SG90_micro_servo"
-    return model.part
+        # Shallow seams between the moulded gearbox lid, body and bottom cover.
+        for z in (-5.0, -SG90_HEIGHT + 3.0):
+            with Locations((0, 0, z)):
+                Box(SG90_BODY_Y + 0.2, SG90_BODY_X + 0.2, 0.3, mode=Mode.SUBTRACT)
+                Box(SG90_BODY_Y - 0.5, SG90_BODY_X - 0.5, 0.3)
+        Box(SG90_BODY_Y + 3.0, SG90_BODY_X + 12.0, 2.0, align=(Align.CENTER, Align.CENTER, Align.MAX))
+        for y in (-16.0, 16.0):
+            with Locations((0, y, -1.0)):
+                Cylinder(1.6, 2.4, mode=Mode.SUBTRACT)
+        with Locations((0, 6.5, 0)):
+            Cylinder(5.8, 6.0, align=(Align.CENTER, Align.CENTER, Align.MIN))
+        with Locations((0, -2.0, 0)):
+            Cylinder(3.1, 2.0, align=(Align.CENTER, Align.CENTER, Align.MIN))
+    case.part.label = "sg90_blue_case"
+    spline = Pos(0, 6.5, 6) * Cylinder(2.4, 2.0, align=(Align.CENTER, Align.CENTER, Align.MIN))
+    # Bore for the horn retaining screw.
+    spline -= Pos(0, 6.5, 7) * Cylinder(0.75, 2.2)
+    spline.label = "sg90_nylon_spline"
+    labels = [Pos(x, 0, -15.5) * Box(0.08, 18, 12) for x in (-SG90_BODY_Y / 2 - 0.04, SG90_BODY_Y / 2 + 0.04)]
+    label = labels[0] + labels[1]
+    label.label = "sg90_side_label"
+    parts = [case.part, spline, label]
+    for index, color in enumerate(("brown", "red", "orange")):
+        wire = Pos((index - 1) * 1.4, -SG90_BODY_X / 2 - 6, -SG90_HEIGHT + 4) * Cylinder(
+            0.55, 12, rotation=(90, 0, 0)
+        )
+        wire.label = f"motor_wire_{color}"
+        parts.append(wire)
+    return tuple(parts)
+
+
+def build_sg90_servo() -> Compound:
+    return Compound(children=list(build_sg90_servo_parts()), label="SG90_micro_servo")
+
+
+def build_sg90_installed(location: Location, label: str) -> Compound:
+    return Compound(children=[part.moved(location) for part in build_sg90_servo_parts()], label=label)
 
 
 def build_m3_socket_screw(length: float, axis: str = "x") -> Part:

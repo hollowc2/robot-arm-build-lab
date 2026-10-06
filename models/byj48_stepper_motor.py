@@ -1,6 +1,6 @@
 from __future__ import annotations
 
-from build123d import Align, Box, BuildPart, Cylinder, Locations, Mode, Part
+from build123d import Align, Box, BuildPart, Cylinder, Locations, Mode, Part, Compound, Location, Pos
 
 try:
     from models.common import (
@@ -34,8 +34,8 @@ SHAFT_LENGTH = 10.0
 MOUNT_HOLE_DEPTH = 3.0
 
 
-def build_model() -> Part:
-    """Build a lightweight 28BYJ-48 motor envelope.
+def _build_case() -> Part:
+    """Stamped steel can and mounting flange.
 
     Coordinate contract:
     - The front mounting face is on local Z=0.
@@ -80,6 +80,13 @@ def build_model() -> Part:
             FRONT_BOSS_HEIGHT,
             align=(Align.CENTER, Align.CENTER, Align.MIN),
         )
+
+    motor.part.label = "byj48_can"
+    return motor.part
+
+
+def _build_shaft() -> Part:
+    with BuildPart() as motor:
         Cylinder(
             BYJ48_SHAFT_DIAMETER / 2,
             SHAFT_LENGTH,
@@ -101,8 +108,38 @@ def build_model() -> Part:
                     mode=Mode.SUBTRACT,
                 )
 
-    motor.part.label = PART_NAME
+    motor.part.label = "byj48_brass_shaft"
     return motor.part
+
+
+def build_parts() -> tuple[Part, ...]:
+    case = _build_case()
+    # Rolled rear cover seam in the stamped can.
+    seam = Pos(0, 0, -BODY_DEPTH + 0.6) * (
+        Cylinder(BYJ48_BODY / 2 + 0.15, 0.7) - Cylinder(BYJ48_BODY / 2 - 0.3, 0.9)
+    )
+    case += seam
+    case.label = "byj48_can"
+    # Blue moulded winding terminal, on the side away from the mounting ears.
+    terminal = Pos(BYJ48_BODY / 2 - 0.5, 0, -BODY_DEPTH + 4) * Box(5, 11, 7)
+    terminal.label = "byj48_blue_terminal"
+    parts = [case, _build_shaft(), terminal]
+    for index, color in enumerate(("blue", "pink", "yellow", "orange", "red")):
+        wire = Pos(BYJ48_BODY / 2 + 8, (index - 2) * 1.5, -BODY_DEPTH + 4) * Cylinder(
+            0.55, 14, rotation=(0, 90, 0)
+        )
+        wire.label = f"motor_wire_{color}"
+        parts.append(wire)
+    return tuple(parts)
+
+
+def build_installed(location: Location, label: str) -> Compound:
+    # Move the leaves explicitly: export code uses their world coordinates.
+    return Compound(children=[part.moved(location) for part in build_parts()], label=label)
+
+
+def build_model() -> Compound:
+    return Compound(children=list(build_parts()), label=PART_NAME)
 
 
 def main() -> None:

@@ -1,3 +1,5 @@
+import { RoomEnvironment } from "three/examples/jsm/environments/RoomEnvironment.js";
+import { byj48Finishes, nema17Finishes, purchasedMaterials, prepareFinishGeometry } from "./purchasedMaterials";
 import { useEffect, useMemo, useRef, useState } from "react";
 import * as THREE from "three";
 import { OrbitControls } from "three/examples/jsm/controls/OrbitControls.js";
@@ -41,6 +43,11 @@ function PartViewer({ part }: { part: CatalogPart }) {
     const renderer = new THREE.WebGLRenderer({ antialias: true, preserveDrawingBuffer: true });
     renderer.setPixelRatio(Math.min(window.devicePixelRatio, 2));
     mount.appendChild(renderer.domElement);
+    const pmrem = new THREE.PMREMGenerator(renderer);
+    const room = new RoomEnvironment();
+    const reflectionTarget = pmrem.fromScene(room, 0.04);
+    room.dispose();
+    pmrem.dispose();
     const controls = new OrbitControls(camera, renderer.domElement);
     controls.enableDamping = true;
     controls.dampingFactor = 0.08;
@@ -85,26 +92,55 @@ function PartViewer({ part }: { part: CatalogPart }) {
       setState("loading");
       loader.load(
         modelUrl(target.webModel),
-        (raw) => {
+        async (raw) => {
           if (disposed || id !== request) {
             raw.dispose();
             return;
           }
-          const geometry = toCreasedNormals(raw, Math.PI / 6);
-          raw.dispose();
-          geometry.computeBoundingBox();
-          const box = geometry.boundingBox!;
+          raw.computeBoundingBox();
+          const box = raw.boundingBox!;
           const center = box.getCenter(new THREE.Vector3());
-          geometry.translate(-center.x, -center.y, -box.min.z);
           const size = box.getSize(new THREE.Vector3());
-
           const group = new THREE.Group();
-          const reference = target.category === "reference" || target.category === "hardware";
-          group.add(new THREE.Mesh(geometry, new THREE.MeshStandardMaterial({
-            color: reference ? "#9aa5ad" : "#e2743f",
-            roughness: reference ? 0.4 : 0.56,
-            metalness: reference ? 0.35 : 0.06,
-          })));
+          const kinds = target.name === "byj48_stepper_motor" ? byj48Finishes
+            : target.name === "nema17_stepper_motor" ? nema17Finishes : [];
+          if (kinds.length) {
+            raw.dispose();
+            const results = await Promise.allSettled(kinds.map((kind) => loader.loadAsync(
+              modelUrl(target.webModel.replace(/\.stl$/, `_${kind}.stl`)),
+            )));
+            if (disposed || id !== request || results.some((result) => result.status === "rejected")) {
+              results.forEach((result) => { if (result.status === "fulfilled") result.value.dispose(); });
+              if (!disposed && id === request) setState("error");
+              return;
+            }
+            const materials = purchasedMaterials(reflectionTarget.texture);
+            results.forEach((result, index) => {
+              if (result.status !== "fulfilled") return;
+              const kind = kinds[index];
+              const geometry = toCreasedNormals(result.value, Math.PI / 6);
+              result.value.dispose();
+              prepareFinishGeometry(geometry, kind);
+              geometry.translate(-center.x, -center.y, -box.min.z);
+              group.add(new THREE.Mesh(geometry, materials[kind]));
+            });
+            Object.entries(materials).forEach(([kind, material]) => {
+              if (!(kinds as readonly string[]).includes(kind)) {
+                material.map?.dispose();
+                material.dispose();
+              }
+            });
+          } else {
+            const geometry = toCreasedNormals(raw, Math.PI / 6);
+            raw.dispose();
+            geometry.translate(-center.x, -center.y, -box.min.z);
+            const reference = target.category === "reference" || target.category === "hardware";
+            group.add(new THREE.Mesh(geometry, new THREE.MeshStandardMaterial({
+              color: reference ? "#9aa5ad" : "#e2743f",
+              roughness: reference ? 0.4 : 0.56,
+              metalness: reference ? 0.35 : 0.06,
+            })));
+          }
           const span = Math.max(60, Math.ceil((Math.max(size.x, size.y) * 1.7) / 20) * 20);
           const grid = new THREE.GridHelper(span, span / 10, "#343b42", "#20252a");
           grid.rotation.x = Math.PI / 2;
@@ -169,6 +205,7 @@ function PartViewer({ part }: { part: CatalogPart }) {
       stopWatching();
       controls.dispose();
       disposeObject(scene);
+      reflectionTarget.dispose();
       renderer.dispose();
       mount.removeChild(renderer.domElement);
     };

@@ -1,3 +1,4 @@
+import { byj48Finishes, nema17Finishes, sg90Finishes, purchasedMaterials, prepareFinishGeometry, type Finish } from "./purchasedMaterials";
 import React, { useEffect, useRef, useState } from "react";
 import * as CANNON from "cannon-es";
 import * as THREE from "three";
@@ -63,7 +64,7 @@ const jointControls: { name: JointName; id: string; label: string; unit: string 
   { name: "wrist", id: "J4", label: "Wrist", unit: "°" },
   { name: "gripper", id: "J5", label: "Grip", unit: " mm" },
 ];
-const meshCount = 35;
+const meshCount = 35 + byj48Finishes.length + sg90Finishes.length;
 const palette = {
   arm: "#e2743f",
   frame: "#4a535b",
@@ -72,8 +73,6 @@ const palette = {
   gripper: "#5fb3a9",
 };
 // Purchased-part finishes exported beside each rigid link as `${link}_${finish}.stl`.
-type Finish = "motor_case" | "motor_stack" | "motor_connector" | "steel";
-const nema17Finishes: Finish[] = ["motor_case", "motor_stack", "motor_connector", "steel"];
 const defaultPreset = "house";
 const brickMass = 0.03;
 // How close a released brick must be to its studs to click into place.
@@ -152,16 +151,7 @@ export function Simulator({ children, facts }: { children: React.ReactNode; fact
     const pmrem = new THREE.PMREMGenerator(renderer);
     const reflections = pmrem.fromScene(new RoomEnvironment(), 0.04).texture;
     pmrem.dispose();
-    const finishes: Record<Finish, THREE.MeshStandardMaterial> = {
-      // Black anodized aluminium end bells.
-      motor_case: new THREE.MeshStandardMaterial({ color: "#1c1e21", roughness: 0.42, metalness: 0.6, envMap: reflections, envMapIntensity: 0.7 }),
-      // Laminated silicon-steel stator stack.
-      motor_stack: new THREE.MeshStandardMaterial({ color: "#aeb3b8", roughness: 0.36, metalness: 0.9, envMap: reflections }),
-      // White JST-PH connector housing.
-      motor_connector: new THREE.MeshStandardMaterial({ color: "#eee8d8", roughness: 0.6, metalness: 0 }),
-      // Polished steel shafts and fasteners.
-      steel: new THREE.MeshStandardMaterial({ color: "#eef1f4", roughness: 0.16, metalness: 1, envMap: reflections, envMapIntensity: 1.2 }),
-    };
+    const finishes = purchasedMaterials(reflections);
     const key = new THREE.DirectionalLight("#ffffff", 2.6);
     key.position.set(320, -420, 900);
     key.castShadow = true;
@@ -262,8 +252,13 @@ export function Simulator({ children, facts }: { children: React.ReactNode; fact
         addMesh(mesh, parent);
       });
     };
-    const loadFinishes = (name: string, parent: THREE.Object3D, offset: [number, number, number], kinds: Finish[]) => {
-      kinds.forEach((kind) => load(`${name}_${kind}`, parent, offset, finishes[kind]));
+    const loadFinishes = (name: string, parent: THREE.Object3D, offset: [number, number, number], kinds: readonly Finish[]) => {
+      kinds.forEach((kind) => loadGeometry(`${name}_${kind}`, (geometry) => {
+        prepareFinishGeometry(geometry, kind);
+        const mesh = new THREE.Mesh(geometry, finishes[kind]);
+        mesh.position.set(...offset);
+        addMesh(mesh, parent);
+      }));
     };
     const loadPulley = (name: string, parent: THREE.Object3D, offset: [number, number, number]) => {
       const pivot = new THREE.Group();
@@ -301,9 +296,9 @@ export function Simulator({ children, facts }: { children: React.ReactNode; fact
     load("simulator_upper_arm", shoulder, [0, 0, -162.03]);
     loadFinishes("simulator_upper_arm", shoulder, [0, 0, -162.03], nema17Finishes);
     load("simulator_forearm", elbow, [0, 0, -337.38]);
-    loadFinishes("simulator_forearm", elbow, [0, 0, -337.38], ["steel"]);
+    loadFinishes("simulator_forearm", elbow, [0, 0, -337.38], ["steel", ...byj48Finishes]);
     load("simulator_wrist_hardware", wrist, wristMeshOffset, palette.hardware);
-    loadFinishes("simulator_wrist_hardware", wrist, wristMeshOffset, ["steel"]);
+    loadFinishes("simulator_wrist_hardware", wrist, wristMeshOffset, ["steel", ...sg90Finishes]);
     load("simulator_gripper_base", wrist, [0, 0, 0], palette.gripper);
     jawLinks.forEach(({ side, jaw, horn, rod }) => {
       const name = side < 0 ? "left" : "right";
