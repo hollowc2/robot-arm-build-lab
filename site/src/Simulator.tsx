@@ -6,7 +6,7 @@ import { OrbitControls } from "three/examples/jsm/controls/OrbitControls.js";
 import { RoomEnvironment } from "three/examples/jsm/environments/RoomEnvironment.js";
 import { STLLoader } from "three/examples/jsm/loaders/STLLoader.js";
 import { toCreasedNormals } from "three/examples/jsm/utils/BufferGeometryUtils.js";
-import { jawAngle, jawPivotX, jawPivotY, linkagePose, releaseTravel } from "./gripper";
+import { hornPin, hornY, jawAngle, jawPivotX, jawPivotY, linkagePose, releaseTravel } from "./gripper";
 import { wristPosition as wristJointPosition, wristMeshOffset } from "./assembly";
 import { graspTravel, type GraspShape, type JawSurface } from "./grasp";
 import {
@@ -201,7 +201,7 @@ export function Simulator({ children, facts }: { children: React.ReactNode; fact
       const jaw = side < 0 ? leftJaw : rightJaw;
       jaw.position.set(side * jawPivotX, jawPivotY, 0);
       const horn = new THREE.Group();
-      horn.position.set(side * jawPivotX, 49.5, 0);
+      horn.position.set(side * jawPivotX, hornY, 0);
       const rod = new THREE.Group();
       wrist.add(horn, rod);
       return { side, jaw, horn, rod };
@@ -303,8 +303,8 @@ export function Simulator({ children, facts }: { children: React.ReactNode; fact
     jawLinks.forEach(({ side, jaw, horn, rod }) => {
       const name = side < 0 ? "left" : "right";
       load(`simulator_gripper_${name}`, jaw, [-side * jawPivotX, -jawPivotY, 0], palette.gripper);
-      load(`simulator_gripper_${name}_horn`, horn, [-side * jawPivotX, -49.5, 0], palette.gripper);
-      load(`simulator_gripper_${name}_rod`, rod, [-side * 17.5, -65, 0], palette.gripper);
+      load(`simulator_gripper_${name}_horn`, horn, [-side * jawPivotX, -hornY, 0], palette.gripper);
+      load(`simulator_gripper_${name}_rod`, rod, hornPin(side).negate().toArray() as [number, number, number], palette.gripper);
     });
     const shoulderDriver = loadPulley("simulator_shoulder_driver", base, [0, 0, 0]);
     loadPulley("simulator_shoulder_driven", shoulder, [0, 0, -162.03]);

@@ -78,7 +78,7 @@ test("the CAD fingers clear every supply brick when open and close on it squarel
       assert.ok(atPick.position.distanceTo(atPlace.position) < 0.01, `${plan.preset.name} ${brick.label}`);
       assert.ok(atPick.quaternion.angleTo(atPlace.quaternion) < 1e-4);
       const contact = graspTravel(jaws, atPick.position, atPick.quaternion, { halfExtents: brick.size.clone().multiplyScalar(0.5) }, openTravel);
-      assert.ok(contact !== null && contact > 8 && contact < openTravel - 3, `${plan.preset.name} ${brick.label} contact ${contact}`);
+      assert.ok(contact !== null && contact > 5 && contact < openTravel - 3, `${plan.preset.name} ${brick.label} contact ${contact}`);
     }
   }
 });

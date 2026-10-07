@@ -58,7 +58,15 @@ SERVO_CENTER_X = 11.5
 SERVO_SHAFT_Y = SERVO_CENTER_Y + 6.5
 GRIPPER_POST_Y = SERVO_SHAFT_Y + 25.0
 GRIPPER_POST_DIAMETER = 5.0
-GRIPPER_POST_HEIGHT = 14.0
+GRIPPER_POST_HEIGHT = 12.0
+GRIPPER_POST_COLLAR_DIAMETER = 7.0
+GRIPPER_POST_COLLAR_HEIGHT = 8.0
+
+# The SG90s hang below the deck: flanges screw to its underside, and the gearbox boss rises
+# through the body pocket so the output spline sits just above the deck.
+SERVO_FLANGE_TOP_Z = -PLATE_THICKNESS / 2
+SERVO_GEARBOX_TOP_Z = SERVO_FLANGE_TOP_Z + 6.0
+SERVO_POCKET_LENGTH = SG90_BODY_X + 2.0
 
 OVERALL_WIDTH = 54.0
 OVERALL_LENGTH = 106.0
@@ -94,7 +102,7 @@ def build_model():
     with BuildPart() as part:
         with BuildSketch(Plane.XY):
             Polygon(deck_outline)
-        extrude(amount=PLATE_THICKNESS, both=True)
+        extrude(amount=PLATE_THICKNESS / 2, both=True)
 
         # Wrist pivot tongue: X is the installed wrist shaft axis and local origin.
         Cylinder(
@@ -103,11 +111,12 @@ def build_model():
             rotation=(0, 90, 0),
         )
 
-        # Small center spine ties the round wrist boss into the servo deck.
-        with Locations((0, 11.0, 0)):
+        # Small center spine ties the round wrist boss into the servo deck, stopping short
+        # of the servo flanges under the deck.
+        with Locations((0, 9.5, 0)):
             Box(
                 CLEVIS_TONGUE_WIDTH,
-                34.0,
+                31.0,
                 10.0,
                 align=(Align.CENTER, Align.CENTER, Align.CENTER),
             )
@@ -141,12 +150,12 @@ def build_model():
                     mode=Mode.SUBTRACT,
                 )
 
-        # SG90 body pockets and 1 mm tab screw pilot holes.
+        # SG90 gearbox pockets and 1 mm tab screw pilot holes.
         for servo_x in (-SERVO_CENTER_X, SERVO_CENTER_X):
             with Locations((servo_x, SERVO_CENTER_Y, 0)):
                 Box(
                     SG90_BODY_Y,
-                    SG90_BODY_X,
+                    SERVO_POCKET_LENGTH,
                     PLATE_THICKNESS + 2.0,
                     mode=Mode.SUBTRACT,
                 )
@@ -166,21 +175,22 @@ def build_model():
         _lightening_slot(20.5, 54.0, 4.8, 39.0, PLATE_THICKNESS + 2.0)
         _lightening_slot(0.0, 77.5, 7.0, 20.0, PLATE_THICKNESS + 2.0)
 
-        # Two vertical gripper fulcrum posts, 25 mm forward of the assumed servo shaft line.
+        # Two vertical gripper fulcrum posts, 25 mm forward of the servo shaft line. The collar
+        # carries each jaw above its pushrod; the jaw turns on the 5 mm pin above it.
         post_start_z = PLATE_THICKNESS / 2
-        post_stem_height = GRIPPER_POST_HEIGHT - 2.5
         for post_x in (-SERVO_CENTER_X, SERVO_CENTER_X):
             with Locations((post_x, GRIPPER_POST_Y, post_start_z + 0.5)):
                 Cylinder(radius=4.0, height=1.0)
-            with Locations((post_x, GRIPPER_POST_Y, post_start_z + 1.75)):
+            with Locations((post_x, GRIPPER_POST_Y, post_start_z + 1.5)):
                 Cone(
                     bottom_radius=4.0,
-                    top_radius=GRIPPER_POST_DIAMETER / 2,
-                    height=1.5,
+                    top_radius=GRIPPER_POST_COLLAR_DIAMETER / 2,
+                    height=1.0,
                 )
-            with Locations((post_x, GRIPPER_POST_Y, post_start_z + 2.5 + post_stem_height / 2)):
-                Cylinder(radius=GRIPPER_POST_DIAMETER / 2, height=post_stem_height)
+            with Locations((post_x, GRIPPER_POST_Y, post_start_z + GRIPPER_POST_COLLAR_HEIGHT / 2)):
+                Cylinder(radius=GRIPPER_POST_COLLAR_DIAMETER / 2, height=GRIPPER_POST_COLLAR_HEIGHT)
             with Locations((post_x, GRIPPER_POST_Y, post_start_z + GRIPPER_POST_HEIGHT / 2)):
+                Cylinder(radius=GRIPPER_POST_DIAMETER / 2, height=GRIPPER_POST_HEIGHT)
                 Cylinder(
                     radius=M3_TAP_HOLE / 2,
                     height=GRIPPER_POST_HEIGHT + 1.0,

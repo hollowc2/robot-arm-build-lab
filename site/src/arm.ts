@@ -33,7 +33,7 @@ export const armJoints = ["base", "shoulder", "elbow", "wrist"] as const;
 export const shoulderPosition: [number, number, number] = [0, 0, 162.03];
 export const elbowPosition: [number, number, number] = [0, 0, 175.35];
 // The centre of the mouth, between the finger pads, in the wrist frame.
-export const gripPointPosition: [number, number, number] = [0, 124, 14];
+export const gripPointPosition: [number, number, number] = [0, 124, 12.5];
 
 export function clampJoint(name: JointName, value: number) {
   const [min, max] = jointLimits[name];

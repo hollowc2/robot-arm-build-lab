@@ -5,9 +5,21 @@ export const jawPivotY = 74.5;
 export const jawPivotX = 11.5;
 const tipLength = 61;
 const tipInward = 5;
-const hornY = 49.5;
-const hornRadius = Math.hypot(6, 15.5);
-const rodLength = Math.hypot(2.5, 26.5);
+export const hornY = 49.5;
+// Pin offsets outboard (scaled by side) and forward of the servo shaft and the jaw pivot.
+export const hornArm = { outboard: 7.5, forward: 15.5 };
+export const jawDrive = { outboard: 7.5, forward: 17 };
+export const hornRadius = Math.hypot(hornArm.outboard, hornArm.forward);
+const rodRest = {
+  outboard: jawDrive.outboard - hornArm.outboard,
+  forward: jawPivotY + jawDrive.forward - hornY - hornArm.forward,
+};
+export const rodLength = Math.hypot(rodRest.outboard, rodRest.forward);
+
+// Horn and rod geometry pivots on their pins: the rest pose of a side's rod pin on the horn.
+export function hornPin(side: -1 | 1) {
+  return new THREE.Vector3(side * (jawPivotX + hornArm.outboard), hornY + hornArm.forward, 0);
+}
 
 export function jawAngle(travel: number, side: -1 | 1): number {
   // Travel is the increase in tip gap, preserving the existing mm control.
@@ -24,7 +36,8 @@ export function jawMatrix(travel: number, side: -1 | 1): THREE.Matrix4 {
 
 export function linkagePose(travel: number, side: -1 | 1) {
   // Solve the rigid horn / pushrod circle intersection on the installed branch.
-  const drive = new THREE.Vector3(side * 15, 91.5, 0).applyMatrix4(jawMatrix(travel, side));
+  const drive = new THREE.Vector3(side * (jawPivotX + jawDrive.outboard), jawPivotY + jawDrive.forward, 0)
+    .applyMatrix4(jawMatrix(travel, side));
   const shaft = new THREE.Vector3(side * jawPivotX, hornY, 0);
   const delta = drive.clone().sub(shaft);
   const distance = delta.length();
@@ -32,8 +45,8 @@ export function linkagePose(travel: number, side: -1 | 1) {
   const height = Math.sqrt(Math.max(0, hornRadius ** 2 - along ** 2));
   const hornEnd = shaft.clone().addScaledVector(delta, along / distance)
     .add(new THREE.Vector3(delta.y, -delta.x, 0).multiplyScalar(side * height / distance));
-  const hornAngle = Math.atan2(hornEnd.y - hornY, hornEnd.x - shaft.x) - Math.atan2(15.5, side * 6);
-  const rodAngle = Math.atan2(drive.y - hornEnd.y, drive.x - hornEnd.x) - Math.atan2(26.5, -side * 2.5);
+  const hornAngle = Math.atan2(hornEnd.y - hornY, hornEnd.x - shaft.x) - Math.atan2(hornArm.forward, side * hornArm.outboard);
+  const rodAngle = Math.atan2(drive.y - hornEnd.y, drive.x - hornEnd.x) - Math.atan2(rodRest.forward, side * rodRest.outboard);
   return { drive, hornEnd, hornAngle, rodAngle };
 }
 

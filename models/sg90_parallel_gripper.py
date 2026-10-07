@@ -31,26 +31,34 @@ PIVOT_X = base_model.SERVO_CENTER_X
 PIVOT_Y = base_model.GRIPPER_POST_Y
 SERVO_SHAFT_Y = base_model.SERVO_SHAFT_Y
 
+# Stack from the deck up: servo horn on the spline, pushrod, then jaw on its post collar.
+# Each moving layer keeps a washer-sized gap to the next so the joints can turn freely.
+LAYER_GAP = 0.5
+
 JAW_THICKNESS = 4.0
 JAW_Z_CENTER = base_model.PLATE_THICKNESS / 2 + base_model.GRIPPER_POST_HEIGHT - JAW_THICKNESS / 2
 JAW_PIVOT_CLEARANCE = base_model.GRIPPER_POST_DIAMETER + 0.5
 JAW_RETAINING_SCREW_PILOT = M3_TAP_HOLE
-JAW_DRIVE_HOLE_OFFSET_U = -3.5
+JAW_DRIVE_HOLE_OFFSET_U = -7.5
 JAW_DRIVE_HOLE_OFFSET_Y = 17.0
 JAW_TIP_Y = PIVOT_Y + 61.0
 JAW_TIP_GAP = 13.0
-JAW_MAX_WIDTH_X = 45.0
+JAW_MAX_WIDTH_X = 46.0
 
 HORN_THICKNESS = 3.0
-HORN_Z_CENTER = base_model.PLATE_THICKNESS / 2 + 6.2
+HORN_Z_CENTER = base_model.SERVO_GEARBOX_TOP_Z + HORN_THICKNESS / 2
 HORN_LINK_Y = SERVO_SHAFT_Y + 15.5
-HORN_LINK_OUTBOARD_X = 6.0
+HORN_LINK_OUTBOARD_X = 7.5
 HORN_CENTER_SCREW_CLEARANCE = 2.2
+HORN_SPLINE_SOCKET_DIAMETER = 5.0
+HORN_SPLINE_SOCKET_DEPTH = 2.2
 HORN_STOCK_SCREW_PILOT = 1.2
 
 LINK_THICKNESS = 3.0
 LINK_WIDTH = 6.5
-LINK_Z_CENTER = JAW_Z_CENTER + JAW_THICKNESS / 2 + LINK_THICKNESS / 2 + 0.8
+LINK_Z_CENTER = HORN_Z_CENTER + HORN_THICKNESS / 2 + LAYER_GAP + LINK_THICKNESS / 2
+if LINK_Z_CENTER + LINK_THICKNESS / 2 + LAYER_GAP > JAW_Z_CENTER - JAW_THICKNESS / 2 + 1e-9:
+    raise ValueError("Pushrods must run between the servo horns and the jaws.")
 
 PAD_THICKNESS = 2.4
 PAD_HEIGHT = 14.0
@@ -97,7 +105,7 @@ def _capsule_between(
     with BuildPart() as link:
         with BuildSketch(Plane.XY):
             Polygon(outline)
-        extrude(amount=thickness, both=True)
+        extrude(amount=thickness / 2, both=True)
         for x, y in (start, end):
             with Locations((x, y, 0)):
                 Cylinder(width / 2, thickness, align=(Align.CENTER, Align.CENTER, Align.CENTER))
@@ -119,14 +127,21 @@ def _build_jaw(side: int):
         side,
         pivot_x,
         [
-            (-6.5, -8.0),
-            (6.0, -7.0),
-            (7.3, 15.0),
-            (12.0, 40.0),
-            (9.4, 56.0),
-            (5.0, 61.0),
-            (-2.5, 57.5),
-            (-5.4, 25.0),
+            # Hub around the post; its inner face stays behind the pads' contact line.
+            (-5.0, -6.5),
+            (4.0, -6.5),
+            (5.5, -3.0),
+            (5.5, 5.0),
+            # Finger: pads stand 2 mm proud of this inner edge.
+            (3.0, 15.0),
+            (3.0, 61.0),
+            (-3.0, 61.0),
+            (-4.5, 40.0),
+            (-6.5, 26.0),
+            # Outboard ear for the pushrod pin, clear of the post collar.
+            (-11.5, 22.0),
+            (-11.5, 12.5),
+            (-8.0, 0.0),
         ],
     )
     drive_x, drive_y = _signed_points(
@@ -134,13 +149,13 @@ def _build_jaw(side: int):
         pivot_x,
         [(JAW_DRIVE_HOLE_OFFSET_U, JAW_DRIVE_HOLE_OFFSET_Y)],
     )[0]
-    spring_x, spring_y = _signed_points(side, pivot_x, [(-4.0, 45.0)])[0]
+    spring_x, spring_y = _signed_points(side, pivot_x, [(0.0, 45.0)])[0]
     pad_center_x = side * (JAW_TIP_GAP / 2 + PAD_THICKNESS / 2)
 
     with BuildPart() as jaw:
         with BuildSketch(Plane.XY):
             Polygon(jaw_outline)
-        extrude(amount=JAW_THICKNESS, both=True)
+        extrude(amount=JAW_THICKNESS / 2, both=True)
 
         for x, y, diameter in (
             (pivot_x, PIVOT_Y, JAW_PIVOT_CLEARANCE),
@@ -222,6 +237,14 @@ def _build_servo_horn_adapter(side: int):
                 HORN_CENTER_SCREW_CLEARANCE / 2,
                 HORN_THICKNESS + 1.0,
                 align=(Align.CENTER, Align.CENTER, Align.CENTER),
+                mode=Mode.SUBTRACT,
+            )
+        # Socket that seats the horn over the servo's output spline.
+        with Locations((shaft_x, SERVO_SHAFT_Y, -HORN_THICKNESS / 2)):
+            Cylinder(
+                HORN_SPLINE_SOCKET_DIAMETER / 2,
+                HORN_SPLINE_SOCKET_DEPTH,
+                align=(Align.CENTER, Align.CENTER, Align.MIN),
                 mode=Mode.SUBTRACT,
             )
         for spoke_angle in (35.0, 145.0, 215.0, 325.0):

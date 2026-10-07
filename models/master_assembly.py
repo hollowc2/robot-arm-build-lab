@@ -298,7 +298,7 @@ def build_model(configuration: str = "mechanical") -> Compound:
             Pos(
                 wrist_gripper_x + x,
                 gripper_base_model.SERVO_CENTER_Y,
-                wrist_pivot_z + gripper_base_model.PLATE_THICKNESS / 2,
+                wrist_pivot_z + gripper_base_model.SERVO_FLANGE_TOP_Z,
             ),
             "SG90_micro_servo",
         )
@@ -319,9 +319,18 @@ def build_model(configuration: str = "mechanical") -> Compound:
         part.label = f"installed_sg90_micro_servo_{index}"
 
     # Visible fasteners at the gripper: four servo tabs, two jaw pivots, and wrist pulley bolts.
+    # Tab screws drive up from under the servo flanges; jaw screws drive down into the posts.
+    servo_tab_screw_length = 6.0
     servo_fasteners = [
-        build_m3_socket_screw(8.0, axis="z").moved(
-            Pos(wrist_gripper_x + x, y, wrist_pivot_z + 5.0)
+        build_m3_socket_screw(servo_tab_screw_length, axis="z").moved(
+            Pos(
+                wrist_gripper_x + x,
+                y,
+                wrist_pivot_z
+                + gripper_base_model.SERVO_FLANGE_TOP_Z
+                - 2.0
+                + servo_tab_screw_length / 2,
+            )
         )
         for x in (-gripper_base_model.SERVO_CENTER_X, gripper_base_model.SERVO_CENTER_X)
         for y in (
@@ -329,13 +338,18 @@ def build_model(configuration: str = "mechanical") -> Compound:
             gripper_base_model.SERVO_CENTER_Y + 16.0,
         )
     ]
+    jaw_screw_length = 10.0
     jaw_fasteners = [
-        build_m3_socket_screw(18.0, axis="z").moved(
+        build_m3_socket_screw(jaw_screw_length, axis="z").moved(
             Pos(
                 wrist_gripper_x + x,
                 gripper_base_model.GRIPPER_POST_Y,
-                wrist_pivot_z + 11.0,
+                wrist_pivot_z
+                + gripper_model.JAW_Z_CENTER
+                + gripper_model.JAW_THICKNESS / 2
+                - jaw_screw_length / 2,
             )
+            * Rot(180, 0, 0)
         )
         for x in (-gripper_base_model.SERVO_CENTER_X, gripper_base_model.SERVO_CENTER_X)
     ]

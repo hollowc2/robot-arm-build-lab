@@ -1,5 +1,6 @@
 import * as THREE from "three";
 import { downTilt, homePose, solveStraightDown, type ArmModel, type JointAngles } from "./arm.ts";
+import { wristPosition } from "./assembly.ts";
 import {
   brickHeight,
   brickLabel,
@@ -132,9 +133,9 @@ const siteAxes = () => {
   };
 };
 
-// The arm's links sit 6 mm to one side of the base axis, so the line the grip point follows at a
-// fixed base angle is offset by the same amount.
-const armSideOffset = -6;
+// The gripper is centered over the base axis (master_assembly.py), so the grip point follows the
+// base's radial line. Keep this in step with the wrist's sideways position.
+const armSideOffset = wristPosition[0];
 
 export function targetPose(entry: PresetBrick): BrickPose {
   const { along, across } = siteAxes();

@@ -3,7 +3,7 @@ import fs from "node:fs";
 import test from "node:test";
 import * as THREE from "three";
 import { STLLoader } from "three/examples/jsm/loaders/STLLoader.js";
-import { jawMatrix, jawPivotX, jawPivotY, linkagePose, releaseTravel } from "../src/gripper.ts";
+import { hornArm, hornPin, hornRadius, hornY, jawDrive, jawMatrix, jawPivotX, jawPivotY, linkagePose, releaseTravel, rodLength } from "../src/gripper.ts";
 import { graspTravel } from "../src/grasp.ts";
 import { elbowPivotZ, wristPosition, wristMeshOffset } from "../src/assembly.ts";
 
@@ -17,12 +17,12 @@ const block = { halfExtents: new THREE.Vector3(12, 11, 11) };
 const ball = { radius: 9 };
 
 test("CAD fingers stop on both a block and a ball, with different openings", () => {
-  const blockTravel = graspTravel(jaws, new THREE.Vector3(0, 131, 14), new THREE.Quaternion(), block, 40);
-  const ballTravel = graspTravel(jaws, new THREE.Vector3(0, 133, 14), new THREE.Quaternion(), ball, 40);
+  const blockTravel = graspTravel(jaws, new THREE.Vector3(0, 131, 12.5), new THREE.Quaternion(), block, 40);
+  const ballTravel = graspTravel(jaws, new THREE.Vector3(0, 133, 12.5), new THREE.Quaternion(), ball, 40);
   assert.ok(blockTravel > 10 && blockTravel < 40, `block travel ${blockTravel}`);
   assert.ok(ballTravel > 0 && ballTravel < blockTravel, `ball travel ${ballTravel}`);
   // Independently verify every finger triangle clears the solid at the returned opening.
-  for (const [shape, position, travel] of [[block, new THREE.Vector3(0, 131, 14), blockTravel], [ball, new THREE.Vector3(0, 133, 14), ballTravel]]) {
+  for (const [shape, position, travel] of [[block, new THREE.Vector3(0, 131, 12.5), blockTravel], [ball, new THREE.Vector3(0, 133, 12.5), ballTravel]]) {
     const bounds = new THREE.Box3(new THREE.Vector3(-12, -11, -11), new THREE.Vector3(12, 11, 11));
     for (const { geometry, side } of jaws) {
       const vertices = geometry.attributes.position;
@@ -37,13 +37,13 @@ test("CAD fingers stop on both a block and a ball, with different openings", () 
 });
 
 test("contact accounts for block rotation and rejects objects outside the mouth", () => {
-  const position = new THREE.Vector3(0, 131, 14);
+  const position = new THREE.Vector3(0, 131, 12.5);
   const straight = graspTravel(jaws, position, new THREE.Quaternion(), block, 40);
   const rotated = graspTravel(jaws, position, new THREE.Quaternion().setFromAxisAngle(new THREE.Vector3(0, 0, 1), Math.PI / 4), block, 40);
   assert.ok(straight !== null && rotated !== null);
   // Pivoting changes the contact angle as well as the mouth width.
   assert.ok(Math.abs(rotated - straight) > 0.5);
-  assert.equal(graspTravel(jaws, new THREE.Vector3(0, 180, 14), new THREE.Quaternion(), ball, 40), null);
+  assert.equal(graspTravel(jaws, new THREE.Vector3(0, 180, 12.5), new THREE.Quaternion(), ball, 40), null);
   assert.equal(graspTravel(jaws, position, new THREE.Quaternion(), { radius: 60 }, 40), null);
 });
 
@@ -84,10 +84,10 @@ test("fingers stay on fixed posts and rigid links remain attached throughout tra
       const pivot = new THREE.Vector3(side * jawPivotX, jawPivotY, 0);
       assert.ok(pivot.clone().applyMatrix4(transform).distanceTo(pivot) < 1e-9);
       const { drive, hornEnd, hornAngle, rodAngle } = linkagePose(travel, side);
-      assert.ok(Math.abs(hornEnd.distanceTo(new THREE.Vector3(side * 11.5, 49.5, 0)) - Math.hypot(6, 15.5)) < 1e-9);
-      assert.ok(Math.abs(hornEnd.distanceTo(drive) - Math.hypot(2.5, 26.5)) < 1e-9);
-      const hornTip = new THREE.Vector3(side * 6, 15.5, 0).applyAxisAngle(new THREE.Vector3(0, 0, 1), hornAngle).add(new THREE.Vector3(side * 11.5, 49.5, 0));
-      const rodTip = new THREE.Vector3(-side * 2.5, 26.5, 0).applyAxisAngle(new THREE.Vector3(0, 0, 1), rodAngle).add(hornEnd);
+      assert.ok(Math.abs(hornEnd.distanceTo(new THREE.Vector3(side * jawPivotX, hornY, 0)) - hornRadius) < 1e-9);
+      assert.ok(Math.abs(hornEnd.distanceTo(drive) - rodLength) < 1e-9);
+      const hornTip = new THREE.Vector3(side * hornArm.outboard, hornArm.forward, 0).applyAxisAngle(new THREE.Vector3(0, 0, 1), hornAngle).add(new THREE.Vector3(side * jawPivotX, hornY, 0));
+      const rodTip = new THREE.Vector3(side * (jawPivotX + jawDrive.outboard), jawPivotY + jawDrive.forward, 0).sub(hornPin(side)).applyAxisAngle(new THREE.Vector3(0, 0, 1), rodAngle).add(hornEnd);
       assert.ok(hornTip.distanceTo(hornEnd) < 1e-9);
       assert.ok(rodTip.distanceTo(drive) < 1e-9);
     }
