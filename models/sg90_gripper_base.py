@@ -16,8 +16,7 @@ from build123d import (
 
 try:
     from models.common import (
-        BEARING_625_OD,
-        M3_CLEARANCE,
+        BEARING_625_ID,
         M3_TAP_HOLE,
         SG90_BODY_X,
         SG90_BODY_Y,
@@ -29,8 +28,7 @@ try:
     )
 except ModuleNotFoundError:
     from common import (
-        BEARING_625_OD,
-        M3_CLEARANCE,
+        BEARING_625_ID,
         M3_TAP_HOLE,
         SG90_BODY_X,
         SG90_BODY_Y,
@@ -47,7 +45,9 @@ MODEL_NAME = "sg90_gripper_base"
 PLATE_THICKNESS = 5.0
 CLEVIS_TONGUE_WIDTH = 14.0
 PIVOT_BOSS_RADIUS = 16.0
-PIVOT_SHAFT_CLEARANCE = 5.4
+# Snug on the 5 mm wrist shaft, like the forearm hub on the elbow shaft: the
+# shaft turns in the forearm's two 625 bearings and carries the gripper.
+PIVOT_SHAFT_BORE = BEARING_625_ID
 PILOT_HOLE_DIAMETER = 1.0
 WRIST_JOINT_ROTATION_CLEARANCE_RADIUS = 22.0
 DECK_ROOT_WIDTH = 15.0
@@ -121,30 +121,20 @@ def build_model():
                 align=(Align.CENTER, Align.CENTER, Align.CENTER),
             )
 
-        # Wrist pivot clearance and two shallow 625-sized registration pockets.
+        # Wrist shaft bore.
         Cylinder(
-            radius=PIVOT_SHAFT_CLEARANCE / 2,
+            radius=PIVOT_SHAFT_BORE / 2,
             height=CLEVIS_TONGUE_WIDTH + 4.0,
             rotation=(0, 90, 0),
             mode=Mode.SUBTRACT,
         )
-        for pocket_x in (
-            -CLEVIS_TONGUE_WIDTH / 2 + 0.7,
-            CLEVIS_TONGUE_WIDTH / 2 - 0.7,
-        ):
-            with Locations((pocket_x, 0, 0)):
-                Cylinder(
-                    radius=BEARING_625_OD / 2,
-                    height=1.4,
-                    rotation=(0, 90, 0),
-                    mode=Mode.SUBTRACT,
-                )
 
-        # Four M3 wrist pulley holes on the integrated 60T pulley bolt pattern.
+        # Four M3 tap pilots for the screws that drive in from the wrist pulley;
+        # the forearm ear leaves no room for nuts on the far face.
         for bolt_y, bolt_z in circle_points(4, WRIST_PULLEY_BOLT_CIRCLE, start_angle=45):
             with Locations((0, bolt_y, bolt_z)):
                 Cylinder(
-                    radius=M3_CLEARANCE / 2,
+                    radius=M3_TAP_HOLE / 2,
                     height=CLEVIS_TONGUE_WIDTH + 4.0,
                     rotation=(0, 90, 0),
                     mode=Mode.SUBTRACT,

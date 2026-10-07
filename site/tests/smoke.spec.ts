@@ -7,7 +7,7 @@ test("landing page runs the brick builder and part viewer", async ({ page }) => 
   await expect(page.getByRole("heading", { level: 1, name: /Robot Arm/ })).toBeVisible();
 
   const hero = page.locator("#simulator");
-  await expect(hero).toHaveAttribute("data-meshes", "49", { timeout: 30_000 });
+  await expect(hero).toHaveAttribute("data-meshes", "48", { timeout: 30_000 });
   await expect(hero).toHaveAttribute("data-mode", "autopilot");
   await expect(hero).toHaveAttribute("data-build", "running");
   await expect(hero.locator(".build-headline")).toHaveText("Placing brick 1 of 13");

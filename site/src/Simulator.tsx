@@ -64,7 +64,7 @@ const jointControls: { name: JointName; id: string; label: string; unit: string 
   { name: "wrist", id: "J4", label: "Wrist", unit: "°" },
   { name: "gripper", id: "J5", label: "Grip", unit: " mm" },
 ];
-const meshCount = 35 + byj48Finishes.length + sg90Finishes.length;
+const meshCount = 34 + byj48Finishes.length + sg90Finishes.length;
 const palette = {
   arm: "#e2743f",
   frame: "#4a535b",
@@ -297,7 +297,6 @@ export function Simulator({ children, facts }: { children: React.ReactNode; fact
     loadFinishes("simulator_upper_arm", shoulder, [0, 0, -162.03], nema17Finishes);
     load("simulator_forearm", elbow, [0, 0, -337.38]);
     loadFinishes("simulator_forearm", elbow, [0, 0, -337.38], ["steel", ...byj48Finishes]);
-    load("simulator_wrist_hardware", wrist, wristMeshOffset, palette.hardware);
     loadFinishes("simulator_wrist_hardware", wrist, wristMeshOffset, ["steel", ...sg90Finishes]);
     load("simulator_gripper_base", wrist, [0, 0, 0], palette.gripper);
     jawLinks.forEach(({ side, jaw, horn, rod }) => {

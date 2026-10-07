@@ -55,6 +55,8 @@ The simulator builds small interlocking-brick models. Presets are plain data in 
 - The base drive uses a 120T module-1 herringbone gear driven by a 20T NEMA17 pinion at a 70 mm center distance.
 - The 120T gear's six M3 turntable holes are clocked to match the azimuth turntable and include bottom-side counterbores so hardware can sit below the gear when bolting up into the turntable.
 - The geared base stator carries the fixed center boss/bearing stack; keep the 120T gear center bore and vertical stack clear of that boss when adjusting the base assembly.
+- The shoulder and elbow driven pulleys are held by four M3 screws that drive from counterbores in the link (bicep at the shoulder, forearm hub at the elbow) into the pulley's thread holes, so the heads stay inside the clevis. The 8 mm and 5 mm steel shafts, not these screws, carry each joint.
+- At the wrist, the gripper tongue sits snug on the 5 mm shaft, which turns in the forearm's two 625 bearings; the 32T pulley's four M3 screws thread into the tongue. The 28BYJ-48 stands 2 mm off the forearm plate on slotted ear pads so its front boss clears the 20T pulley and its shaft ends 8 mm into the pulley bore.
 - `models/master_assembly.py` supports `mechanical` and `service` configurations. The default remains `mechanical`.
 - The electronics enclosure is a prototype until physical fit, temperature, and interlock tests are recorded.
 

@@ -101,6 +101,11 @@ ELBOW_BELT_CHANNEL_Z_MAX = TOP_PIVOT_Z - ELBOW_CLEVIS_CLEARANCE_Z / 2 + 2.0
 SHOULDER_PULLEY_EXTRA_CLEARANCE_X = 1.0
 SHOULDER_PULLEY_FLAT_FACE_X = -8.5
 SHOULDER_PULLEY_FLAT_SIZE_YZ = 84.0
+# Shoulder pulley screws drive from these +X face counterbores into the 80T
+# pulley's tap holes on the -X side.
+SHOULDER_M3_COUNTERBORE_DEPTH = 3.8
+SHOULDER_M3_COUNTERBORE_CENTER_X = LINK_X_THICKNESS / 2 - 1.8
+SHOULDER_M3_SCREW_SEAT_X = SHOULDER_M3_COUNTERBORE_CENTER_X - SHOULDER_M3_COUNTERBORE_DEPTH / 2
 ELBOW_REINFORCEMENT_WIDTH_Y = 46.0
 ELBOW_REINFORCEMENT_HEIGHT_Z = 86.0
 
@@ -162,8 +167,8 @@ def _slotted_shaft_hole_along_x(z: float, travel: float) -> None:
 def _counterbored_x_hole(y: float, z: float) -> None:
     with Locations((0, y, z)):
         _x_axis_hole(M3_CLEARANCE / 2)
-    with Locations((LINK_X_THICKNESS / 2 - 1.8, y, z)):
-        _x_axis_hole(3.0, height=3.8)
+    with Locations((SHOULDER_M3_COUNTERBORE_CENTER_X, y, z)):
+        _x_axis_hole(3.0, height=SHOULDER_M3_COUNTERBORE_DEPTH)
 
 
 def _build_flush_motor_reinforcement():

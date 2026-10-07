@@ -18,7 +18,6 @@ PART_MODULES = [
     "models.nema17_stepper_motor",
     "models.transmission_components",
     "models.electronics_enclosure",
-    "models.wrist_keyed_shaft_adapter",
     "models.master_assembly",
 ]
 
@@ -145,7 +144,7 @@ def test_master_assembly_has_all_major_children() -> None:
 
     assembly = build_model()
 
-    assert len(assembly.children) == 78
+    assert len(assembly.children) == 75
     assert assembly.volume > 0
 
 
@@ -163,7 +162,6 @@ def test_master_assembly_arm_pulley_planes_match_motor_layout() -> None:
     elbow_driven = children_by_label["elbow_60T_HTD3M_16p15_4xM3_25BC"]
     elbow_belt = children_by_label["elbow_16T_to_60T_HTD3M_open_belt_visual"]
     wrist_driver = children_by_label["wrist_driver_20T_HTD3M_5mm_double_D_shaft"]
-    wrist_adapter = children_by_label["wrist_keyed_28byj_shaft_to_pulley_adapter"]
     wrist_driven = children_by_label["wrist_32T_HTD3M_16p15_4xM3_20BC"]
     wrist_belt = children_by_label["wrist_20T_to_32T_HTD3M_open_belt_visual"]
     elbow_motor = children_by_label["elbow_nema17_stepper_motor"]
@@ -184,7 +182,6 @@ def test_master_assembly_arm_pulley_planes_match_motor_layout() -> None:
     assert elbow_motor.bounding_box().min.X < elbow_x < elbow_motor.bounding_box().max.X
     assert elbow_motor.bounding_box().max.X > 0
     assert center_x(wrist_driver) == pytest.approx(center_x(wrist_driven))
-    assert center_x(wrist_adapter) == pytest.approx(center_x(wrist_driver))
     assert center_x(wrist_belt) == pytest.approx(center_x(wrist_driven))
     assert shoulder_driver.label.endswith("D_shaft")
     assert elbow_driver.label.endswith("round_shaft")
@@ -351,7 +348,7 @@ def test_master_assembly_shows_installed_joint_hardware_and_flush_shafts() -> No
     labels = [child.label for child in assembly.children]
 
     assert (
-        len([label for label in labels if label.startswith("installed_bearing_")]) == 10
+        len([label for label in labels if label.startswith("installed_bearing_")]) == 8
     )
     assert len([label for label in labels if label.startswith("installed_sg90_")]) == 2
     assert (
@@ -361,6 +358,137 @@ def test_master_assembly_shows_installed_joint_hardware_and_flush_shafts() -> No
     assert joint_shafts.SHOULDER_SHAFT_LENGTH == pytest.approx(67.0)
     assert joint_shafts.ELBOW_SHAFT_LENGTH == pytest.approx(44.0)
     assert joint_shafts.WRIST_SHAFT_LENGTH == pytest.approx(41.0)
+
+
+def test_joint_shafts_fill_their_608_and_625_bearings() -> None:
+    from models import joint_shafts
+    from models.master_assembly import build_model
+
+    assembly = build_model()
+    children_by_label = {child.label: child for child in assembly.children}
+
+    for label, diameter, bearings in (
+        ("shoulder_pivot_8mm_shaft", 8.0, ("03_608", "04_608")),
+        ("elbow_pivot_5mm_shaft", 5.0, ("05_625", "06_625")),
+        ("wrist_pivot_5mm_shaft", 5.0, ("07_625", "08_625")),
+    ):
+        size = children_by_label[label].bounding_box().size
+        assert size.Y == pytest.approx(diameter)
+        assert size.Z == pytest.approx(diameter)
+        for prefix in bearings:
+            bearing = next(
+                child
+                for child in assembly.children
+                if child.label.startswith(f"installed_bearing_{prefix}")
+            )
+            # The bore matches the rod, so the rod fills the bearing without overlap.
+            assert (bearing & children_by_label[label]).volume == pytest.approx(0, abs=1e-3)
+    assert joint_shafts.SHOULDER_PIVOT_SPACER_ID > joint_shafts.SHOULDER_SHAFT_DIAMETER
+
+
+def test_elbow_pulley_screws_are_hidden_inside_the_bicep_clevis() -> None:
+    from models import bicep_arm_link
+    from models.master_assembly import build_model
+
+    assembly = build_model()
+    children_by_label = {child.label: child for child in assembly.children}
+    screws = [
+        child
+        for child in assembly.children
+        if child.label.startswith("installed_M3_fastener_elbow_pulley_")
+    ]
+    bicep = children_by_label["bicep_arm_link"]
+    forearm = children_by_label["forearm_link"]
+    pulley = children_by_label["elbow_60T_HTD3M_16p15_4xM3_25BC"]
+
+    assert len(screws) == 4
+    for screw in screws:
+        bbox = screw.bounding_box()
+        # Heads stay between the bicep ears instead of poking out the outer face.
+        assert bbox.max.X < bicep_arm_link.ELBOW_CLEVIS_GAP_X / 2
+        assert bbox.min.X > -bicep_arm_link.ELBOW_CLEVIS_GAP_X / 2
+        assert (screw & bicep).volume == pytest.approx(0, abs=1e-3)
+        assert (screw & forearm).volume == pytest.approx(0, abs=1e-3)
+        # Threads bite into the pulley's undersized pilots.
+        assert (screw & pulley).volume > 0
+
+
+def test_shoulder_pulley_screws_clear_the_shoulder_bearings() -> None:
+    from models.master_assembly import build_model
+
+    assembly = build_model()
+    children_by_label = {child.label: child for child in assembly.children}
+    screws = [
+        child
+        for child in assembly.children
+        if child.label.startswith("installed_M3_fastener_shoulder_pulley_")
+    ]
+    bearings = [
+        child
+        for child in assembly.children
+        if child.label.startswith(("installed_bearing_03_", "installed_bearing_04_"))
+    ]
+    bicep = children_by_label["bicep_arm_link"]
+    pulley = children_by_label["shoulder_80T_HTD3M_8p5_4xM3_25BC"]
+
+    assert len(screws) == 4
+    assert len(bearings) == 2
+    for screw in screws:
+        assert (screw & bicep).volume == pytest.approx(0, abs=1e-3)
+        assert (screw & pulley).volume > 0
+        for bearing in bearings:
+            assert (screw & bearing).volume == pytest.approx(0, abs=1e-3)
+
+
+def test_wrist_pulley_screws_stop_inside_the_gripper_tongue() -> None:
+    from models.master_assembly import build_model
+
+    assembly = build_model()
+    children_by_label = {child.label: child for child in assembly.children}
+    screws = [
+        child
+        for child in assembly.children
+        if child.label.startswith("installed_M3_fastener_wrist_pulley_")
+    ]
+    forearm = children_by_label["forearm_link"]
+    gripper = children_by_label["sg90_parallel_gripper"]
+    # Child parts are placed relative to the gripper assembly.
+    gripper_base = next(
+        child for child in gripper.children if child.label == "sg90_gripper_base"
+    ).moved(gripper.location)
+
+    assert len(screws) == 4
+    for screw in screws:
+        assert (screw & forearm).volume == pytest.approx(0, abs=1e-3)
+        # Threads bite into the tongue's tap pilots.
+        assert (screw & gripper_base).volume > 0
+
+
+def test_gripper_rides_snug_on_the_wrist_shaft_without_its_own_bearings() -> None:
+    from models import sg90_gripper_base
+    from models.common import BEARING_625_ID
+    from models.master_assembly import build_model
+
+    assembly = build_model()
+    children_by_label = {child.label: child for child in assembly.children}
+    gripper = children_by_label["sg90_parallel_gripper"]
+    gripper_base = next(
+        child for child in gripper.children if child.label == "sg90_gripper_base"
+    ).moved(gripper.location)
+    shaft = children_by_label["wrist_pivot_5mm_shaft"]
+    wrist_bearings = [
+        child for child in assembly.children
+        if child.label.startswith(("installed_bearing_07_", "installed_bearing_08_"))
+    ]
+
+    assert sg90_gripper_base.PIVOT_SHAFT_BORE == pytest.approx(BEARING_625_ID)
+    assert (gripper_base & shaft).volume == pytest.approx(0, abs=1e-3)
+    assert "wrist_keyed_28byj_shaft_to_pulley_adapter" not in children_by_label
+    for bearing in wrist_bearings:
+        assert (bearing & gripper_base).volume == pytest.approx(0, abs=1e-3)
+        assert (bearing & children_by_label["forearm_link"]).volume == pytest.approx(
+            0, abs=1e-3
+        )
 
 
 def test_shoulder_spacer_fills_azimuth_clevis_stack() -> None:
@@ -404,8 +532,13 @@ def test_master_assembly_includes_single_wrist_motor() -> None:
     wrist_bbox = wrist_motor.bounding_box()
     wrist_center_x = (wrist_bbox.min.X + wrist_bbox.max.X) / 2
     wrist_driver_bbox = wrist_driver.bounding_box()
-    shaft_protrusion = wrist_bbox.max.X - wrist_driver_bbox.max.X
-    assert 0.25 <= shaft_protrusion <= 0.5
+    # The shaft tip ends inside the pulley with most of the bore engaged.
+    shaft_engagement = wrist_bbox.max.X - wrist_driver_bbox.min.X
+    assert 7.5 <= shaft_engagement < wrist_driver_bbox.size.X
+    can = next(part for part in wrist_motor.children if part.label == "byj48_can")
+    assert can.bounding_box().max.X <= wrist_driver_bbox.min.X - 0.4
+    for part in wrist_motor.children:
+        assert (part & wrist_driver).volume == pytest.approx(0, abs=1e-3)
 
     forearm_x = (
         -bicep_arm_link.ELBOW_CLEVIS_GAP_X / 2
@@ -458,30 +591,27 @@ def test_forearm_has_integrated_closed_slot_wrist_motor_mount() -> None:
 
     motor_mount_outer_x = mount_face_center_x - forearm_link.MOTOR_FACE_THICKNESS_X / 2
     mounting_ring_y = forearm_link.BYJ48_EAR_SPACING / 2 + 3.5
-    assert not model.is_inside(
-        (
-            motor_mount_outer_x + forearm_link.MOTOR_MOUNT_RECESS_DEPTH_X / 2,
-            mounting_ring_y,
-            forearm_link.MOTOR_SHAFT_Z,
-        ),
-        tolerance=1e-6,
-    )
+    # Standoff pads raise the motor ears off the plate's outer face.
     assert model.is_inside(
         (
-            motor_mount_outer_x + forearm_link.MOTOR_MOUNT_RECESS_DEPTH_X + 0.5,
+            motor_mount_outer_x - forearm_link.MOTOR_EAR_STANDOFF_X / 2,
             mounting_ring_y,
             forearm_link.MOTOR_SHAFT_Z,
         ),
         tolerance=1e-6,
     )
-    assert (
-        forearm_link.MOTOR_FACE_THICKNESS_X - forearm_link.MOTOR_MOUNT_RECESS_DEPTH_X
-        >= 3.6
+    assert not model.is_inside(
+        (
+            motor_mount_outer_x - forearm_link.MOTOR_EAR_STANDOFF_X - 0.5,
+            mounting_ring_y,
+            forearm_link.MOTOR_SHAFT_Z,
+        ),
+        tolerance=1e-6,
     )
 
     # The adjustment features are closed at both ends, unlike the former
     # downward-open fork, while the center of each ear slot remains clear.
-    closed_end_offset = forearm_link.MOTOR_MOUNT_RECESS_SLOT_WIDTH_YZ / 2 + 1.0
+    closed_end_offset = forearm_link.MOTOR_EAR_STANDOFF_WIDTH_YZ / 2 + 1.0
     for y in (
         -forearm_link.BYJ48_EAR_SPACING / 2,
         forearm_link.BYJ48_EAR_SPACING / 2,
@@ -659,11 +789,11 @@ def test_electronics_carriers_are_low_profile_with_external_attachment_ears() ->
     )
 
 
-def test_forearm_elbow_hub_has_flush_pulley_side_m3_counterbores() -> None:
+def test_forearm_elbow_hub_has_inner_face_m3_counterbores() -> None:
     from models import forearm_link
     from models.common import M3_COUNTERBORE_DEPTH
 
-    assert forearm_link.ELBOW_BOLT_HEAD_SIDE_SIGN == -1
+    assert forearm_link.ELBOW_BOLT_HEAD_SIDE_SIGN == 1
     assert forearm_link.ELBOW_M3_COUNTERBORE_DIAMETER > forearm_link.M3_CLEARANCE
     assert forearm_link.ELBOW_M3_COUNTERBORE_DEPTH == pytest.approx(
         M3_COUNTERBORE_DEPTH

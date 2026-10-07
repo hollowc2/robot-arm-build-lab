@@ -22,7 +22,7 @@ jobs:
         run: uv sync
 
       - name: Run CAD tests
-        run: uv run pytest
+        run: uv run python -m pytest
 
       - name: Generate public metadata
         run: |

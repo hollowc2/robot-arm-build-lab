@@ -82,10 +82,11 @@ MOTOR_SLOT_BOTTOM_Z = MOTOR_SLOT_CENTER_Z - MOTOR_SLOT_TRAVEL / 2
 MOTOR_MOUNT_BOTTOM_Z = MOTOR_SHAFT_Z - MOTOR_FACE_HEIGHT_Z / 2
 MOTOR_BODY_POCKET_DEPTH = MOTOR_FACE_THICKNESS_X
 MOTOR_BODY_POCKET_CLEARANCE = 0.35
-# Leaves a 3.6 mm (nine 0.4 mm extrusion widths) mounting floor while giving
-# the short motor shaft 0.4 mm of positive reach through the driver pulley.
-MOTOR_MOUNT_RECESS_DEPTH_X = 1.4
-MOTOR_MOUNT_RECESS_SLOT_WIDTH_YZ = 10.0
+# The driver pulley's inner face sits flush with the plate's outer face, so
+# slotted pads stand the motor's ears off the plate: the 1.5 mm front boss
+# clears the pulley by 0.5 mm and the shaft ends 8 mm into the pulley bore.
+MOTOR_EAR_STANDOFF_X = 2.0
+MOTOR_EAR_STANDOFF_WIDTH_YZ = 10.0
 MOTOR_SHAFT_CLEARANCE = 10.0
 MOTOR_GUSSET_RIB_WIDTH_Y = 7.0
 MOTOR_GUSSET_RIB_THICKNESS_Z = 7.0
@@ -119,7 +120,10 @@ WRIST_PULLEY_RELIEF_CENTER_X = WRIST_BELT_CHANNEL_CENTER_X
 WRIST_PULLEY_RELIEF_DEPTH_X = WRIST_PULLEY_TOTAL_HEIGHT + 2 * WRIST_PULLEY_AXIAL_CLEARANCE_X
 
 
-ELBOW_BOLT_HEAD_SIDE_SIGN = -1
+# The four M3 screws enter from the hub face opposite the 60T pulley, so their
+# heads sit recessed inside the bicep clevis and thread into the pulley's
+# pilots.  The elbow shaft, not these screws, links the forearm to the bicep.
+ELBOW_BOLT_HEAD_SIDE_SIGN = 1
 ELBOW_M3_COUNTERBORE_DIAMETER = 6.8
 ELBOW_M3_COUNTERBORE_DEPTH = M3_COUNTERBORE_DEPTH
 
@@ -286,6 +290,20 @@ def _build_forearm_monocoque_hull():
     return hull.part
 
 
+def _add_motor_ear_standoffs() -> None:
+    """Raise a slotted pad under each 28BYJ-48 ear on the plate's outer face."""
+    outer_face_x = WRIST_ASSEMBLY_OFFSET_X + WRIST_MOTOR_SIDE_SIGN * (
+        LINK_THICKNESS_X / 2 + MOTOR_FACE_THICKNESS_X
+    )
+    with BuildSketch(Plane.YZ.offset(outer_face_x)) as pads:
+        for y in (-BYJ48_EAR_SPACING / 2, BYJ48_EAR_SPACING / 2):
+            with Locations((y, MOTOR_SLOT_CENTER_Z)):
+                SlotCenterToCenter(
+                    MOTOR_SLOT_TRAVEL, MOTOR_EAR_STANDOFF_WIDTH_YZ, rotation=90
+                )
+    extrude(pads.sketch, amount=WRIST_MOTOR_SIDE_SIGN * MOTOR_EAR_STANDOFF_X)
+
+
 def _build_integrated_motor_mount():
     """Build a rounded motor plate with tapered ribs blended into the monocoque."""
     face_x = WRIST_ASSEMBLY_OFFSET_X + WRIST_MOTOR_SIDE_SIGN * (
@@ -424,6 +442,7 @@ def build_model():
         add(_build_forearm_monocoque_hull())
         add(_build_integrated_motor_mount())
         add(_build_wrist_offset_ear_gusset())
+        _add_motor_ear_standoffs()
 
         with Locations((0, 0, 0)):
             _x_cylinder(BOTTOM_PIVOT_HOLE / 2, BOTTOM_HUB_THICKNESS + 4.0, Mode.SUBTRACT)
@@ -449,17 +468,6 @@ def build_model():
         face_x = WRIST_ASSEMBLY_OFFSET_X + WRIST_MOTOR_SIDE_SIGN * (
             LINK_THICKNESS_X / 2 + MOTOR_FACE_THICKNESS_X / 2
         )
-        motor_mount_outer_x = face_x - MOTOR_FACE_THICKNESS_X / 2
-        for y in (-BYJ48_EAR_SPACING / 2, BYJ48_EAR_SPACING / 2):
-            _vertical_slot_along_x(
-                y,
-                MOTOR_SLOT_CENTER_Z,
-                MOTOR_SLOT_TRAVEL,
-                MOTOR_MOUNT_RECESS_SLOT_WIDTH_YZ,
-                x_start=motor_mount_outer_x,
-                depth=MOTOR_MOUNT_RECESS_DEPTH_X,
-            )
-
         pocket_center_x = WRIST_ASSEMBLY_OFFSET_X + WRIST_MOTOR_SIDE_SIGN * (
             LINK_THICKNESS_X / 2 + MOTOR_FACE_THICKNESS_X - MOTOR_BODY_POCKET_DEPTH / 2
         )
