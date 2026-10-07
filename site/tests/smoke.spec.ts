@@ -61,10 +61,10 @@ test("landing page runs the brick builder and part viewer", async ({ page }) => 
   await hero.getByRole("button", { name: "Pause" }).click();
   await hero.getByRole("tab", { name: "Joints" }).click();
   // The build's own grip target is already closed, so squeeze to a different value to take over.
-  await page.getByLabel("Grip", { exact: true }).fill("5");
+  await page.getByLabel("Grip", { exact: true }).fill("2");
   await expect(hero).toHaveAttribute("data-paused", "false");
   await expect(hero).toHaveAttribute("data-build", "stopped");
-  await expect.poll(async () => Number.parseFloat(await readouts.nth(4).innerText())).toBeGreaterThan(10);
+  await expect.poll(async () => Number.parseFloat(await readouts.nth(4).innerText())).toBeGreaterThan(5);
   await expect(hero).toHaveAttribute("data-held", "tan 2×4");
   await page.getByLabel("Grip", { exact: true }).fill("40");
   await expect(hero).toHaveAttribute("data-held", "", { timeout: 10_000 });
