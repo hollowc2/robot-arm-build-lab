@@ -20,7 +20,13 @@ def export_printed_mesh(parts: list, destination: Path) -> None:
     from build123d import Compound, export_stl
 
     if parts:
-        export_stl(Compound(children=parts), destination)
+        from OCP.BRepTools import BRepTools
+
+        # The full assembly's print export caches fine triangulation on these shapes.
+        # Re-mesh simulator-only links for display, keeping the print artifacts untouched.
+        shape = Compound(children=parts)
+        BRepTools.Clean_s(shape.wrapped)
+        export_stl(shape, destination, tolerance=0.1, angular_tolerance=0.4)
     else:
         destination.unlink(missing_ok=True)
 
