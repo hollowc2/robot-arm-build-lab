@@ -8,6 +8,7 @@ try:
         ELBOW_PULLEY_BOLT_CIRCLE,
         NEMA17_HOLE_SPACING,
         SHOULDER_PULLEY_BOLT_CIRCLE,
+        WRIST_PULLEY_BOLT_CIRCLE,
         circle_points,
         export_model,
     )
@@ -17,6 +18,7 @@ except ModuleNotFoundError:
         ELBOW_PULLEY_BOLT_CIRCLE,
         NEMA17_HOLE_SPACING,
         SHOULDER_PULLEY_BOLT_CIRCLE,
+        WRIST_PULLEY_BOLT_CIRCLE,
         circle_points,
         export_model,
     )
@@ -92,6 +94,7 @@ def build_model(configuration: str = "mechanical") -> Compound:
         from models.sg90_parallel_gripper import build_model as build_gripper
         from models.transmission_components import (
             PULLEY_TOTAL_HEIGHT,
+            WRIST_PULLEY_M3_COUNTERBORE_DEPTH,
             build_base_driven_gear,
             build_base_driver_pinion,
             build_elbow_htd_belt,
@@ -102,7 +105,6 @@ def build_model(configuration: str = "mechanical") -> Compound:
             build_shoulder_pulley,
             build_wrist_driver_pulley,
             build_wrist_htd_belt,
-            build_wrist_keyed_shaft_adapter,
             build_wrist_pulley,
             BASE_GEAR_BOLT_START_ANGLE,
         )
@@ -141,6 +143,7 @@ def build_model(configuration: str = "mechanical") -> Compound:
         from sg90_parallel_gripper import build_model as build_gripper
         from transmission_components import (
             PULLEY_TOTAL_HEIGHT,
+            WRIST_PULLEY_M3_COUNTERBORE_DEPTH,
             build_base_driven_gear,
             build_base_driver_pinion,
             build_elbow_htd_belt,
@@ -151,7 +154,6 @@ def build_model(configuration: str = "mechanical") -> Compound:
             build_shoulder_pulley,
             build_wrist_driver_pulley,
             build_wrist_htd_belt,
-            build_wrist_keyed_shaft_adapter,
             build_wrist_pulley,
             BASE_GEAR_BOLT_START_ANGLE,
         )
@@ -289,10 +291,6 @@ def build_model(configuration: str = "mechanical") -> Compound:
             - 2.5,
         )
     ]
-    gripper_bearings = [
-        build_625_bearing().moved(Pos(wrist_gripper_x + x, 0, wrist_pivot_z))
-        for x in (-6.3, 6.3)
-    ]
     sg90_servos = [
         build_sg90_installed(
             Pos(
@@ -310,7 +308,6 @@ def build_model(configuration: str = "mechanical") -> Compound:
             *shoulder_bearings,
             *elbow_bearings,
             *wrist_bearings,
-            *gripper_bearings,
         ),
         1,
     ):
@@ -353,9 +350,25 @@ def build_model(configuration: str = "mechanical") -> Compound:
         )
         for x in (-gripper_base_model.SERVO_CENTER_X, gripper_base_model.SERVO_CENTER_X)
     ]
+    # Wrist screws seat in the 32T pulley's counterbores and thread into the
+    # gripper tongue, stopping short of the forearm's far wrist ear.
+    wrist_screw_seat_x = (
+        wrist_pulley_x - PULLEY_TOTAL_HEIGHT / 2 + WRIST_PULLEY_M3_COUNTERBORE_DEPTH
+    )
+    wrist_screw_length = max(
+        length
+        for length in M3_SCREW_LENGTHS
+        if length
+        <= wrist_gripper_x
+        + gripper_base_model.CLEVIS_TONGUE_WIDTH / 2
+        - 1.0
+        - wrist_screw_seat_x
+    )
     wrist_pulley_fasteners = [
-        build_m3_socket_screw(30.0).moved(Pos(wrist_gripper_x, y, wrist_pivot_z + z))
-        for y, z in ((7.07, 7.07), (-7.07, 7.07), (-7.07, -7.07), (7.07, -7.07))
+        build_m3_socket_screw(wrist_screw_length).moved(
+            Pos(wrist_screw_seat_x + wrist_screw_length / 2, y, wrist_pivot_z + z)
+        )
+        for y, z in circle_points(4, WRIST_PULLEY_BOLT_CIRCLE, start_angle=45.0)
     ]
     # The remaining defined driveline bolt circles use the same M3 preview hardware.
     base_gear_fasteners = [
@@ -364,14 +377,40 @@ def build_model(configuration: str = "mechanical") -> Compound:
             6, BASE_GEAR_BOLT_CIRCLE, start_angle=BASE_GEAR_BOLT_START_ANGLE
         )
     ]
+    # Like the elbow, the shoulder screws drive from the bicep's counterbores
+    # into the 80T pulley, clear of the left shoulder bearing.
+    shoulder_screw_seat_x = bicep_model.SHOULDER_M3_SCREW_SEAT_X
+    shoulder_screw_length = max(
+        length
+        for length in M3_SCREW_LENGTHS
+        if length
+        <= shoulder_screw_seat_x - (shoulder_pulley_x - PULLEY_TOTAL_HEIGHT / 2) - 1.0
+    )
     shoulder_pulley_fasteners = [
-        build_m3_socket_screw(30.0).moved(
-            Pos(shoulder_pulley_x, y, shoulder_pivot_z + z)
+        build_m3_socket_screw(shoulder_screw_length).moved(
+            Pos(shoulder_screw_seat_x - shoulder_screw_length / 2, y, shoulder_pivot_z + z)
+            * Rot(0, 0, 180)
         )
         for y, z in circle_points(4, SHOULDER_PULLEY_BOLT_CIRCLE, start_angle=45.0)
     ]
+    # The elbow screws drive from the forearm hub's counterbores into the 60T
+    # pulley's thread pilots, so their heads stay hidden inside the bicep clevis.
+    elbow_screw_seat_x = (
+        forearm_x
+        + forearm_model.ELBOW_BOLT_HEAD_SIDE_SIGN
+        * (forearm_model.BOTTOM_HUB_THICKNESS / 2 - forearm_model.ELBOW_M3_COUNTERBORE_DEPTH)
+    )
+    elbow_pulley_far_face_x = elbow_pulley_x - PULLEY_TOTAL_HEIGHT / 2
+    elbow_screw_length = max(
+        length
+        for length in M3_SCREW_LENGTHS
+        if length <= elbow_screw_seat_x - elbow_pulley_far_face_x - 1.0
+    )
     elbow_pulley_fasteners = [
-        build_m3_socket_screw(30.0).moved(Pos(elbow_pulley_x, y, elbow_pivot_z + z))
+        build_m3_socket_screw(elbow_screw_length).moved(
+            Pos(elbow_screw_seat_x - elbow_screw_length / 2, y, elbow_pivot_z + z)
+            * Rot(0, 0, 180)
+        )
         for y, z in circle_points(4, ELBOW_PULLEY_BOLT_CIRCLE, start_angle=45.0)
     ]
     base_motor_location = Pos(
@@ -446,7 +485,7 @@ def build_model(configuration: str = "mechanical") -> Compound:
             forearm_x
             + forearm_model.WRIST_ASSEMBLY_OFFSET_X
             - wrist_motor_face_x
-            + forearm_model.MOTOR_MOUNT_RECESS_DEPTH_X,
+            - forearm_model.MOTOR_EAR_STANDOFF_X,
             0,
             elbow_pivot_z + forearm_model.MOTOR_SHAFT_Z,
         )
@@ -471,14 +510,6 @@ def build_model(configuration: str = "mechanical") -> Compound:
         * Rot(0, 90, 0)
     )
     wrist_driver_pulley = build_wrist_driver_pulley().moved(
-        Pos(
-            wrist_pulley_x,
-            0,
-            elbow_pivot_z + forearm_model.MOTOR_SHAFT_Z,
-        )
-        * Rot(0, 90, 0)
-    )
-    wrist_shaft_adapter = build_wrist_keyed_shaft_adapter().moved(
         Pos(
             wrist_pulley_x,
             0,
@@ -627,13 +658,11 @@ def build_model(configuration: str = "mechanical") -> Compound:
         elbow_pulley,
         wrist_motor,
         wrist_driver_tray,
-        wrist_shaft_adapter,
         wrist_driver_pulley,
         wrist_belt,
         wrist_shaft,
         *wrist_bearings,
         gripper,
-        *gripper_bearings,
         *sg90_servos,
         *servo_fasteners,
         *jaw_fasteners,

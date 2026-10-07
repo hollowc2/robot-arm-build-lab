@@ -54,7 +54,6 @@ def main() -> None:
                     "installed_bearing_07_625-2RS_bearing", "installed_bearing_08_625-2RS_bearing",
                 ),
                 "simulator_wrist_hardware": (
-                    "installed_bearing_09_625-2RS_bearing", "installed_bearing_10_625-2RS_bearing",
                     "installed_sg90_micro_servo_1", "installed_sg90_micro_servo_2",
                 ),
                 "simulator_shoulder_driver": ("shoulder_driver_16T_HTD3M_5mm_D_shaft",),
@@ -64,7 +63,7 @@ def main() -> None:
                 "simulator_elbow_belt": ("elbow_16T_to_60T_HTD3M_open_belt_visual",),
                 "simulator_elbow_driven": ("elbow_60T_HTD3M_16p15_4xM3_25BC",),
                 "simulator_wrist_driver": (
-                    "wrist_keyed_28byj_shaft_to_pulley_adapter", "wrist_driver_20T_HTD3M_5mm_double_D_shaft",
+                    "wrist_driver_20T_HTD3M_5mm_double_D_shaft",
                 ),
                 "simulator_wrist_belt": ("wrist_20T_to_32T_HTD3M_open_belt_visual",),
                 "simulator_wrist_driven": ("wrist_32T_HTD3M_16p15_4xM3_20BC",),
@@ -92,6 +91,9 @@ def main() -> None:
                     if label.endswith("stepper_motor") or label.startswith("installed_sg90_micro_servo_"):
                         for part in child.children:
                             finishes.setdefault(PURCHASED_FINISHES[part.label], []).append(part)
+                    elif label.endswith("mm_shaft"):
+                        # Joint pivots are plain steel rods.
+                        finishes.setdefault("steel", []).append(child)
                     else:
                         printed.append(child)
                 prefixes = fastener_groups.get(name, ())
