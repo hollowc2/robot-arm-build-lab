@@ -14,6 +14,17 @@ ROOT = Path(__file__).resolve().parents[1]
 sys.path.insert(0, str(ROOT))
 
 
+
+def export_printed_mesh(parts: list, destination: Path) -> None:
+    """Export a rigid group's printed solids, removing obsolete meshes if it has none."""
+    from build123d import Compound, export_stl
+
+    if parts:
+        export_stl(Compound(children=parts), destination)
+    else:
+        destination.unlink(missing_ok=True)
+
+
 def main() -> None:
     from build123d import Compound, export_stl
     from OCP.BRepTools import BRepTools
@@ -100,7 +111,7 @@ def main() -> None:
                 finishes.setdefault("steel", []).extend(
                     child for child in children if prefixes and child.label.startswith(prefixes)
                 )
-                export_stl(Compound(children=printed), OUT_DIR / f"{name}.stl")
+                export_printed_mesh(printed, OUT_DIR / f"{name}.stl")
                 for finish, parts in finishes.items():
                     if parts:
                         # Small purchased parts do not need the printed parts' fine tessellation.
