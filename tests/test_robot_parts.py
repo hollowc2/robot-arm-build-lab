@@ -22,10 +22,14 @@ PART_MODULES = [
 ]
 
 
-def test_robot_part_models_have_volume() -> None:
+def test_robot_part_models_have_volume(master_assembly) -> None:
     for module_name in PART_MODULES:
         module = importlib.import_module(module_name)
-        model = module.build_model()
+        model = (
+            master_assembly
+            if module_name == "models.master_assembly"
+            else module.build_model()
+        )
         assert model.volume > 0, module_name
 
 
@@ -139,19 +143,15 @@ def test_azimuth_flush_motor_mount_and_recessed_arduino_fit() -> None:
     assert board_z_max <= turntable.ELBOW_MOTOR_RELIEF_Z_MAX
 
 
-def test_master_assembly_has_all_major_children() -> None:
-    from models.master_assembly import build_model
-
-    assembly = build_model()
+def test_master_assembly_has_all_major_children(master_assembly) -> None:
+    assembly = master_assembly
 
     assert len(assembly.children) == 75
     assert assembly.volume > 0
 
 
-def test_master_assembly_arm_pulley_planes_match_motor_layout() -> None:
-    from models.master_assembly import build_model
-
-    assembly = build_model()
+def test_master_assembly_arm_pulley_planes_match_motor_layout(master_assembly) -> None:
+    assembly = master_assembly
     children = list(assembly.children)
     children_by_label = {child.label: child for child in children}
 
@@ -281,12 +281,12 @@ def test_bicep_has_negative_x_pulley_side_clearance_planes() -> None:
     )
 
 
-def test_elbow_clevis_sandwiches_forearm_hub_and_60t_pulley() -> None:
+def test_elbow_clevis_sandwiches_forearm_hub_and_60t_pulley(master_assembly) -> None:
     from models import bicep_arm_link, forearm_link
-    from models.master_assembly import PULLEY_SIDE_CLEARANCE, build_model
+    from models.master_assembly import PULLEY_SIDE_CLEARANCE
     from models.transmission_components import PULLEY_TOTAL_HEIGHT
 
-    assembly = build_model()
+    assembly = master_assembly
     children = list(assembly.children)
     children_by_label = {child.label: child for child in children}
 
@@ -327,10 +327,8 @@ def test_elbow_clevis_sandwiches_forearm_hub_and_60t_pulley() -> None:
     )
 
 
-def test_master_assembly_includes_all_joint_shafts() -> None:
-    from models.master_assembly import build_model
-
-    assembly = build_model()
+def test_master_assembly_includes_all_joint_shafts(master_assembly) -> None:
+    assembly = master_assembly
     labels = {child.label for child in assembly.children}
 
     assert "base_azimuth_8mm_shaft" in labels
@@ -340,11 +338,12 @@ def test_master_assembly_includes_all_joint_shafts() -> None:
     assert "wrist_pivot_5mm_shaft" in labels
 
 
-def test_master_assembly_shows_installed_joint_hardware_and_flush_shafts() -> None:
+def test_master_assembly_shows_installed_joint_hardware_and_flush_shafts(
+    master_assembly,
+) -> None:
     from models import joint_shafts
-    from models.master_assembly import build_model
 
-    assembly = build_model()
+    assembly = master_assembly
     labels = [child.label for child in assembly.children]
 
     assert (
@@ -360,11 +359,10 @@ def test_master_assembly_shows_installed_joint_hardware_and_flush_shafts() -> No
     assert joint_shafts.WRIST_SHAFT_LENGTH == pytest.approx(41.0)
 
 
-def test_joint_shafts_fill_their_608_and_625_bearings() -> None:
+def test_joint_shafts_fill_their_608_and_625_bearings(master_assembly) -> None:
     from models import joint_shafts
-    from models.master_assembly import build_model
 
-    assembly = build_model()
+    assembly = master_assembly
     children_by_label = {child.label: child for child in assembly.children}
 
     for label, diameter, bearings in (
@@ -382,15 +380,18 @@ def test_joint_shafts_fill_their_608_and_625_bearings() -> None:
                 if child.label.startswith(f"installed_bearing_{prefix}")
             )
             # The bore matches the rod, so the rod fills the bearing without overlap.
-            assert (bearing & children_by_label[label]).volume == pytest.approx(0, abs=1e-3)
+            assert (bearing & children_by_label[label]).volume == pytest.approx(
+                0, abs=1e-3
+            )
     assert joint_shafts.SHOULDER_PIVOT_SPACER_ID > joint_shafts.SHOULDER_SHAFT_DIAMETER
 
 
-def test_elbow_pulley_screws_are_hidden_inside_the_bicep_clevis() -> None:
+def test_elbow_pulley_screws_are_hidden_inside_the_bicep_clevis(
+    master_assembly,
+) -> None:
     from models import bicep_arm_link
-    from models.master_assembly import build_model
 
-    assembly = build_model()
+    assembly = master_assembly
     children_by_label = {child.label: child for child in assembly.children}
     screws = [
         child
@@ -413,10 +414,8 @@ def test_elbow_pulley_screws_are_hidden_inside_the_bicep_clevis() -> None:
         assert (screw & pulley).volume > 0
 
 
-def test_shoulder_pulley_screws_clear_the_shoulder_bearings() -> None:
-    from models.master_assembly import build_model
-
-    assembly = build_model()
+def test_shoulder_pulley_screws_clear_the_shoulder_bearings(master_assembly) -> None:
+    assembly = master_assembly
     children_by_label = {child.label: child for child in assembly.children}
     screws = [
         child
@@ -440,10 +439,8 @@ def test_shoulder_pulley_screws_clear_the_shoulder_bearings() -> None:
             assert (screw & bearing).volume == pytest.approx(0, abs=1e-3)
 
 
-def test_wrist_pulley_screws_stop_inside_the_gripper_tongue() -> None:
-    from models.master_assembly import build_model
-
-    assembly = build_model()
+def test_wrist_pulley_screws_stop_inside_the_gripper_tongue(master_assembly) -> None:
+    assembly = master_assembly
     children_by_label = {child.label: child for child in assembly.children}
     screws = [
         child
@@ -464,12 +461,13 @@ def test_wrist_pulley_screws_stop_inside_the_gripper_tongue() -> None:
         assert (screw & gripper_base).volume > 0
 
 
-def test_gripper_rides_snug_on_the_wrist_shaft_without_its_own_bearings() -> None:
+def test_gripper_rides_snug_on_the_wrist_shaft_without_its_own_bearings(
+    master_assembly,
+) -> None:
     from models import sg90_gripper_base
     from models.common import BEARING_625_ID
-    from models.master_assembly import build_model
 
-    assembly = build_model()
+    assembly = master_assembly
     children_by_label = {child.label: child for child in assembly.children}
     gripper = children_by_label["sg90_parallel_gripper"]
     gripper_base = next(
@@ -477,7 +475,8 @@ def test_gripper_rides_snug_on_the_wrist_shaft_without_its_own_bearings() -> Non
     ).moved(gripper.location)
     shaft = children_by_label["wrist_pivot_5mm_shaft"]
     wrist_bearings = [
-        child for child in assembly.children
+        child
+        for child in assembly.children
         if child.label.startswith(("installed_bearing_07_", "installed_bearing_08_"))
     ]
 
@@ -491,12 +490,12 @@ def test_gripper_rides_snug_on_the_wrist_shaft_without_its_own_bearings() -> Non
         )
 
 
-def test_shoulder_spacer_fills_azimuth_clevis_stack() -> None:
+def test_shoulder_spacer_fills_azimuth_clevis_stack(master_assembly) -> None:
     from models import azimuth_turntable_shoulder_cleat, bicep_arm_link, joint_shafts
-    from models.master_assembly import PULLEY_SIDE_CLEARANCE, build_model
+    from models.master_assembly import PULLEY_SIDE_CLEARANCE
     from models.transmission_components import PULLEY_TOTAL_HEIGHT
 
-    assembly = build_model()
+    assembly = master_assembly
     children_by_label = {child.label: child for child in assembly.children}
     spacer = children_by_label["shoulder_pivot_8mm_spacer"]
 
@@ -518,12 +517,12 @@ def test_shoulder_spacer_fills_azimuth_clevis_stack() -> None:
     )
 
 
-def test_master_assembly_includes_single_wrist_motor() -> None:
+def test_master_assembly_includes_single_wrist_motor(master_assembly) -> None:
     from models import bicep_arm_link, forearm_link
-    from models.master_assembly import PULLEY_SIDE_CLEARANCE, build_model
+    from models.master_assembly import PULLEY_SIDE_CLEARANCE
     from models.transmission_components import PULLEY_TOTAL_HEIGHT
 
-    assembly = build_model()
+    assembly = master_assembly
     children_by_label = {child.label: child for child in assembly.children}
 
     wrist_motor = children_by_label["wrist_28BYJ-48_stepper_motor"]
@@ -837,16 +836,17 @@ def test_forearm_wrist_clevis_clears_gripper_base_pivot_boss() -> None:
     )
 
 
-def test_master_wrist_joint_stacks_pulley_and_gripper_with_clearance() -> None:
+def test_master_wrist_joint_stacks_pulley_and_gripper_with_clearance(
+    master_assembly,
+) -> None:
     from models import bicep_arm_link, forearm_link, sg90_gripper_base
     from models.master_assembly import (
         PULLEY_SIDE_CLEARANCE,
         WRIST_STACK_CLEARANCE,
-        build_model,
     )
     from models.transmission_components import PULLEY_TOTAL_HEIGHT
 
-    assembly = build_model()
+    assembly = master_assembly
     children_by_label = {child.label: child for child in assembly.children}
     wrist_pulley = children_by_label["wrist_32T_HTD3M_16p15_4xM3_20BC"]
     gripper = children_by_label["sg90_parallel_gripper"]
@@ -1158,12 +1158,10 @@ def test_shoulder_driver_tray_screws_into_left_clevis_wall_pilots() -> None:
         )
 
 
-def test_master_assembly_localizes_motor_drivers_and_excludes_loose_wire_guides() -> (
-    None
-):
-    from models.master_assembly import build_model
-
-    assembly = build_model()
+def test_master_assembly_localizes_motor_drivers_and_excludes_loose_wire_guides(
+    master_assembly,
+) -> None:
+    assembly = master_assembly
     children_by_label = {child.label: child for child in assembly.children}
     labels = set(children_by_label)
 
