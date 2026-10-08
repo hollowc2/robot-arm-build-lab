@@ -7,7 +7,7 @@ test("landing page runs the brick builder and part viewer", async ({ page }) => 
   await expect(page.getByRole("heading", { level: 1, name: /Robot Arm/ })).toBeVisible();
 
   const hero = page.locator("#simulator");
-  await expect(hero).toHaveAttribute("data-meshes", "48", { timeout: 30_000 });
+  await expect(hero).toHaveAttribute("data-meshes", "54", { timeout: 30_000 });
   await expect(hero).toHaveAttribute("data-mode", "autopilot");
   await expect(hero).toHaveAttribute("data-build", "running");
   await expect(hero.locator(".build-headline")).toHaveText("Placing brick 1 of 50");
@@ -79,6 +79,12 @@ test("landing page runs the brick builder and part viewer", async ({ page }) => 
   await parts.getByRole("button", { name: /SG90 Parallel Gripper/ }).click();
   await expect(parts.getByRole("heading", { name: "SG90 Parallel Gripper" })).toBeVisible();
   await expect(stage).toHaveAttribute("data-state", "stl", { timeout: 15_000 });
+  for (const name of ["ESP32 DevKit 30-pin", "ESP32 30P Expansion Board"]) {
+    await parts.getByRole("button", { name: new RegExp(name) }).click();
+    await expect(parts.getByRole("heading", { name, exact: true })).toBeVisible();
+    await expect(stage).toHaveAttribute("data-state", "stl", { timeout: 15_000 });
+    await expect.poll(() => countRenderedPixels(parts.locator("canvas"))).toBeGreaterThan(0);
+  }
 });
 
 test("mobile controls keep the build moving with the canvas off screen", async ({ page }, testInfo) => {
@@ -88,7 +94,7 @@ test("mobile controls keep the build moving with the canvas off screen", async (
   await page.route("**/*.woff2", (route) => route.abort());
   await page.goto("/");
   const hero = page.locator("#simulator");
-  await expect(hero).toHaveAttribute("data-meshes", "48", { timeout: 30_000 });
+  await expect(hero).toHaveAttribute("data-meshes", "54", { timeout: 30_000 });
   await hero.getByRole("radio", { name: /Terraced monument/ }).click();
   await page.getByLabel("Simulation speed").fill("4");
   await hero.getByRole("button", { name: "Start" }).click();

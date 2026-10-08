@@ -8,7 +8,7 @@ test("architectural builds refill the tray and reset cleanly", async ({ page }, 
   page.on("console", (message) => { if (message.type() === "error") errors.push(message.text()); });
   await page.goto("/");
   const hero = page.locator("#simulator");
-  await expect(hero).toHaveAttribute("data-meshes", "48", { timeout: 60_000 });
+  await expect(hero).toHaveAttribute("data-meshes", "54", { timeout: 60_000 });
   for (const [name, count] of [["Grand citadel", 250], ["City skyline", 150], ["Terraced monument", 100], ["Garden pavilion", 50]] as const) {
     await hero.getByRole("radio", { name: new RegExp(name) }).click();
     await expect(hero.getByRole("progressbar")).toHaveAttribute("aria-valuemax", String(count));

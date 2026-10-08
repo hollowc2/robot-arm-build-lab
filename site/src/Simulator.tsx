@@ -1,4 +1,4 @@
-import { byj48Finishes, nema17Finishes, sg90Finishes, purchasedMaterials, prepareFinishGeometry, type Finish } from "./purchasedMaterials";
+import { byj48Finishes, nema17Finishes, sg90Finishes, electronicsFinishes, purchasedMaterials, prepareFinishGeometry, type Finish } from "./purchasedMaterials";
 import React, { useEffect, useRef, useState } from "react";
 import * as CANNON from "cannon-es";
 import * as THREE from "three";
@@ -65,7 +65,7 @@ const jointControls: { name: JointName; id: string; label: string; unit: string 
   { name: "wrist", id: "J4", label: "Wrist", unit: "°" },
   { name: "gripper", id: "J5", label: "Grip", unit: " mm" },
 ];
-const meshCount = 34 + byj48Finishes.length + sg90Finishes.length;
+const meshCount = 34 + byj48Finishes.length + sg90Finishes.length + electronicsFinishes.length;
 const palette = {
   arm: "#e2743f",
   frame: "#4a535b",
@@ -299,7 +299,7 @@ export function Simulator({ children, facts }: { children: React.ReactNode; fact
     });
     loadFinishes("simulator_base_fixed", robotRoot, [0, 0, 0], nema17Finishes);
     load("simulator_base_yaw", base, [0, 0, 0]);
-    loadFinishes("simulator_base_yaw", base, [0, 0, 0], nema17Finishes);
+    loadFinishes("simulator_base_yaw", base, [0, 0, 0], [...nema17Finishes, ...electronicsFinishes]);
     load("simulator_upper_arm", shoulder, [0, 0, -162.03]);
     loadFinishes("simulator_upper_arm", shoulder, [0, 0, -162.03], nema17Finishes);
     load("simulator_forearm", elbow, [0, 0, -337.38]);

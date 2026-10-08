@@ -127,6 +127,15 @@ ARDUINO_BOARD_CENTER_Z = (
 ARDUINO_STANDOFF_POINTS_YZ = tuple(
     (board_y, ARDUINO_BOARD_CENTER_Z + board_x) for board_x, board_y in UNO_HOLE_POINTS
 )
+# The photographed ESP32 expansion board has the Uno-like pattern on its
+# underside. A proper outboard installation requires the approved new bosses.
+# Keep the original Uno datum for reference and fit reporting.
+from models.esp32_boards import registered_hole_points
+
+ESP32_STANDOFF_POINTS_YZ = tuple(
+    (board_y, ARDUINO_BOARD_CENTER_Z + board_x)
+    for board_x, board_y in registered_hole_points()
+)
 # The shoulder StepStick tray lies flat on the left wall's outer face just
 # forward of the motor flange.  Its ears point down toward the deeper wall root
 # and screw into two blind M3 pilots, clear of the root flare below.
@@ -399,11 +408,32 @@ def _cut_right_elbow_motor_swing_relief() -> None:
     )
 
 
-def _add_arduino_uno_standoffs() -> None:
-    """Add four recessed, M3-tapped Arduino Uno R4 mounting bosses."""
+def _cut_esp32_board_clearance() -> None:
+    """Clear the tilted PCB footprint, retaining the original 3.2 mm back skin.
+
+    The lower corner remains above the 12 mm deck. Cut before adding the bosses.
+    """
+    from models.esp32_boards import (
+        EXPANSION_LENGTH, EXPANSION_WIDTH, board_mount_location,
+    )
+    seating = board_mount_location()
+    floor = CLEVIS_CLEAR_GAP / 2 + ELBOW_MOTOR_RELIEF_BACK_SKIN
+    # Include the photographed connectors' 1.7 mm power-edge overhang and
+    # the DevKit antenna-end PCB's 0.2 mm overhang, with 0.5 mm edge clearance.
+    cutter = Box(EXPANSION_LENGTH + 2.9, EXPANSION_WIDTH + 1,
+                 CLEVIS_ROOT_THICKNESS + 0.2,
+                 align=(Align.CENTER, Align.CENTER, Align.MIN), mode=Mode.PRIVATE)
+    cutter = cutter.moved(Pos(floor - seating.position.X, 0, 0) * seating * Pos(0.75, 0, 0))
+    above_deck = Box(200, 200, 200, align=(Align.CENTER, Align.CENTER, Align.MIN), mode=Mode.PRIVATE)
+    cutter &= above_deck.moved(Pos(0, 0, PLATE_THICKNESS + 0.1))
+    add(cutter, mode=Mode.SUBTRACT)
+
+
+def _add_esp32_standoffs() -> None:
+    """Add the four approved M3-tapped ESP32 expansion-board mounting bosses."""
     relief_floor_x = CLEVIS_CLEAR_GAP / 2 + ELBOW_MOTOR_RELIEF_BACK_SKIN
     boss_center_x = relief_floor_x + ARDUINO_STANDOFF_HEIGHT / 2 - 0.2
-    for y, z in ARDUINO_STANDOFF_POINTS_YZ:
+    for y, z in ESP32_STANDOFF_POINTS_YZ:
         with Locations((boss_center_x, y, z)):
             Cylinder(
                 ARDUINO_STANDOFF_DIAMETER / 2,
@@ -501,10 +531,11 @@ def build_model():
             through_length=CLEVIS_WALL_THICKNESS + 20.0,
         )
         _cut_right_elbow_motor_swing_relief()
+        _cut_esp32_board_clearance()
         _cut_left_upper_lightening_window()
         _cut_shoulder_driver_tray_pilots()
         _cut_608_pivot_pockets()
-        _add_arduino_uno_standoffs()
+        _add_esp32_standoffs()
 
     model = part.part
     size = model.bounding_box().size

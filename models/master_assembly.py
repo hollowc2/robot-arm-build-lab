@@ -599,6 +599,30 @@ def build_model(configuration: str = "mechanical") -> Compound:
     )
     wrist_driver_tray.label = "wrist_28byj_uln2003_board_tray"
 
+    from models.esp32_boards import (
+        PCB_THICKNESS, SOCKET_CENTER_X, DEVKIT_SEATED_Z,
+        build_expansion, build_devkit, board_mount_location,
+    )
+    electronics_location = board_mount_location(AZIMUTH_TURNTABLE_Z)
+    esp32_expansion = Compound(children=[part.moved(electronics_location)
+                                         for part in build_expansion().children])
+    esp32_expansion.label = "installed_esp32_expansion_30pin"
+    esp32_devkit = Compound(children=[
+        part.moved(electronics_location * Pos(SOCKET_CENTER_X, 0, DEVKIT_SEATED_Z))
+        for part in build_devkit().children
+    ])
+    esp32_devkit.label = "installed_esp32_devkit_30pin"
+    # M3 × 6 screws seat on the PCB top. 4.4 mm engagement reaches the
+    # existing blind printed pilot depth without breaking through the wall.
+    electronics_fasteners = []
+    for index, (y, z) in enumerate(turntable_model.ESP32_STANDOFF_POINTS_YZ, 1):
+        screw = build_m3_socket_screw(6, axis="z").moved(
+            Pos(electronics_location.position.X + PCB_THICKNESS - 3,
+                y, AZIMUTH_TURNTABLE_Z + z) * Rot(0, -90, 0)
+        )
+        screw.label = f"installed_M3_fastener_esp32_{index}"
+        electronics_fasteners.append(screw)
+
     # Wire-management parts are disabled in the main assembly preview.
     # base_cable_guide = build_base_cable_entry_strain_relief_guide().moved(
     #     Pos(0, -98, stator_model.BASE_THICKNESS)
@@ -649,6 +673,9 @@ def build_model(configuration: str = "mechanical") -> Compound:
         *base_bearings,
         *base_gear_fasteners,
         turntable,
+        esp32_expansion,
+        esp32_devkit,
+        *electronics_fasteners,
         shoulder_motor,
         *shoulder_motor_fasteners,
         shoulder_driver_tray,

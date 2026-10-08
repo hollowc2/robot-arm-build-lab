@@ -146,7 +146,7 @@ def test_azimuth_flush_motor_mount_and_recessed_arduino_fit() -> None:
 def test_master_assembly_has_all_major_children(master_assembly) -> None:
     assembly = master_assembly
 
-    assert len(assembly.children) == 77
+    assert len(assembly.children) == 83
     assert assembly.volume > 0
 
 
