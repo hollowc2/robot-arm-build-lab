@@ -5,6 +5,8 @@ from build123d import Align, Compound, Cylinder, Location, Pos, Rot
 try:
     from models.common import (
         BASE_GEAR_BOLT_CIRCLE,
+        BYJ48_EAR_SPACING,
+        M3_NUT_DEPTH,
         ELBOW_PULLEY_BOLT_CIRCLE,
         NEMA17_HOLE_SPACING,
         SHOULDER_PULLEY_BOLT_CIRCLE,
@@ -15,6 +17,8 @@ try:
 except ModuleNotFoundError:
     from common import (
         BASE_GEAR_BOLT_CIRCLE,
+        BYJ48_EAR_SPACING,
+        M3_NUT_DEPTH,
         ELBOW_PULLEY_BOLT_CIRCLE,
         NEMA17_HOLE_SPACING,
         SHOULDER_PULLEY_BOLT_CIRCLE,
@@ -27,7 +31,7 @@ except ModuleNotFoundError:
 AZIMUTH_TURNTABLE_Z = 28.0
 PULLEY_SIDE_CLEARANCE = 0.75
 WRIST_STACK_CLEARANCE = 1.0
-M3_SCREW_LENGTHS = (6.0, 8.0, 10.0, 12.0, 14.0, 16.0, 18.0, 20.0, 25.0, 30.0)
+M3_SCREW_LENGTHS = (6.0, 8.0, 10.0, 12.0, 14.0, 16.0, 18.0, 20.0, 25.0, 30.0, 40.0)
 NEMA17_THREAD_DEPTH = 4.5
 
 
@@ -81,9 +85,10 @@ def build_model(configuration: str = "mechanical") -> Compound:
             build_608_bearing,
             build_625_bearing,
             build_m3_socket_screw,
+            build_m3_nut,
             build_sg90_installed,
         )
-        from models.byj48_stepper_motor import build_installed as build_byj48
+        from models.byj48_stepper_motor import MOUNT_PLATE_THICKNESS, build_installed as build_byj48
         from models.nema17_stepper_motor import build_installed as build_nema17
         from models.electronics_mounts import (
             build_28byj_uln_board_tray,
@@ -130,9 +135,10 @@ def build_model(configuration: str = "mechanical") -> Compound:
             build_608_bearing,
             build_625_bearing,
             build_m3_socket_screw,
+            build_m3_nut,
             build_sg90_installed,
         )
-        from byj48_stepper_motor import build_installed as build_byj48
+        from byj48_stepper_motor import MOUNT_PLATE_THICKNESS, build_installed as build_byj48
         from nema17_stepper_motor import build_installed as build_nema17
         from electronics_mounts import (
             build_28byj_uln_board_tray,
@@ -480,7 +486,7 @@ def build_model(configuration: str = "mechanical") -> Compound:
     wrist_motor_face_x = (
         forearm_model.LINK_THICKNESS_X / 2 + forearm_model.MOTOR_FACE_THICKNESS_X
     )
-    wrist_motor = build_byj48(
+    wrist_motor_location = (
         Pos(
             forearm_x
             + forearm_model.WRIST_ASSEMBLY_OFFSET_X
@@ -489,10 +495,36 @@ def build_model(configuration: str = "mechanical") -> Compound:
             0,
             elbow_pivot_z + forearm_model.MOTOR_SHAFT_Z,
         )
-        * Rot(0, 90, 0),
+        * Rot(0, 90, 0)
+    )
+    wrist_motor = build_byj48(
+        wrist_motor_location,
         "wrist_28BYJ-48_stepper_motor",
     )
     wrist_motor.label = "wrist_28BYJ-48_stepper_motor"
+    # Clamp both slotted ears through the printed mount with nuts on its far face.
+    # Probe each hole independently: the mount's ribs make its thickness vary.
+    wrist_motor_fasteners = []
+    for index, y in enumerate((-BYJ48_EAR_SPACING / 2, BYJ48_EAR_SPACING / 2), 1):
+        probe = Cylinder(3.1, 40, align=(Align.CENTER, Align.CENTER, Align.MIN))
+        probe -= Cylinder(1.9, 40, align=(Align.CENTER, Align.CENTER, Align.MIN))
+        contact = forearm & probe.moved(wrist_motor_location * Pos(0, y, 0))
+        if contact.volume <= 0:
+            raise ValueError("28BYJ-48 mount screw probe found no printed material.")
+        nut_seat = contact.moved(wrist_motor_location.inverse()).bounding_box().max.Z
+        length = next(
+            length for length in M3_SCREW_LENGTHS
+            if length >= MOUNT_PLATE_THICKNESS + nut_seat + M3_NUT_DEPTH + 0.5
+        )
+        screw = build_m3_socket_screw(length, axis="z").moved(
+            wrist_motor_location * Pos(0, y, -MOUNT_PLATE_THICKNESS + length / 2)
+        )
+        screw.label = f"installed_M3_fastener_wrist_motor_{index:02d}"
+        nut = build_m3_nut(axis="z").moved(
+            wrist_motor_location * Pos(0, y, nut_seat + M3_NUT_DEPTH / 2)
+        )
+        nut.label = f"installed_M3_nut_wrist_motor_{index:02d}"
+        wrist_motor_fasteners.extend((screw, nut))
     shoulder_driver_pulley = build_shoulder_driver_pulley().moved(
         Pos(
             shoulder_pulley_x,
@@ -657,6 +689,7 @@ def build_model(configuration: str = "mechanical") -> Compound:
         forearm,
         elbow_pulley,
         wrist_motor,
+        *wrist_motor_fasteners,
         wrist_driver_tray,
         wrist_driver_pulley,
         wrist_belt,

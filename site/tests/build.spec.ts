@@ -28,7 +28,7 @@ for (const preset of buildPresets) {
   for (const speed of [0.5, 1, 4]) {
     test(`${preset.name} completes at ${speed}x`, async ({ page }, info) => {
       test.skip(info.project.name !== "desktop", "Desktop only");
-      const budget = (buildSeconds / speed) * 1000 * 1.5;
+      const budget = (Math.max(buildSeconds, preset.bricks.length * 20) / speed) * 1000 * 1.5;
       test.setTimeout(budget + 90_000);
       const { hero, errors } = await openBuilder(page, preset.name, speed);
       const started = Date.now();

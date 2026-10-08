@@ -490,14 +490,21 @@ def build_model():
             depth=motor_mount_through_x,
         )
 
+        # The offset plate joins the forearm through ribs and the center web.
+        # Clear the complete stack, including the ear pads, for through bolts.
+        ear_slot_start_x = (
+            WRIST_ASSEMBLY_OFFSET_X - LINK_THICKNESS_X / 2
+            - MOTOR_FACE_THICKNESS_X - MOTOR_EAR_STANDOFF_X - 1.0
+        )
+        ear_slot_depth = LINK_THICKNESS_X / 2 + 1.0 - ear_slot_start_x
         for y in (-BYJ48_EAR_SPACING / 2, BYJ48_EAR_SPACING / 2):
             _vertical_slot_along_x(
                 y,
                 MOTOR_SLOT_CENTER_Z,
                 MOTOR_SLOT_TRAVEL,
                 BYJ48_MOUNT_HOLE,
-                x_start=face_x - motor_mount_through_x / 2,
-                depth=motor_mount_through_x,
+                x_start=ear_slot_start_x,
+                depth=ear_slot_depth,
             )
 
         with Locations((WRIST_CLEVIS_GAP_CENTER_X, 0, TOP_WRIST_PIVOT_Z)):

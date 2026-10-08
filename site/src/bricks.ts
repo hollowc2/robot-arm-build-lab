@@ -53,6 +53,20 @@ const brick = (type: BrickType, color: BrickColor, u: number, layer: number, rot
   type, color, cell: [u, v, layer], rotation,
 });
 
+// Open rows leave room for the real finger pads. Each column clutches the course
+// below; the baseplate ties the rows together. These are volumetric structures,
+// with depth as well as height, rather than longer versions of the small wall.
+function sculpture(id: string, name: string, blurb: string, heights: number[][], colors: BrickColor[]): BuildPreset {
+  const bricks: PresetBrick[] = [];
+  const layers = Math.max(...heights.flat());
+  for (let layer = 0; layer < layers; layer += 1) {
+    heights.forEach((row, v) => row.forEach((height, u) => {
+      if (layer < height) bricks.push(brick("2x2", colors[layer % colors.length], u * 2, layer, 0, (v - (heights.length - 1) / 2) * 4));
+    }));
+  }
+  return { id, name, blurb, bricks };
+}
+
 export const buildPresets: BuildPreset[] = [
   {
     id: "wall",
@@ -103,6 +117,19 @@ export const buildPresets: BuildPreset[] = [
       brick("2x2", "green", 4, 6),
     ],
   },
+  sculpture("pavilion", "Garden pavilion", "Two open colonnades · five courses", [
+    [5, 5, 5, 5, 5], [5, 5, 5, 5, 5],
+  ], ["white", "tan", "green"]),
+  sculpture("terraces", "Terraced monument", "Four stepped terraces with finger-clearance lanes", [
+    [4, 4, 5, 4, 4], [5, 6, 7, 6, 5], [5, 6, 7, 6, 5], [4, 4, 5, 4, 4],
+  ], ["tan", "yellow", "orange", "red"]),
+  sculpture("skyline", "City skyline", "Three streets of rising towers", [
+    [7, 9, 12, 9, 7], [10, 12, 18, 12, 10], [7, 9, 12, 9, 7],
+  ], ["blue", "white"]),
+  sculpture("citadel", "Grand citadel", "Five open avenues around a central keep", [
+    [10, 10, 10, 10, 10], [9, 10, 12, 10, 9], [8, 10, 14, 10, 8],
+    [9, 10, 12, 10, 9], [10, 10, 10, 10, 10],
+  ], ["white", "blue", "blue", "tan", "tan"]),
 ];
 
 // Studs along (u) and across (v) the build line once the rotation is applied.

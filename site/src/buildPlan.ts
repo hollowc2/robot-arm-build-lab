@@ -29,6 +29,10 @@ export const carryClearance = 16;
 export const buildSite = { baseAngle: 222, start: 175 };
 // Supply bricks wait on two arcs in front of the arm, picked in assembly order.
 export const supplyLayout = { centerAngle: 138, radii: [190, 255], spacing: 42 };
+// Replenish this bounded tray between batches instead of wrapping hundreds of
+// simultaneously waiting bricks around the arm and through the build site.
+export const supplyBatchSize = 12;
+export const supplyBatch = (index: number) => Math.floor(index / supplyBatchSize);
 
 export type BuildStage = "approach" | "lower" | "grip" | "lift" | "carry" | "align" | "place" | "release" | "retract" | "park";
 export const stageVerbs: Record<BuildStage, string> = {
@@ -150,11 +154,13 @@ export function targetPose(entry: PresetBrick): BrickPose {
 }
 
 function supplySlots(count: number) {
-  const inner = Math.ceil(count / 2);
+  const capacity = Math.min(count, supplyBatchSize);
+  const inner = Math.ceil(capacity / 2);
   return Array.from({ length: count }, (_, index) => {
-    const ring = index < inner ? 0 : 1;
-    const slots = ring === 0 ? inner : count - inner;
-    const slot = ring === 0 ? index : index - inner;
+    const trayIndex = index % capacity;
+    const ring = trayIndex < inner ? 0 : 1;
+    const slots = ring === 0 ? inner : capacity - inner;
+    const slot = ring === 0 ? trayIndex : trayIndex - inner;
     const radius = supplyLayout.radii[ring];
     const step = THREE.MathUtils.radToDeg(supplyLayout.spacing / radius);
     const angle = THREE.MathUtils.degToRad(supplyLayout.centerAngle + (slot - (slots - 1) / 2) * step);
@@ -170,7 +176,10 @@ export function planBuild(preset: BuildPreset, arm: ArmModel): BuildPlan {
   const gripAt = (center: THREE.Vector3) => center.clone().add(new THREE.Vector3(0, 0, gripAboveCenter));
   let previous: JointAngles = { ...homePose };
   const solve = (point: THREE.Vector3, gripper: number, what: string) => {
-    const pose = arm.solve(point, gripper, previous);
+    // Most build moves use the same straight-down elbow branch. The exact IK
+    // avoids numerical searches for thousands of poses in a large preset.
+    const pose = solveStraightDown(point, gripper, arm.root.position.z, Math.sign(previous.elbow) || -1)
+      ?? arm.solve(point, gripper, previous);
     const miss = arm.probe(pose).distanceTo(point);
     if (miss > 0.05 || Math.abs(downTilt(pose)) > 0.05) problems.push(`${what} is out of reach (${miss.toFixed(1)} mm short)`);
     previous = pose;
@@ -249,7 +258,8 @@ export function planBuild(preset: BuildPreset, arm: ArmModel): BuildPlan {
     arm.grip.getWorldPosition(gripPosition);
     arm.grip.getWorldQuaternion(pickQuaternion);
     const fingers = gripperBoxes(gripPosition, pickQuaternion, 200);
-    const hits = bricks.slice(index + 1).filter((other) => fingers.some((part) => boxesOverlap(part, brickBox(other, other.supply))));
+    const hits = bricks.slice(index + 1).filter((other) => supplyBatch(other.index) === supplyBatch(index)
+      && fingers.some((part) => boxesOverlap(part, brickBox(other, other.supply))));
     if (hits.length) problems.push(`${preset.name} brick ${index + 1}: the open fingers would hit supply brick ${hits[0].index + 1}`);
   });
 
