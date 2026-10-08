@@ -94,6 +94,8 @@ CI restores CAD exports only on an exact cache-key match. The key includes Pytho
 
 Caches from a PR are scoped to that PR; main must populate its own cache after merge. New commits cancel older CI runs for the same PR. Main runs are retained so deployment can consume their tested artifacts.
 
+CI runs smoke tests with one browser worker so desktop and mobile software WebGL do not compete for CPU on the same runner. Both projects keep their original assertions and timeouts.
+
 ## Deployment
 
 After successful CI for a push to `main`, `deploy.yml` downloads that run's tested `robot-arm-site-dist` artifact. It skips failed CI, PR runs, and revisions superseded on main before preparing deployment. It uses the `production` GitHub Environment before syncing the bundle to Helios:

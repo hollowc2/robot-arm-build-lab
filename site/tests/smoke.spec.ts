@@ -80,6 +80,34 @@ test("landing page runs the brick builder and part viewer", async ({ page }) => 
   await expect(stage).toHaveAttribute("data-state", "stl", { timeout: 15_000 });
 });
 
+test("mobile controls keep the build moving with the canvas off screen", async ({ page }, testInfo) => {
+  test.skip(testInfo.project.name !== "mobile", "Mobile controls sit below the canvas");
+  test.setTimeout(90_000);
+  // A slow or missing font must not change whether the controls can run the arm.
+  await page.route("**/*.woff2", (route) => route.abort());
+  await page.goto("/");
+  const hero = page.locator("#simulator");
+  await expect(hero).toHaveAttribute("data-meshes", "48", { timeout: 30_000 });
+  await hero.getByRole("radio", { name: /Pyramid/ }).click();
+  await page.getByLabel("Simulation speed").fill("4");
+  await hero.getByRole("button", { name: "Start" }).click();
+
+  // Leave the controls visible while moving the canvas beyond the visibility margin.
+  await hero.locator(".hero-stage").evaluate((canvas) => {
+    window.scrollBy({ top: canvas.getBoundingClientRect().bottom + 160, behavior: "instant" });
+  });
+  const bounds = await hero.evaluate((element) => ({
+    canvasBottom: element.querySelector(".hero-stage")!.getBoundingClientRect().bottom,
+    controlsBottom: element.querySelector(".dock")!.getBoundingClientRect().bottom,
+    controlsTop: element.querySelector(".dock")!.getBoundingClientRect().top,
+    viewportHeight: window.innerHeight,
+  }));
+  expect(bounds.canvasBottom).toBeLessThan(-120);
+  expect(bounds.controlsBottom).toBeGreaterThan(0);
+  expect(bounds.controlsTop).toBeLessThan(bounds.viewportHeight);
+  await expect(hero).toHaveAttribute("data-held", "tan 2×4", { timeout: 60_000 });
+});
+
 test("old simulator URL lands on the main page", async ({ page }) => {
   await page.goto("simulator/");
   await expect(page).toHaveURL(/\/robot-arm\/#simulator$/);
