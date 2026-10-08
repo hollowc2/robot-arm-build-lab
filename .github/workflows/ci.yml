@@ -5,34 +5,63 @@ on:
   push:
     branches: [main]
 
+concurrency:
+  group: ci-${{ github.event.pull_request.number || github.ref }}
+  cancel-in-progress: ${{ github.event_name == 'pull_request' }}
+
 jobs:
   cad:
     name: CAD and Generated Metadata
-    runs-on: ubuntu-latest
+    runs-on: ubuntu-24.04
     steps:
       - uses: actions/checkout@v4
 
+      # Cache only validated geometry, not revision-specific catalog/progress JSON.
+      # No restore-keys: a changed CAD input must run all tests and exports again.
+      - name: Restore validated CAD artifacts
+        id: cad-cache
+        uses: actions/cache/restore@v4
+        with:
+          path: |
+            models/out/
+            site/public/generated/models/
+          key: cad-v1-${{ runner.os }}-${{ runner.arch }}-ubuntu24-py311-${{ hashFiles('models/**/*.py', 'scripts/**/*.py', 'tests/**/*.py', 'firmware/**', 'pyproject.toml', 'uv.lock', '.github/workflows/ci.yml') }}
+
       - name: Install uv
+        if: steps.cad-cache.outputs.cache-hit != 'true'
         uses: astral-sh/setup-uv@v5
 
       - name: Set up Python
+        if: steps.cad-cache.outputs.cache-hit != 'true'
         run: uv python install 3.11
 
       - name: Install CAD dependencies
-        run: uv sync
+        if: steps.cad-cache.outputs.cache-hit != 'true'
+        run: uv sync --locked
 
       - name: Run CAD tests
+        if: steps.cad-cache.outputs.cache-hit != 'true'
         run: uv run python -m pytest
 
       - name: Generate public metadata
         run: |
-          uv run python scripts/generate_catalog.py
-          uv run python scripts/generate_progress_feed.py
+          python3 scripts/generate_catalog.py
+          python3 scripts/generate_progress_feed.py
 
       - name: Export CAD artifacts
+        if: steps.cad-cache.outputs.cache-hit != 'true'
         run: |
           uv run python scripts/export_models.py
           uv run python scripts/publish_web_models.py
+
+      - name: Save validated CAD artifacts
+        if: steps.cad-cache.outputs.cache-hit != 'true'
+        uses: actions/cache/save@v4
+        with:
+          path: |
+            models/out/
+            site/public/generated/models/
+          key: ${{ steps.cad-cache.outputs.cache-primary-key }}
 
       - name: Upload CAD exports
         uses: actions/upload-artifact@v4
@@ -65,10 +94,12 @@ jobs:
         uses: actions/setup-node@v4
         with:
           node-version: 22
+          cache: npm
+          cache-dependency-path: site/package-lock.json
 
       - name: Install site dependencies
         working-directory: site
-        run: npm install
+        run: npm ci
 
       - name: Install Playwright browser
         working-directory: site
@@ -84,7 +115,8 @@ jobs:
 
       - name: Smoke test site
         working-directory: site
-        run: npm run smoke
+        # Desktop/mobile software WebGL compete for the same runner's CPU.
+        run: npm run smoke -- --workers=1
 
       - name: Upload static site
         uses: actions/upload-artifact@v4

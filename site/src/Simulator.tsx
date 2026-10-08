@@ -117,6 +117,7 @@ export function Simulator({ children, facts }: { children: React.ReactNode; fact
     let frame = 0;
     let disposed = false;
     let visible = true;
+    let canvasVisible = true;
     let loadedCount = 0;
     setLoaded(0);
     setMode("loading");
@@ -141,8 +142,13 @@ export function Simulator({ children, facts }: { children: React.ReactNode; fact
     controls.maxDistance = 2600;
     controls.maxPolarAngle = Math.PI * 0.53;
     const stopWheelGuard = guardWheelZoom(mount, controls);
-    const stopWatching = watchVisibility(mount, (isVisible) => {
+    // On mobile the controls sit below the canvas. Keep motion running while
+    // either is in view, but avoid drawing a canvas that has scrolled away.
+    const stopWatching = watchVisibility(mount.parentElement!, (isVisible) => {
       visible = isVisible;
+    });
+    const stopWatchingCanvas = watchVisibility(mount, (isVisible) => {
+      canvasVisible = isVisible;
     });
 
     scene.add(new THREE.HemisphereLight("#fff3e6", "#15181b", 1.7));
@@ -801,7 +807,7 @@ export function Simulator({ children, facts }: { children: React.ReactNode; fact
       publish();
       writeReadouts(renderPose, time);
       controls.update();
-      renderer.render(scene, camera);
+      if (canvasVisible) renderer.render(scene, camera);
     };
     render();
 
@@ -811,6 +817,7 @@ export function Simulator({ children, facts }: { children: React.ReactNode; fact
       resizeObserver.disconnect();
       stopWheelGuard();
       stopWatching();
+      stopWatchingCanvas();
       controls.dispose();
       actionsRef.current = noActions;
       disposeObject(scene);
