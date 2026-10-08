@@ -23,7 +23,7 @@ MODEL_REGISTRY: tuple[ModelEntry, ...] = (
     ModelEntry("models.azimuth_turntable_shoulder_cleat", "azimuth_turntable_shoulder_cleat", "Azimuth Turntable Shoulder Cleat", "base", "prototype", True),
     ModelEntry("models.bicep_arm_link", "bicep_arm_link", "Bicep Arm Link", "arm", "prototype", True),
     ModelEntry("models.forearm_link", "forearm_link", "Forearm Link", "arm", "prototype", True,
-               hardware=("2 × M3 socket screws (40 mm)", "2 × M3 nuts", "28BYJ-48 wrist motor")),
+               hardware=("2 × M3 socket screws (6 mm)", "28BYJ-48 wrist motor")),
     ModelEntry("models.electronics_mounts", "electronics_mounts", "Electronics Mounts", "electronics", "draft", True),
     ModelEntry("models.wire_management", "wire_management", "Wire Management", "electronics", "draft", True),
     ModelEntry("models.joint_shafts", "joint_shafts", "Joint Shafts", "hardware", "reference", False),

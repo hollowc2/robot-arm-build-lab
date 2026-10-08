@@ -146,7 +146,7 @@ def test_azimuth_flush_motor_mount_and_recessed_arduino_fit() -> None:
 def test_master_assembly_has_all_major_children(master_assembly) -> None:
     assembly = master_assembly
 
-    assert len(assembly.children) == 79
+    assert len(assembly.children) == 77
     assert assembly.volume > 0
 
 
@@ -556,40 +556,42 @@ def test_master_assembly_includes_single_wrist_motor(master_assembly) -> None:
     assert wrist_center_x < forearm_x - forearm_link.LINK_THICKNESS_X / 2
 
 
-def test_wrist_motor_through_bolts_clamp_both_ears_without_collisions(master_assembly) -> None:
-    from build123d import Align, Cylinder, Pos
-    from models.common import BYJ48_EAR_SPACING, M3_NUT_DEPTH
+def test_wrist_motor_short_screws_seat_in_blind_plastic_pilots(master_assembly) -> None:
+    from build123d import Pos
+    from models import forearm_link
+    from models.common import BYJ48_EAR_SPACING
     from models.byj48_stepper_motor import MOUNT_PLATE_THICKNESS
 
     children = {child.label: child for child in master_assembly.children}
     motor = children["wrist_28BYJ-48_stepper_motor"]
     can = next(part for part in motor.children if part.label == "byj48_can")
-    front_x = can.bounding_box().max.X - 1.5  # front boss, beyond the flange
+    front_x = can.bounding_box().max.X - 1.5
     center_z = children["wrist_driver_20T_HTD3M_5mm_double_D_shaft"].bounding_box().center().Z
     forearm = children["forearm_link"]
+    assert not any(label.startswith("installed_M3_nut_wrist_motor_") for label in children)
+    engagement = forearm_link.MOTOR_MOUNT_SCREW_LENGTH - MOUNT_PLATE_THICKNESS
+    assert engagement == pytest.approx(4.4)
     for index, y in enumerate((-BYJ48_EAR_SPACING / 2, BYJ48_EAR_SPACING / 2), 1):
         screw = children[f"installed_M3_fastener_wrist_motor_{index:02d}"]
-        nut = children[f"installed_M3_nut_wrist_motor_{index:02d}"]
-        assert screw.bounding_box().center().Y == pytest.approx(y)
-        assert screw.bounding_box().center().Z == pytest.approx(center_z)
-        assert screw.bounding_box().min.X + 3 == pytest.approx(front_x - MOUNT_PLATE_THICKNESS)
-        assert screw.bounding_box().max.X > nut.bounding_box().max.X + 0.49
-        assert nut.bounding_box().size.X == pytest.approx(M3_NUT_DEPTH)
-        for other in (forearm, *motor.children,
-                      children["wrist_driver_20T_HTD3M_5mm_double_D_shaft"],
-                      children["wrist_20T_to_32T_HTD3M_open_belt_visual"]):
-            assert (screw & other).volume == pytest.approx(0, abs=1e-3)
-            assert (nut & other).volume == pytest.approx(0, abs=1e-3)
-        # Both closed slots must clear a shank through the complete rib/web at
-        # either tension-adjustment extreme as well as the installed position.
-        for dz in (-5, 0, 5):
-            shank = Pos(front_x + 18, y, center_z + dz) * Cylinder(
-                1.5, 40, rotation=(0, 90, 0), align=(Align.CENTER,) * 3
-            )
-            assert (shank & forearm).volume == pytest.approx(0, abs=1e-3)
+        bbox = screw.bounding_box()
+        assert bbox.center().Y == pytest.approx(y)
+        assert bbox.center().Z == pytest.approx(center_z)
+        assert bbox.min.X + 3 == pytest.approx(front_x - MOUNT_PLATE_THICKNESS)
+        assert bbox.max.X == pytest.approx(front_x + engagement)
+        for dz in forearm_link.MOTOR_MOUNT_POSITIONS_Z:
+            moved = screw.moved(Pos(0, 0, dz))
+            # The simplified screw shank overlaps the pilot's thread allowance.
+            assert (moved & forearm).volume > 1
+            assert not forearm.is_inside((front_x + engagement, y, center_z + dz))
+            assert forearm.is_inside((front_x + forearm_link.MOTOR_MOUNT_PILOT_DEPTH + 0.1,
+                                      y, center_z + dz))
+            for other in (*motor.children,
+                          children["wrist_driver_20T_HTD3M_5mm_double_D_shaft"],
+                          children["wrist_20T_to_32T_HTD3M_open_belt_visual"]):
+                assert (moved & other.moved(Pos(0, 0, dz))).volume == pytest.approx(0, abs=1e-3)
 
 
-def test_forearm_has_integrated_closed_slot_wrist_motor_mount() -> None:
+def test_forearm_has_integrated_blind_pilot_wrist_motor_mount() -> None:
     from models import forearm_link
 
     model = forearm_link.build_model()
@@ -642,7 +644,7 @@ def test_forearm_has_integrated_closed_slot_wrist_motor_mount() -> None:
     )
 
     # The adjustment features are closed at both ends, unlike the former
-    # downward-open fork, while the center of each ear slot remains clear.
+    # downward-open fork, while the center of each pilot remains clear.
     closed_end_offset = forearm_link.MOTOR_EAR_STANDOFF_WIDTH_YZ / 2 + 1.0
     for y in (
         -forearm_link.BYJ48_EAR_SPACING / 2,

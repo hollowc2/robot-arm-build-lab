@@ -48,7 +48,7 @@ cd site && npm run build
 
 The export also creates the rigid-link `simulator_*` meshes used by the simulator at the top of `/robot-arm/`. The old `/robot-arm/simulator/` URL redirects there.
 
-The simulator builds small interlocking-brick models. Presets are plain data in `site/src/bricks.ts` (brick type, color, grid cell, rotation, listed in assembly order); `site/src/buildPlan.ts` turns one into supply positions and arm waypoints and rejects layouts that are unsupported, out of reach, or would put the gripper through another brick. `npm run test:motion` (in `site/`) checks every preset headlessly at 0.5×, 1× and 4×; `BUILD_MATRIX=1 npx playwright test tests/build.spec.ts --project=desktop` runs the same builds in a GPU-backed browser.
+The simulator builds 50–250-brick architectural models. Presets are plain data in `site/src/bricks.ts` (brick type, color, grid cell, rotation, listed in assembly order); `site/src/buildPlan.ts` turns one into supply positions and arm waypoints and rejects layouts that are unsupported, out of reach, or would put the gripper through another brick. `npm run test:motion` (in `site/`) checks every architectural preset to completion at 4× and mixed-size regression fixtures at 0.5×, 1× and 4×; `BUILD_MATRIX=1 npx playwright test tests/build.spec.ts --project=desktop` runs the same builds in a GPU-backed browser.
 
 ## Current CAD Notes
 
@@ -57,9 +57,9 @@ The simulator builds small interlocking-brick models. Presets are plain data in 
 - The geared base stator carries the fixed center boss/bearing stack; keep the 120T gear center bore and vertical stack clear of that boss when adjusting the base assembly.
 - The shoulder and elbow driven pulleys are held by four M3 screws that drive from counterbores in the link (bicep at the shoulder, forearm hub at the elbow) into the pulley's thread holes, so the heads stay inside the clevis. The 8 mm and 5 mm steel shafts, not these screws, carry each joint.
 - At the wrist, the gripper tongue sits snug on the 5 mm shaft, which turns in the forearm's two 625 bearings; the 32T pulley's four M3 screws thread into the tongue. The 28BYJ-48 stands 2 mm off the forearm plate on slotted ear pads so its front boss clears the 20T pulley and its shaft ends 8 mm into the pulley bore.
-- Two M3 × 40 mm socket screws clamp the 28BYJ-48 ears through the complete forearm mount with M3 nuts on the opposite face. The closed adjustment slots pass through the pads, ribs and web, so both screws can slide over the full 10 mm belt-tension range.
+- Two M3 × 6 mm socket screws fasten the 28BYJ-48 ears directly into Ø2.5 mm blind pilots in the plastic pads, with 4.4 mm of engagement and no nuts. Three pilot pairs at −5, 0 and +5 mm retain the 10 mm belt-tension range in discrete positions.
 
-The simulator includes four larger architectural builds: Garden pavilion (50 bricks), Terraced monument (100), City skyline (150), and Grand citadel (250). These structures extend across the baseplate as well as upward. Open lanes between rows leave room for the physical gripper; each column clutches the bricks below it. The supply tray automatically replenishes every 12 bricks, keeping all pickups within reach. Reset restores only the first batch. The existing speed control applies to the entire build, including refills; larger builds take longer to complete.
+The simulator offers four architectural builds: Garden pavilion (50 bricks), Terraced monument (100), City skyline (150), and Grand citadel (250). These structures extend across the baseplate as well as upward. Open lanes between rows leave room for the physical gripper; each column clutches the bricks below it. The supply tray automatically replenishes every 12 bricks, keeping all pickups within reach. Reset restores only the first batch. The existing speed control applies to the entire build, including refills; larger builds take longer to complete.
 - `models/master_assembly.py` supports `mechanical` and `service` configurations. The default remains `mechanical`.
 - The electronics enclosure is a prototype until physical fit, temperature, and interlock tests are recorded.
 
