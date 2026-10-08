@@ -14,6 +14,11 @@ test("architectural builds refill the tray and reset cleanly", async ({ page }, 
     await expect(hero.getByRole("progressbar")).toHaveAttribute("aria-valuemax", String(count));
     await expect(hero).toHaveAttribute("data-build", "idle");
     await expect(hero).toHaveAttribute("data-supply", "12");
+    const bounds = await hero.evaluate((node) => ({
+      heroBottom: node.getBoundingClientRect().bottom,
+      controlsBottom: node.querySelector(".dock")!.getBoundingClientRect().bottom,
+    }));
+    expect(bounds.controlsBottom).toBeLessThanOrEqual(bounds.heroBottom);
   }
   await page.getByLabel("Simulation speed").fill("4");
   await hero.getByRole("button", { name: "Start" }).click();

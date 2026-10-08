@@ -217,6 +217,23 @@ canvas {
   pointer-events: none;
 }
 
+/* Let the desktop simulator grow when its controls need more than one screen. */
+@media (min-width: 1000px) {
+  .hero {
+    height: auto;
+    min-height: max(760px, 100svh);
+  }
+
+  .hero-rail {
+    position: relative;
+    top: auto;
+    bottom: auto;
+    min-height: max(760px, 100svh);
+    padding-top: calc(var(--nav-h) + clamp(28px, 6vh, 72px));
+    padding-bottom: 32px;
+  }
+}
+
 .kicker {
   display: flex;
   align-items: center;
