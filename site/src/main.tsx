@@ -22,7 +22,7 @@ function parseNote(raw: unknown, path: string) {
 
 const jointSpecs = [
   { id: "J1", name: "Base yaw", range: "360°", ratio: "6:1", motor: "NEMA 17", drive: "20T → 120T herringbone gear" },
-  { id: "J2", name: "Shoulder", range: "±130°", ratio: "5:1", motor: "NEMA 17", drive: "16T → 80T HTD 3M belt" },
+  { id: "J2", name: "Shoulder", range: "±125°", ratio: "5:1", motor: "NEMA 17", drive: "16T → 80T HTD 3M belt" },
   { id: "J3", name: "Elbow", range: "±135°", ratio: "3.75:1", motor: "NEMA 17", drive: "16T → 60T HTD 3M belt" },
   { id: "J4", name: "Wrist pitch", range: "−150° / +18°", ratio: "1.6:1", motor: "28BYJ-48", drive: "20T → 32T HTD 3M belt" },
   { id: "J5", name: "Gripper", range: "0–24 mm", ratio: "1:1", motor: "SG90 servo", drive: "Servo horn → parallel jaws" },
