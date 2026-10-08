@@ -15,13 +15,13 @@ content; the canonical CAD source lives in this repo's `models/` directory.
 - `site/`: Vite + React + TypeScript single-page site: a live Three.js/cannon-es simulator as the hero, plus anatomy, part viewer, process, and build log sections.
 - `.github/workflows/`: CI for CAD/test/site build and deployment scaffolding.
 
-Generated STEP/STL/glTF/render files are not committed by default. CI regenerates them from source, uploads heavyweight files as Actions artifacts, and copies small JSON/web assets into the static site build.
+Generated STEP/STL/glTF/render files are not committed by default. CI builds or restores validated CAD exports, uploads heavyweight files as Actions artifacts, and copies small JSON/web assets into the static site build.
 
 ## Local CAD
 
 ```bash
 UV_CACHE_DIR=.uv-cache UV_PYTHON_INSTALL_DIR=.uv-python uv sync
-uv run pytest
+uv run python -m pytest
 uv run python scripts/generate_catalog.py
 uv run python scripts/export_models.py
 ```
@@ -77,11 +77,30 @@ npm run smoke
 
 The site is built with `base: "/robot-arm/"` and uses bundled assets only.
 
+## Faster Iteration
+
+For a site-only edit, reuse your existing `site/public/generated/models/` meshes and run the site build, motion tests, and smoke tests. Regenerate the meshes when CAD sources or export scripts change.
+
+For a CAD edit, run the affected tests first, then the complete suite before opening a PR:
+
+```bash
+uv run python -m pytest tests/test_robot_parts.py -k wrist
+uv run python -m pytest
+```
+
+Always invoke pytest through `python -m pytest`; the environment's standalone pytest launcher may have a stale shebang. Run the full CAD suite and master-assembly exports sequentially, never together on the same machine. The tests build one master assembly per session and give each test an independent deep copy.
+
+CI restores CAD exports only on an exact cache-key match. The key includes Python sources under `models/`, `scripts/`, and `tests/`, all firmware files, `pyproject.toml`, `uv.lock`, and the CI workflow, plus the runner platform and Python version family. Any changed input or missing cache runs the full CAD suite and regenerates exports. When introducing CAD input files outside these paths, extend the key before relying on reuse. Catalog and progress JSON regenerate for every revision; the site build, motion tests, and desktop/mobile smoke checks always run.
+
+Caches from a PR are scoped to that PR; main must populate its own cache after merge. New commits cancel older CI runs for the same PR. Main runs are retained so deployment can consume their tested artifacts.
+
 ## Deployment
 
-The `deploy.yml` workflow builds on `main` and includes an explicit `production` GitHub Environment gate before syncing `site/dist/` to Helios:
+After successful CI for a push to `main`, `deploy.yml` downloads that run's tested `robot-arm-site-dist` artifact. It skips failed CI, PR runs, and revisions superseded on main before preparing deployment. It uses the `production` GitHub Environment before syncing the bundle to Helios:
 
 `/var/www/billybitcoin.cloud/html/robot-arm/`
+
+Manual `workflow_dispatch` retains the rebuild option, with `dry_run` defaulting to true. A deployed run retains its own site artifact, so rerunning its deploy job can restore that bundle while the artifact remains available.
 
 Required `production` environment secrets:
 
