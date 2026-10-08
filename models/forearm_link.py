@@ -24,8 +24,8 @@ try:
         BEARING_625_OD,
         BEARING_625_WIDTH,
         BYJ48_BODY,
-        BYJ48_MOUNT_HOLE,
         BYJ48_EAR_SPACING,
+        M3_TAP_HOLE,
         M3_CLEARANCE,
         M3_COUNTERBORE_DEPTH,
         ELBOW_PULLEY_BOLT_CIRCLE,
@@ -43,8 +43,8 @@ except ModuleNotFoundError:
         BEARING_625_OD,
         BEARING_625_WIDTH,
         BYJ48_BODY,
-        BYJ48_MOUNT_HOLE,
         BYJ48_EAR_SPACING,
+        M3_TAP_HOLE,
         M3_CLEARANCE,
         M3_COUNTERBORE_DEPTH,
         ELBOW_PULLEY_BOLT_CIRCLE,
@@ -83,8 +83,12 @@ MOTOR_MOUNT_BOTTOM_Z = MOTOR_SHAFT_Z - MOTOR_FACE_HEIGHT_Z / 2
 MOTOR_BODY_POCKET_DEPTH = MOTOR_FACE_THICKNESS_X
 MOTOR_BODY_POCKET_CLEARANCE = 0.35
 # The driver pulley's inner face sits flush with the plate's outer face, so
-# slotted pads stand the motor's ears off the plate: the 1.5 mm front boss
+# pilot-bearing pads stand the motor's ears off the plate: the 1.5 mm front boss
 # clears the pulley by 0.5 mm and the shaft ends 8 mm into the pulley bore.
+MOTOR_MOUNT_SCREW_LENGTH = 6.0
+MOTOR_MOUNT_PILOT_DEPTH = 5.0
+# Three blind pilot pairs retain the original 10 mm tension adjustment range.
+MOTOR_MOUNT_POSITIONS_Z = (-MOTOR_SLOT_TRAVEL / 2, 0.0, MOTOR_SLOT_TRAVEL / 2)
 MOTOR_EAR_STANDOFF_X = 2.0
 MOTOR_EAR_STANDOFF_WIDTH_YZ = 10.0
 MOTOR_SHAFT_CLEARANCE = 10.0
@@ -490,22 +494,17 @@ def build_model():
             depth=motor_mount_through_x,
         )
 
-        # The offset plate joins the forearm through ribs and the center web.
-        # Clear the complete stack, including the ear pads, for through bolts.
-        ear_slot_start_x = (
+        # Blind tap pilots replace through slots: the screws grip plastic, and
+        # three mounting positions retain belt adjustment without loose nuts.
+        pilot_start_x = (
             WRIST_ASSEMBLY_OFFSET_X - LINK_THICKNESS_X / 2
-            - MOTOR_FACE_THICKNESS_X - MOTOR_EAR_STANDOFF_X - 1.0
+            - MOTOR_FACE_THICKNESS_X - MOTOR_EAR_STANDOFF_X
         )
-        ear_slot_depth = LINK_THICKNESS_X / 2 + 1.0 - ear_slot_start_x
         for y in (-BYJ48_EAR_SPACING / 2, BYJ48_EAR_SPACING / 2):
-            _vertical_slot_along_x(
-                y,
-                MOTOR_SLOT_CENTER_Z,
-                MOTOR_SLOT_TRAVEL,
-                BYJ48_MOUNT_HOLE,
-                x_start=ear_slot_start_x,
-                depth=ear_slot_depth,
-            )
+            for dz in MOTOR_MOUNT_POSITIONS_Z:
+                with Locations((pilot_start_x + MOTOR_MOUNT_PILOT_DEPTH / 2,
+                                y, MOTOR_SLOT_CENTER_Z + dz)):
+                    _x_cylinder(M3_TAP_HOLE / 2, MOTOR_MOUNT_PILOT_DEPTH, Mode.SUBTRACT)
 
         with Locations((WRIST_CLEVIS_GAP_CENTER_X, 0, TOP_WRIST_PIVOT_Z)):
             _x_cylinder(

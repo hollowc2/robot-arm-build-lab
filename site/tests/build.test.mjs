@@ -8,6 +8,7 @@ import { brickHeight, buildPresets, studHeight, validateLayout } from "../src/br
 import { boxesOverlap, brickBox, followLine, gripperBoxes, openTravel, planBuild, supplyBatch, supplyBatchSize } from "../src/buildPlan.ts";
 import { ArmDriver, BuildSequencer } from "../src/buildRunner.ts";
 import { graspTravel } from "../src/grasp.ts";
+import { smallBuildFixtures } from "./small-build-fixtures.ts";
 import { releaseTravel } from "../src/gripper.ts";
 import { SimClock, simStep } from "../src/simClock.ts";
 
@@ -19,7 +20,8 @@ const load = (name) => {
 const jaws = [{ geometry: load("gripper_left"), side: -1 }, { geometry: load("gripper_right"), side: 1 }];
 // Matches the simulator, which grounds the arm on its lowest CAD support (asserted in grasp.test).
 const arm = createArmModel(46);
-const plans = new Map(buildPresets.map((preset) => [preset.id, planBuild(preset, arm)]));
+const regressionPresets = [...smallBuildFixtures, ...buildPresets];
+const plans = new Map(regressionPresets.map((preset) => [preset.id, planBuild(preset, arm)]));
 
 // Where a brick sits in the wrist frame, which is what the simulator hands to graspTravel.
 function inWristFrame(pose, brickPose) {
@@ -33,7 +35,7 @@ function inWristFrame(pose, brickPose) {
 }
 
 test("presets are supported, in a buildable order and squeezable across the jaws", () => {
-  assert.ok(buildPresets.length >= 4);
+  assert.deepEqual(buildPresets.map((preset) => preset.id), ["pavilion", "terraces", "skyline", "citadel"]);
   for (const preset of buildPresets) {
     assert.deepEqual(validateLayout(preset), [], preset.name);
     assert.ok(preset.bricks.length >= 6 && preset.bricks.length <= 250, `${preset.name} has ${preset.bricks.length} bricks`);
@@ -63,7 +65,7 @@ test("large builds reuse a bounded tray without overlapping waiting bricks", () 
 });
 
 test("layout validation catches bad assembly orders, overlaps and floating bricks", () => {
-  const wall = buildPresets.find((preset) => preset.id === "wall");
+  const wall = smallBuildFixtures.find((preset) => preset.id === "wall");
   // Upper course listed before the course it rests on.
   const reordered = { ...wall, bricks: [wall.bricks[2], ...wall.bricks.slice(0, 2), ...wall.bricks.slice(3)] };
   assert.match(validateLayout(reordered).join("\n"), /nothing placed beneath it/);

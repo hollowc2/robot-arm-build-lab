@@ -95,7 +95,6 @@ def main() -> None:
                 ),
                 "simulator_forearm": (
                     "installed_M3_fastener_elbow_pulley_", "installed_M3_fastener_wrist_motor_",
-                    "installed_M3_nut_wrist_motor_",
                 ),
                 "simulator_wrist_hardware": (
                     "installed_M3_fastener_servo_", "installed_M3_fastener_jaw_",

@@ -74,7 +74,7 @@ const palette = {
   gripper: "#5fb3a9",
 };
 // Purchased-part finishes exported beside each rigid link as `${link}_${finish}.stl`.
-const defaultPreset = "house";
+const defaultPreset = "pavilion";
 const brickMass = 0.03;
 // How close a released brick must be to its studs to click into place.
 const snapDistance = 2;

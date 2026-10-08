@@ -44,8 +44,8 @@ for (const preset of buildPresets) {
 
 test("speed changes mid-grip and mid-carry keep the build on track", async ({ page }, info) => {
   test.skip(info.project.name !== "desktop", "Desktop only");
-  test.setTimeout(400_000);
-  const { hero, errors } = await openBuilder(page, "Little house", 1);
+  test.setTimeout(600_000);
+  const { hero, errors } = await openBuilder(page, "Garden pavilion", 4);
   const speed = page.getByLabel("Simulation speed");
   await hero.getByRole("button", { name: "Start" }).click();
   for (const [stage, value] of [["Gripping", "4"], ["Carrying", "0.5"], ["Aligning", "2"], ["Gripping", "0.75"], ["Carrying", "4"]] as const) {
@@ -54,7 +54,7 @@ test("speed changes mid-grip and mid-carry keep the build on track", async ({ pa
     await expect(hero).toHaveAttribute("data-speed", value);
     await expect(hero).toHaveAttribute("data-build", "running");
   }
-  await expect(hero).toHaveAttribute("data-build", "complete", { timeout: 240_000 });
-  await expect(hero).toHaveAttribute("data-placed", "13");
+  await expect(hero).toHaveAttribute("data-build", "complete", { timeout: 400_000 });
+  await expect(hero).toHaveAttribute("data-placed", "50");
   expect(errors).toEqual([]);
 });
