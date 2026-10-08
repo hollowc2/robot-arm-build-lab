@@ -25,7 +25,7 @@ jobs:
           path: |
             models/out/
             site/public/generated/models/
-          key: cad-v1-${{ runner.os }}-${{ runner.arch }}-ubuntu24-py311-${{ hashFiles('models/**/*.py', 'scripts/**/*.py', 'tests/**/*.py', 'firmware/**', 'pyproject.toml', 'uv.lock', '.github/workflows/ci.yml') }}
+          key: cad-v1-${{ runner.os }}-${{ runner.arch }}-ubuntu24-py311-${{ hashFiles('models/**/*.py', 'scripts/**/*.py', 'tests/**/*.py', 'site/src/arm.ts', 'firmware/**', 'pyproject.toml', 'uv.lock', '.github/workflows/ci.yml') }}
 
       - name: Install uv
         if: steps.cad-cache.outputs.cache-hit != 'true'

@@ -56,7 +56,8 @@ test("large builds reuse a bounded tray without overlapping waiting bricks", () 
       const waiting = plan.bricks.slice(start, start + supplyBatchSize);
       for (let i = 0; i < waiting.length; i += 1) {
         const brick = waiting[i];
-        assert.ok(brick.supply.position.length() < 260);
+        // The elbow stops move the tray outward; it remains within a 300 mm envelope.
+        assert.ok(brick.supply.position.length() < 300);
         for (const other of waiting.slice(i + 1)) assert.equal(boxesOverlap(brickBox(brick, brick.supply), brickBox(other, other.supply)), false);
         if (start > 0) assert.ok(brick.supply.position.distanceTo(plan.bricks[i].supply.position) < 1e-9);
       }
