@@ -125,10 +125,16 @@ def test_mounted_boards_clear_structure_and_sampled_shoulder_motion(master_assem
     source = (Path(__file__).resolve().parents[1] / "site/src/arm.ts").read_text()
     match = re.search(r"shoulder: \[(-?\d+), (-?\d+)\]", source)
     lower, upper = map(int, match.groups())
+    # moved() deep-copies an anytree shape's parent hierarchy. Detach these
+    # global-coordinate bodies from this test's isolated assembly copy first,
+    # so every pose copies only its moving body rather than the whole robot.
+    moving_names = ("bicep_arm_link", "elbow_nema17_stepper_motor", "shoulder_80T_HTD3M_8p5_4xM3_25BC")
+    for name in moving_names:
+        children[name].parent = None
     pivot = AZIMUTH_TURNTABLE_Z + mount.PIVOT_Z
     for angle in sorted({lower, upper, *range(lower, upper + 1, 5)}):
         move = Pos(0, 0, pivot) * Rot(-angle, 0, 0) * Pos(0, 0, -pivot)
-        for name in ("bicep_arm_link", "elbow_nema17_stepper_motor", "shoulder_80T_HTD3M_8p5_4xM3_25BC"):
+        for name in moving_names:
             moving = children[name].moved(move)
             # AABB separation is a lower bound on solid separation. Skip OCC's
             # expensive component-level search only when that already proves
