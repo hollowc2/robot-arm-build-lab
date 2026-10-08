@@ -231,7 +231,20 @@ def board_mount_location(turntable_z=0.0):
             * Rot(0, 90, 0) * Rot(0, 0, -angle))
 
 
+def install_reference(board, location, label):
+    """Consume a reference and place its leaves without copying its parent tree.
+
+    build123d moved() copies anytree parents too. These fresh local-coordinate
+    leaves must be detached before placement, just like the purchased motors.
+    """
+    leaves = tuple(board.children)
+    for leaf in leaves:
+        leaf.parent = None
+    return Compound(children=[leaf.moved(location) for leaf in leaves], label=label)
+
+
 def build_model():
     return Compound(children=[build_expansion(),
-                              build_devkit().moved(Pos(SOCKET_CENTER_X, 0, DEVKIT_SEATED_Z))],
+                              install_reference(build_devkit(), Pos(SOCKET_CENTER_X, 0, DEVKIT_SEATED_Z),
+                                                "seated_esp32_devkit_30pin")],
                     label="esp32_seated_board_pair")

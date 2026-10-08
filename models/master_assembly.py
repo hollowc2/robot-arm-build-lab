@@ -601,17 +601,16 @@ def build_model(configuration: str = "mechanical") -> Compound:
 
     from models.esp32_boards import (
         PCB_THICKNESS, SOCKET_CENTER_X, DEVKIT_SEATED_Z,
-        build_expansion, build_devkit, board_mount_location,
+        build_expansion, build_devkit, board_mount_location, install_reference,
     )
     electronics_location = board_mount_location(AZIMUTH_TURNTABLE_Z)
-    esp32_expansion = Compound(children=[part.moved(electronics_location)
-                                         for part in build_expansion().children])
-    esp32_expansion.label = "installed_esp32_expansion_30pin"
-    esp32_devkit = Compound(children=[
-        part.moved(electronics_location * Pos(SOCKET_CENTER_X, 0, DEVKIT_SEATED_Z))
-        for part in build_devkit().children
-    ])
-    esp32_devkit.label = "installed_esp32_devkit_30pin"
+    esp32_expansion = install_reference(
+        build_expansion(), electronics_location, "installed_esp32_expansion_30pin"
+    )
+    esp32_devkit = install_reference(
+        build_devkit(), electronics_location * Pos(SOCKET_CENTER_X, 0, DEVKIT_SEATED_Z),
+        "installed_esp32_devkit_30pin",
+    )
     # M3 × 6 screws seat on the PCB top. 4.4 mm engagement reaches the
     # existing blind printed pilot depth without breaking through the wall.
     electronics_fasteners = []
