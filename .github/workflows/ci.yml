@@ -115,7 +115,8 @@ jobs:
 
       - name: Smoke test site
         working-directory: site
-        run: npm run smoke
+        # Desktop/mobile software WebGL compete for the same runner's CPU.
+        run: npm run smoke -- --workers=1
 
       - name: Upload static site
         uses: actions/upload-artifact@v4
