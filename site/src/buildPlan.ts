@@ -26,9 +26,10 @@ export const carryClearance = 16;
 // Bricks are built along a line the gripper can follow with the base held still, so every
 // brick keeps the same yaw relative to the jaws and lands square on the grid. Angles follow the
 // base joint: degrees clockwise from +Y, seen from above.
-export const buildSite = { baseAngle: 222, start: 175 };
+// Keep pickups and placements outside the inner reach excluded by the elbow stops.
+export const buildSite = { baseAngle: 222, start: 230 };
 // Supply bricks wait on two arcs in front of the arm, picked in assembly order.
-export const supplyLayout = { centerAngle: 138, radii: [190, 255], spacing: 42 };
+export const supplyLayout = { centerAngle: 138, radii: [240, 285], spacing: 42 };
 // Replenish this bounded tray between batches instead of wrapping hundreds of
 // simultaneously waiting bricks around the arm and through the build site.
 export const supplyBatchSize = 12;

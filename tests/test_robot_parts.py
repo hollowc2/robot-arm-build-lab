@@ -1244,3 +1244,32 @@ def test_motor_shafts_clear_lower_pulley_envelopes() -> None:
 
     assert bicep_arm_link.MOTOR_SHAFT_Z - shoulder_80t_flange_radius >= 5.0
     assert forearm_link.MOTOR_SHAFT_Z - elbow_60t_flange_radius >= 5.0
+
+
+def test_forearm_clears_bicep_through_simulator_elbow_range() -> None:
+    import re
+    from pathlib import Path
+    from build123d import Pos, Rot
+    from models import bicep_arm_link as bicep, forearm_link as forearm
+    from models.master_assembly import PULLEY_SIDE_CLEARANCE
+    from models.transmission_components import PULLEY_TOTAL_HEIGHT, build_elbow_htd_belt
+
+    # Read the actual UI/planner stops so increasing their range must pass CAD QA.
+    source = (Path(__file__).resolve().parents[1] / "site/src/arm.ts").read_text()
+    match = re.search(r"elbow: \[(-?\d+), (-?\d+)\]", source)
+    assert match is not None
+    lower, upper = map(int, match.groups())
+    side = (bicep.ELBOW_CLEVIS_GAP_X - forearm.BOTTOM_HUB_THICKNESS
+            - PULLEY_TOTAL_HEIGHT - PULLEY_SIDE_CLEARANCE) / 2
+    forearm_x = (-bicep.ELBOW_CLEVIS_GAP_X / 2 + side + PULLEY_TOTAL_HEIGHT
+                 + PULLEY_SIDE_CLEARANCE + forearm.BOTTOM_HUB_THICKNESS / 2)
+    fixed = bicep.build_model().moved(Pos(0, 0, -bicep.TOP_PIVOT_Z))
+    pulley_x = -bicep.ELBOW_CLEVIS_GAP_X / 2 + side + PULLEY_TOTAL_HEIGHT / 2
+    belt = build_elbow_htd_belt().moved(
+        Pos(pulley_x, 0, bicep.MOTOR_SHAFT_Z - bicep.TOP_PIVOT_Z) * Rot(0, 90, 90)
+    )
+    moving = forearm.build_model().moved(Pos(forearm_x, 0, 0))
+    for angle in sorted({lower, upper, *range(lower, upper + 1, 5)}):
+        rotated = moving.moved(Rot(angle, 0, 0))
+        assert fixed.distance_to(rotated) >= 1.0, f"Elbow {angle}° has under 1 mm clearance"
+        assert belt.distance_to(rotated) >= 1.0, f"Elbow {angle}° reaches the elbow belt"

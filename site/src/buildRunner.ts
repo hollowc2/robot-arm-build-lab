@@ -1,4 +1,4 @@
-import { armJoints, homePose, jointDelta, jointMotion, type JointAngles } from "./arm.ts";
+import { armJoints, clampJoint, homePose, jointDelta, jointMotion, jointNames, type JointAngles } from "./arm.ts";
 import { advanceMotion, planJointMove, stepJointMove, type JointMove } from "./motion.ts";
 import type { BuildPlan, BuildStep } from "./buildPlan.ts";
 
@@ -17,14 +17,16 @@ export class ArmDriver {
 
   constructor(pose: JointAngles = homePose) {
     this.pose = { ...pose };
-    this.targets = { ...pose };
+    for (const joint of jointNames) this.pose[joint] = clampJoint(joint, this.pose[joint]);
+    this.targets = { ...this.pose };
   }
 
   // Coordinated move to the target. `along` optionally bends the joint-space line into some other
   // path between the same two poses (a straight Cartesian drop), sampled by shared progress.
   moveTo(target: JointAngles, along?: (progress: number) => JointAngles) {
     this.targets = { ...target };
-    const move = planJointMove<ArmJoint>(pickArm(this.pose), pickArm(target), jointMotion, ["base"]);
+    for (const joint of jointNames) this.targets[joint] = clampJoint(joint, this.targets[joint]);
+    const move = planJointMove<ArmJoint>(pickArm(this.pose), pickArm(this.targets), jointMotion, ["base"]);
     // A curved path asks a little more of some joints mid-way than the end points suggest.
     if (along) {
       // Curved Cartesian moves can demand more joint travel in the middle than
@@ -61,6 +63,7 @@ export class ArmDriver {
   }
 
   step(seconds: number) {
+    for (const joint of jointNames) this.targets[joint] = clampJoint(joint, this.targets[joint]);
     if (this.move) {
       const before = pickArm(this.pose);
       stepJointMove(this.move, seconds, this.pose, this.velocities, ["base"]);
@@ -83,6 +86,16 @@ export class ArmDriver {
       this.pose.gripper, this.velocities.gripper, this.targets.gripper,
       jointMotion.gripper.maxSpeed, jointMotion.gripper.acceleration, seconds,
     );
+    // Reversing a target can leave outward velocity while braking. Enforce the
+    // physical stops on the pose as well as targets and curved path samples.
+    for (const joint of jointNames) {
+      if (joint === "base") continue;
+      const bounded = clampJoint(joint, this.pose[joint]);
+      if (bounded !== this.pose[joint]) {
+        this.pose[joint] = bounded;
+        this.velocities[joint] = 0;
+      }
+    }
   }
 
   // A held brick stops the jaws short of a closing target; that counts as arrived.

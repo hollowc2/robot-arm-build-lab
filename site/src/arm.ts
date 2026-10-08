@@ -14,7 +14,9 @@ export const homePose: JointAngles = { base: 0, shoulder: 0, elbow: 0, wrist: 0,
 export const jointLimits: Record<JointName, [number, number]> = {
   base: [0, 360],
   shoulder: [-130, 130],
-  elbow: [-135, 135],
+  // CAD sweep: the wrist motor mount reaches the elbow belt near ±113°,
+  // then the bicep near ±117°. ±108° leaves over 1 mm at both obstacles.
+  elbow: [-108, 108],
   wrist: [-150, 18],
   gripper: [0, 40],
 };
@@ -101,6 +103,7 @@ export function createArmModel(lift = 0) {
     const solutions: { pose: JointAngles; error: number; cost: number; travel: number }[] = [];
     for (const seed of [[previous.shoulder, previous.elbow, previous.wrist], [45, -110, -48], [30, -130, -66], [-125, 125, -100]]) {
       let candidate: JointAngles = { base: baseAngle, shoulder: seed[0], elbow: seed[1], wrist: seed[2], gripper };
+      for (const joint of armJoints) candidate[joint] = clampJoint(joint, candidate[joint]);
       for (const step of [24, 8, 2, 0.5, 0.1, 0.02]) {
         for (let round = 0; round < 12; round += 1) {
           let improved = false;
@@ -129,10 +132,11 @@ export function createArmModel(lift = 0) {
     const accurate = solutions.filter((solution) => solution.error < 4);
     const rank = (solution: (typeof solutions)[number]) => (accurate.length ? solution.cost + 0.1 * solution.travel : solution.cost);
     const chosen = (accurate.length ? accurate : solutions).reduce((best, solution) => (rank(solution) < rank(best) ? solution : best)).pose;
-    // Coordinate descent stalls a fraction of a millimetre short in narrow valleys. Close the gap
-    // exactly on the branch it chose, as long as that stays within limits and clear of the table.
+    // Prefer the exact vertical pose on the chosen branch when it fits the joint stops.
+    // Near a stop, soft clearance costs can pull the numerical solution off the target;
+    // use the same exact solution as the vertical path to avoid a jump on the next step.
     const exact = solveStraightDown(target, gripper, root.position.z, Math.sign(chosen.elbow) || -1);
-    if (exact && armJoints.every((joint) => Math.abs(jointDelta(joint, chosen[joint], exact[joint])) < 6) && cost(exact, target).cost <= cost(chosen, target).cost) {
+    if (exact) {
       return exact;
     }
     return chosen;

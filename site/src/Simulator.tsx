@@ -513,8 +513,8 @@ export function Simulator({ children, facts }: { children: React.ReactNode; fact
 
     const updateReach = () => {
       let maxReach = 0;
-      for (let s = -130; s <= 130; s += 5) {
-        for (let e = -135; e <= 135; e += 5) {
+      for (let s = jointLimits.shoulder[0]; s <= jointLimits.shoulder[1]; s += 5) {
+        for (let e = jointLimits.elbow[0]; e <= jointLimits.elbow[1]; e += 5) {
           for (let w = -150; w <= 18; w += 12) {
             const tip = arm.probe({ base: 0, shoulder: s, elbow: e, wrist: w, gripper: 0 });
             if (tip.z >= 0) maxReach = Math.max(maxReach, Math.hypot(tip.x, tip.y));
