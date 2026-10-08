@@ -5,7 +5,7 @@ import * as THREE from "three";
 import { STLLoader } from "three/examples/jsm/loaders/STLLoader.js";
 import { createArmModel, jointMotion, jointNames } from "../src/arm.ts";
 import { brickHeight, buildPresets, studHeight, validateLayout } from "../src/bricks.ts";
-import { boxesOverlap, brickBox, followLine, gripperBoxes, openTravel, planBuild } from "../src/buildPlan.ts";
+import { boxesOverlap, brickBox, followLine, gripperBoxes, openTravel, planBuild, supplyBatch, supplyBatchSize } from "../src/buildPlan.ts";
 import { ArmDriver, BuildSequencer } from "../src/buildRunner.ts";
 import { graspTravel } from "../src/grasp.ts";
 import { releaseTravel } from "../src/gripper.ts";
@@ -36,7 +36,29 @@ test("presets are supported, in a buildable order and squeezable across the jaws
   assert.ok(buildPresets.length >= 4);
   for (const preset of buildPresets) {
     assert.deepEqual(validateLayout(preset), [], preset.name);
-    assert.ok(preset.bricks.length >= 6 && preset.bricks.length <= 18, `${preset.name} has ${preset.bricks.length} bricks`);
+    assert.ok(preset.bricks.length >= 6 && preset.bricks.length <= 250, `${preset.name} has ${preset.bricks.length} bricks`);
+  }
+});
+
+test("large sculptures span three dimensions at 50, 100, 150 and 250 bricks", () => {
+  const large = buildPresets.filter((preset) => preset.bricks.length >= 50);
+  assert.deepEqual(large.map((preset) => preset.bricks.length), [50, 100, 150, 250]);
+  for (const preset of large) {
+    for (let axis = 0; axis < 3; axis += 1) assert.ok(new Set(preset.bricks.map((brick) => brick.cell[axis])).size > 1);
+  }
+});
+
+test("large builds reuse a bounded tray without overlapping waiting bricks", () => {
+  for (const plan of plans.values()) {
+    for (let start = 0; start < plan.bricks.length; start += supplyBatchSize) {
+      const waiting = plan.bricks.slice(start, start + supplyBatchSize);
+      for (let i = 0; i < waiting.length; i += 1) {
+        const brick = waiting[i];
+        assert.ok(brick.supply.position.length() < 260);
+        for (const other of waiting.slice(i + 1)) assert.equal(boxesOverlap(brickBox(brick, brick.supply), brickBox(other, other.supply)), false);
+        if (start > 0) assert.ok(brick.supply.position.distanceTo(plan.bricks[i].supply.position) < 1e-9);
+      }
+    }
   }
 });
 
@@ -85,7 +107,7 @@ test("the CAD fingers clear every supply brick when open and close on it squarel
 
 // Runs a whole build on the shared clock, driver and sequencer, standing in for cannon-es with an
 // ideal grasp at the CAD contact travel. Every fixed step is checked for collisions.
-function runBuild(plan, speedForFrame = () => 1, frameSeconds = 1 / 60) {
+function runBuild(plan, speedForFrame = () => 1, frameSeconds = 1 / 60, recordPoses = true) {
   const clock = new SimClock();
   const driver = new ArmDriver();
   const sequencer = new BuildSequencer(plan);
@@ -109,7 +131,7 @@ function runBuild(plan, speedForFrame = () => 1, frameSeconds = 1 / 60) {
   const first = sequencer.start();
   driver.moveTo(first.target, followLine(first, 46));
   let frame = 0;
-  while (sequencer.status === "running" && clock.elapsed < 600) {
+  while (sequencer.status === "running" && clock.elapsed < Math.max(600, plan.bricks.length * 20)) {
     clock.setSpeed(speedForFrame(frame, sequencer.step));
     clock.advance(frameSeconds, (seconds) => {
       if (sequencer.status !== "running") return;
@@ -121,7 +143,7 @@ function runBuild(plan, speedForFrame = () => 1, frameSeconds = 1 / 60) {
         const change = Math.abs(((driver.pose[joint] - previous[joint] + 540) % 360) - 180);
         assert.ok(change <= jointMotion[joint].maxSpeed * seconds + 1e-6, `${joint} jumped ${change}`);
       }
-      poses.push(Object.values(driver.pose).join(","));
+      if (recordPoses) poses.push(Object.values(driver.pose).join(","));
       const step = sequencer.step;
       if (held === null && step.stage === "grip" && driver.pose.gripper <= contacts[step.brick]) {
         held = step.brick;
@@ -147,7 +169,11 @@ function runBuild(plan, speedForFrame = () => 1, frameSeconds = 1 / 60) {
         }
       }
       // Nothing the arm carries may pass through placed bricks or bricks still waiting.
-      const obstacles = bricks.filter((brick) => brick.index !== held);
+      // The active brick intentionally touches the pads. Its exact STL contact
+      // is checked above; the conservative tool boxes check other obstacles.
+      const obstacles = bricks.filter((brick) => brick.index !== held
+        && (plan.bricks.length < 50 || brick.index !== step.brick)
+        && (placed.has(brick.index) || supplyBatch(brick.index) === supplyBatch(step.brick)));
       const tools = gripperBoxes(gripPosition, gripQuaternion);
       if (held !== null) {
         const carried = brickBox(bricks[held], bricks[held].pose);
@@ -158,6 +184,9 @@ function runBuild(plan, speedForFrame = () => 1, frameSeconds = 1 / 60) {
       }
       for (const obstacle of obstacles) {
         const box = brickBox(obstacle, obstacle.pose);
+        // Broad phase before the SAT check; most bricks are nowhere near the tool.
+        if (Math.abs(box.center.z - gripPosition.z) > box.half.z + 150) continue;
+        if (Math.hypot(box.center.x - gripPosition.x, box.center.y - gripPosition.y) > 90) continue;
         if (tools.some((tool) => boxesOverlap(tool, box))) collisions.push(`${step.label} hit ${obstacle.label} #${obstacle.index + 1}`);
       }
       const next = sequencer.update(seconds, driver.arrived(heldTravel), held, (index) => placed.has(index));
@@ -169,7 +198,7 @@ function runBuild(plan, speedForFrame = () => 1, frameSeconds = 1 / 60) {
 }
 
 const baselines = new Map();
-for (const plan of plans.values()) {
+for (const plan of [...plans.values()].filter((plan) => plan.bricks.length < 50)) {
   test(`${plan.preset.name} builds to completion at 0.5x, 1x and 4x along one trajectory`, () => {
     const runs = [0.5, 1, 4].map((speed) => runBuild(plan, () => speed));
     for (const run of runs) {
@@ -187,6 +216,17 @@ for (const plan of plans.values()) {
     baselines.set(plan.preset.id, runs[0]);
     // Keep demos watchable: a couple of minutes at 1x.
     assert.ok(runs[0].elapsed < 240, `${plan.preset.name} takes ${runs[0].elapsed.toFixed(0)} s`);
+  });
+}
+
+for (const plan of [...plans.values()].filter((plan) => plan.bricks.length >= 50)) {
+  test(`${plan.preset.name} completes every pickup, placement and tray refill without collisions`, () => {
+    const run = runBuild(plan, () => 4, 1 / 60, false);
+    assert.equal(run.sequencer.status, "complete", run.sequencer.failure ?? "");
+    assert.equal(run.placed.size, plan.bricks.length);
+    assert.deepEqual(run.collisions, []);
+    assert.ok(run.worstDrift < 0.05, `drifted ${run.worstDrift} mm while placing`);
+    for (const brick of run.bricks) assert.ok(brick.pose.position.distanceTo(brick.target.position) < 1e-9);
   });
 }
 

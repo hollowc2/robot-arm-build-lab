@@ -27,6 +27,19 @@ export class ArmDriver {
     const move = planJointMove<ArmJoint>(pickArm(this.pose), pickArm(target), jointMotion, ["base"]);
     // A curved path asks a little more of some joints mid-way than the end points suggest.
     if (along) {
+      // Curved Cartesian moves can demand more joint travel in the middle than
+      // their endpoints imply, especially beside tall structures. Bound speed
+      // by the steepest sampled joint derivative instead of a fixed discount.
+      const samples = 128;
+      let previous = along(0);
+      for (let i = 1; i <= samples; i += 1) {
+        const pose = along(i / samples);
+        for (const joint of armJoints) {
+          const derivative = Math.abs(jointDelta(joint, previous[joint], pose[joint])) * samples;
+          if (derivative > 0) move.limits.maxSpeed = Math.min(move.limits.maxSpeed, jointMotion[joint].maxSpeed / derivative);
+        }
+        previous = pose;
+      }
       move.limits.maxSpeed *= 0.8;
       move.limits.acceleration *= 0.6;
     }
