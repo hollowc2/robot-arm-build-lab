@@ -129,5 +129,15 @@ def test_mounted_boards_clear_structure_and_sampled_shoulder_motion(master_assem
     for angle in sorted({lower, upper, *range(lower, upper + 1, 5)}):
         move = Pos(0, 0, pivot) * Rot(-angle, 0, 0) * Pos(0, 0, -pivot)
         for name in ("bicep_arm_link", "elbow_nema17_stepper_motor", "shoulder_80T_HTD3M_8p5_4xM3_25BC"):
-            clearance = electronics.distance_to(children[name].moved(move))
+            moving = children[name].moved(move)
+            # AABB separation is a lower bound on solid separation. Skip OCC's
+            # expensive component-level search only when that already proves
+            # the required gap; near poses still compare the actual solids.
+            fixed_box, moving_box = electronics.bounding_box(), moving.bounding_box()
+            gaps = [max(0, a_min - b_max, b_min - a_max)
+                    for a_min, a_max, b_min, b_max in zip(
+                        fixed_box.min, fixed_box.max, moving_box.min, moving_box.max)]
+            if sum(gap * gap for gap in gaps) >= 1.0:
+                continue
+            clearance = electronics.distance_to(moving)
             assert clearance >= 1.0, f"Shoulder {angle}°: {name} is {clearance:.3f} mm from boards"
