@@ -226,7 +226,7 @@ def board_mount_location(turntable_z=0.0):
     from models import azimuth_turntable_shoulder_cleat as mount
     angle, offset, _, _ = mounting_registration()
     face = (mount.CLEVIS_CLEAR_GAP / 2 + mount.ELBOW_MOTOR_RELIEF_BACK_SKIN
-            + mount.ARDUINO_STANDOFF_HEIGHT - 0.2)
+            + mount.ESP32_STANDOFF_HEIGHT - 0.2)
     return (Pos(face, offset[1], turntable_z + mount.ARDUINO_BOARD_CENTER_Z + offset[0])
             * Rot(0, 90, 0) * Rot(0, 0, -angle))
 

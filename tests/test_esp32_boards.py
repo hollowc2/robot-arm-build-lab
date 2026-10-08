@@ -141,3 +141,27 @@ def test_mounted_boards_clear_structure_and_sampled_shoulder_motion(master_assem
                 continue
             clearance = electronics.distance_to(moving)
             assert clearance >= 1.0, f"Shoulder {angle}°: {name} is {clearance:.3f} mm from boards"
+
+
+def test_downward_ports_accept_compact_right_angle_power_plugs(master_assembly):
+    from build123d import Align, Box
+    from models.master_assembly import AZIMUTH_TURNTABLE_Z
+    from models import azimuth_turntable_shoulder_cleat as mount
+
+    assert mount.ESP32_STANDOFF_HEIGHT == 16
+    children = {p.label: p for p in master_assembly.children}
+    location = boards.board_mount_location(AZIMUTH_TURNTABLE_Z)
+    # Visual-estimate plug envelopes: 11 mm axial body, compact/right-angle
+    # cable egress toward outboard +X. Do not treat these as supplier drawings.
+    plugs = (("carrier_usb_c", 35.7, -14, 3.2, 8.6, 4.8),
+             ("carrier_micro_b", 34.75, 6, 3.0, 7.5, 4.8),
+             ("carrier_barrel", 36, 19, 6.85, 10, 10),
+             ("devkit_micro_b", 19.75, 0, boards.DEVKIT_SEATED_Z + 3, 7.5, 4.8))
+    for name, x, y, z, width, height in plugs:
+        plug = Box(11, width, height, align=(Align.MIN, Align.CENTER, Align.CENTER))
+        plug = plug.moved(location * Pos(x, y, z))
+        for fixed in ("geared_base_stator", "azimuth_turntable_shoulder_cleat",
+                      "base_driven_120T_module1_herringbone_48mm_bore_6xM3_60BC",
+                      "shoulder_nema17_stepper_motor", "base_nema17_stepper_motor"):
+            overlap = plug & children[fixed]
+            assert overlap is None or overlap.volume < 1e-6, f"{name} plug reaches {fixed}"

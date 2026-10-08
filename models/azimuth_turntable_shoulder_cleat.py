@@ -117,7 +117,10 @@ ELBOW_MOTOR_RELIEF_Z_MAX = PIVOT_Z - ELBOW_MOTOR_RELIEF_TOP_MARGIN
 ELBOW_MOTOR_RELIEF_BACK_SKIN = 3.2  # Eight 0.4 mm extrusion widths
 ELBOW_MOTOR_RELIEF_BOTTOM_RADIUS = 10.0
 ELBOW_MOTOR_RELIEF_TOP_RADIUS = 28.0
-ARDUINO_STANDOFF_HEIGHT = 4.0
+ARDUINO_STANDOFF_HEIGHT = 4.0  # Historical Uno mounting datum.
+# Put the downward-facing ports outside the hub/clevis rail for compact
+# right-angle power plugs; the original 4 mm bosses block connector access.
+ESP32_STANDOFF_HEIGHT = 16.0
 ARDUINO_BOARD_BOTTOM_CLEARANCE = 0.5
 # Keep the board low: a bare PCB only reaches the elbow motor at the nominal
 # +/-130 degree endpoints. Revalidate limits with the populated board installed.
@@ -432,18 +435,18 @@ def _cut_esp32_board_clearance() -> None:
 def _add_esp32_standoffs() -> None:
     """Add the four approved M3-tapped ESP32 expansion-board mounting bosses."""
     relief_floor_x = CLEVIS_CLEAR_GAP / 2 + ELBOW_MOTOR_RELIEF_BACK_SKIN
-    boss_center_x = relief_floor_x + ARDUINO_STANDOFF_HEIGHT / 2 - 0.2
+    boss_center_x = relief_floor_x + ESP32_STANDOFF_HEIGHT / 2 - 0.2
     for y, z in ESP32_STANDOFF_POINTS_YZ:
         with Locations((boss_center_x, y, z)):
             Cylinder(
                 ARDUINO_STANDOFF_DIAMETER / 2,
-                ARDUINO_STANDOFF_HEIGHT,
+                ESP32_STANDOFF_HEIGHT,
                 rotation=(0, 90, 0),
                 align=(Align.CENTER, Align.CENTER, Align.CENTER),
             )
             Cylinder(
                 ARDUINO_STANDOFF_PILOT / 2,
-                ARDUINO_STANDOFF_HEIGHT + 0.8,
+                ESP32_STANDOFF_HEIGHT + 0.8,
                 rotation=(0, 90, 0),
                 align=(Align.CENTER, Align.CENTER, Align.CENTER),
                 mode=Mode.SUBTRACT,

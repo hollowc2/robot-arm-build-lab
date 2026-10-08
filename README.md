@@ -129,4 +129,4 @@ First production deployment should be approved manually after checking a dry run
 
 ### Azimuth electronics
 
-The simulator includes the photographed ESP32 30P expansion board and a seated 30-pin ESP32 development board on the azimuth. The printed bosses and recess now match that board revision; shoulder motion is limited to ±125° to clear the populated board. See [dimensions, fit assumptions, and rendered views](docs/esp32-boards.md) before printing or installing a physical clone.
+The simulator includes the photographed ESP32 30P expansion board and a seated 30-pin ESP32 development board on the azimuth. The printed bosses and recess now match that board revision, with 16 mm standoffs for compact right-angle power-lead access; shoulder motion is limited to ±125° to clear the populated board. See [dimensions, fit assumptions, and rendered views](docs/esp32-boards.md) before printing or installing a physical clone.
