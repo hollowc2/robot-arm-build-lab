@@ -12,13 +12,18 @@ export const brickPlay = 0.1;
 // The jaws can only squeeze a brick across this many studs.
 export const maxGripStuds = 2;
 
-export type BrickType = "1x2" | "2x2" | "2x3" | "2x4";
+export type BrickType = "1x1" | "1x2" | "1x3" | "1x4" | "1x6" | "2x2" | "2x3" | "2x4" | "2x6";
 // Width (along the jaw axis) x length (along the build line) in studs at rotation 0.
 export const brickTypes: Record<BrickType, { width: number; length: number }> = {
+  "1x1": { width: 1, length: 1 },
   "1x2": { width: 1, length: 2 },
+  "1x3": { width: 1, length: 3 },
+  "1x4": { width: 1, length: 4 },
+  "1x6": { width: 1, length: 6 },
   "2x2": { width: 2, length: 2 },
   "2x3": { width: 2, length: 3 },
   "2x4": { width: 2, length: 4 },
+  "2x6": { width: 2, length: 6 },
 };
 
 export const brickColors = {
@@ -29,6 +34,9 @@ export const brickColors = {
   white: "#d9d8d2",
   orange: "#d2600f",
   tan: "#c2a66a",
+  gray: "#66717b",
+  brown: "#58331f",
+  glass: "#9cd7e8",
 } as const;
 export type BrickColor = keyof typeof brickColors;
 
@@ -39,6 +47,8 @@ export type PresetBrick = {
   cell: [u: number, v: number, layer: number];
   // Quarter turns about the vertical axis; 90 swaps width and length.
   rotation: 0 | 90;
+  // Roof wedges rise toward the centre of the building across the depth axis.
+  slope?: 1 | -1;
 };
 
 export type BuildPreset = {
@@ -49,38 +59,48 @@ export type BuildPreset = {
   bricks: PresetBrick[];
 };
 
-const brick = (type: BrickType, color: BrickColor, u: number, layer: number, rotation: 0 | 90 = 0, v = 0): PresetBrick => ({
-  type, color, cell: [u, v, layer], rotation,
-});
-
-// Open rows leave room for the real finger pads. Each column clutches the course
-// below; the baseplate ties the rows together. These are volumetric structures,
-// with depth as well as height, rather than longer versions of the small wall.
-function sculpture(id: string, name: string, blurb: string, heights: number[][], colors: BrickColor[]): BuildPreset {
+// Three open bays preserve a deep silhouette while leaving 40 mm finger lanes.
+// All pickups present a two-stud face. Courses are assembled from the inside out
+// at each height, never descending beside an already finished tall wall.
+function architecture(id: string, name: string, blurb: string): BuildPreset {
   const bricks: PresetBrick[] = [];
-  const layers = Math.max(...heights.flat());
-  for (let layer = 0; layer < layers; layer += 1) {
-    heights.forEach((row, v) => row.forEach((height, u) => {
-      if (layer < height) bricks.push(brick("2x2", colors[layer % colors.length], u * 2, layer, 0, (v - (heights.length - 1) / 2) * 4));
-    }));
+  const add = (u: number, v: number, layer: number, length: 2 | 3 | 4 | 6, color: BrickColor) =>
+    bricks.push({ type: `2x${length}` as BrickType, color, cell: [u, v, layer], rotation: 0 });
+  const lanes = [0, -6, 6];
+  const height = id === "skyline" ? 12 : id === "citadel" ? 9 : 8;
+  for (let layer = 0; layer < height; layer++) for (const v of lanes) {
+    if (id === "pavilion") {
+      if (layer === 0) { add(0, v, layer, 4, "gray"); add(4, v, layer, 6, "gray"); }
+      else if (layer < 4) { add(0, v, layer, 2, layer === 2 ? "glass" : "tan"); add(8, v, layer, 2, layer === 2 ? "glass" : "tan"); }
+      else if (layer === 4) { add(0, v, layer, 4, "white"); add(4, v, layer, 6, "white"); }
+      else { const inset = layer - 5; add(inset, v, layer, 4, "green"); add(inset + 4, v, layer, (layer === 7 ? 2 : 4), "green"); }
+    } else if (id === "terraces") {
+      const inset = Math.floor(layer / 2);
+      const color = layer % 2 ? "orange" : "tan";
+      if (inset === 0) { add(0, v, layer, 4, color); add(4, v, layer, 6, color); }
+      else if (inset === 1) { add(1, v, layer, 4, color); add(5, v, layer, 4, color); }
+      else if (inset === 2) { add(2, v, layer, 3, color); add(5, v, layer, 3, color); }
+      else add(3, v, layer, 4, "yellow");
+    } else if (id === "skyline") {
+      const towerHeight = v === 0 ? 12 : v < 0 ? 8 : 10;
+      if (layer >= towerHeight) continue;
+      const color = layer === towerHeight - 1 ? "yellow" : layer % 3 === 2 ? "white" : layer % 3 === 1 ? "glass" : "blue";
+      add(v === 0 ? 2 : 0, v, layer, 4, color);
+      if (v !== 0) add(6, v, layer, 4, color);
+    } else {
+      if (layer === 0 || layer === 4 || layer === 6) { add(0, v, layer, 4, layer === 0 ? "gray" : "tan"); add(4, v, layer, 6, "tan"); }
+      else if (layer < 7) { add(0, v, layer, 2, "white"); add(8, v, layer, 2, "white"); }
+      else { add(0, v, layer, 2, "tan"); add(4, v, layer, 2, "tan"); add(8, v, layer, 2, "tan"); }
+    }
   }
   return { id, name, blurb, bricks };
 }
 
 export const buildPresets: BuildPreset[] = [
-  sculpture("pavilion", "Garden pavilion", "Two open colonnades · five courses", [
-    [5, 5, 5, 5, 5], [5, 5, 5, 5, 5],
-  ], ["white", "tan", "green"]),
-  sculpture("terraces", "Terraced monument", "Four stepped terraces with finger-clearance lanes", [
-    [4, 4, 5, 4, 4], [5, 6, 7, 6, 5], [5, 6, 7, 6, 5], [4, 4, 5, 4, 4],
-  ], ["tan", "yellow", "orange", "red"]),
-  sculpture("skyline", "City skyline", "Three streets of rising towers", [
-    [7, 9, 12, 9, 7], [10, 12, 18, 12, 10], [7, 9, 12, 9, 7],
-  ], ["blue", "white"]),
-  sculpture("citadel", "Grand citadel", "Five open avenues around a central keep", [
-    [10, 10, 10, 10, 10], [9, 10, 12, 10, 9], [8, 10, 14, 10, 8],
-    [9, 10, 12, 10, 9], [10, 10, 10, 10, 10],
-  ], ["white", "blue", "blue", "tan", "tan"]),
+  architecture("pavilion", "Garden pavilion", "Open glazed colonnade · ivory lintels · stepped green gables"),
+  architecture("terraces", "Terraced monument", "Four receding terraces · sandstone bands · terracotta steps"),
+  architecture("skyline", "City skyline", "Five staggered towers · glazed façades · gold crowns"),
+  architecture("citadel", "Grand citadel", "Triple gate arcade · stone towers · raised battlements"),
 ];
 
 // Studs along (u) and across (v) the build line once the rotation is applied.

@@ -146,7 +146,7 @@ def test_azimuth_flush_motor_mount_and_recessed_arduino_fit() -> None:
 def test_master_assembly_has_all_major_children(master_assembly) -> None:
     assembly = master_assembly
 
-    assert len(assembly.children) == 77
+    assert len(assembly.children) == 83
     assert assembly.volume > 0
 
 
@@ -352,7 +352,7 @@ def test_master_assembly_shows_installed_joint_hardware_and_flush_shafts(
     assert len([label for label in labels if label.startswith("installed_sg90_")]) == 2
     assert (
         len([label for label in labels if label.startswith("installed_M3_fastener_")])
-        == 38
+        == 42
     )
     assert joint_shafts.SHOULDER_SHAFT_LENGTH == pytest.approx(67.0)
     assert joint_shafts.ELBOW_SHAFT_LENGTH == pytest.approx(44.0)

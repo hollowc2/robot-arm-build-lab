@@ -99,3 +99,10 @@ test("objects contacting near maximum opening can still be released", () => {
   assert.equal(releaseTravel(39, 40), 40);
   assert.equal(releaseTravel(20, 40), 22);
 });
+
+
+test("a pinch rejects missing or one-sided finger contact", () => {
+  const position = new THREE.Vector3(0, 131, 12.5);
+  assert.equal(graspTravel([jaws[0]], position, new THREE.Quaternion(), block, 40), null);
+  assert.equal(graspTravel(jaws, position.clone().setX(5), new THREE.Quaternion(), block, 40), null);
+});

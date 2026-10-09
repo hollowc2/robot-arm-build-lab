@@ -27,7 +27,7 @@ def main() -> None:
             continue
         shutil.copy2(source, WEB_MODEL_DIR / source.name)
 
-    for pattern in ("simulator_*.stl", "byj48_stepper_motor_*.stl", "nema17_stepper_motor_*.stl"):
+    for pattern in ("simulator_*.stl", "byj48_stepper_motor_*.stl", "nema17_stepper_motor_*.stl", "esp32_*_*.stl"):
         for published in WEB_MODEL_DIR.glob(pattern):
             if not (OUT_DIR / published.name).exists():
                 published.unlink()

@@ -59,6 +59,7 @@ def main() -> None:
                     "base_azimuth_8mm_shaft", "installed_bearing_01_608-2RS_bearing",
                     "installed_bearing_02_608-2RS_bearing", "azimuth_turntable_shoulder_cleat",
                     "shoulder_nema17_stepper_motor", "shoulder_pivot_8mm_shaft",
+                    "installed_esp32_expansion_30pin", "installed_esp32_devkit_30pin",
                     "installed_bearing_03_608-2RS_bearing", "installed_bearing_04_608-2RS_bearing",
                 ),
                 "simulator_upper_arm": (
@@ -89,6 +90,7 @@ def main() -> None:
                 "simulator_base_fixed": ("installed_M3_fastener_base_motor_",),
                 "simulator_base_yaw": (
                     "installed_M3_fastener_base_gear_", "installed_M3_fastener_shoulder_motor_",
+                    "installed_M3_fastener_esp32_",
                 ),
                 "simulator_upper_arm": (
                     "installed_M3_fastener_shoulder_pulley_", "installed_M3_fastener_elbow_motor_",
@@ -107,7 +109,8 @@ def main() -> None:
                 finishes: dict[str, list] = {}
                 for label in labels:
                     child = children_by_label[label]
-                    if label.endswith("stepper_motor") or label.startswith("installed_sg90_micro_servo_"):
+                    if (label.endswith("stepper_motor") or label.startswith("installed_sg90_micro_servo_")
+                            or label.startswith("installed_esp32_")):
                         for part in child.children:
                             finishes.setdefault(PURCHASED_FINISHES[part.label], []).append(part)
                     elif label.endswith("mm_shaft"):
@@ -145,10 +148,14 @@ def main() -> None:
                 export_stl(Compound(children=[gripper_children[label] for label in labels]), OUT_DIR / f"{name}.stl")
         else:
             export_model(model, entry.name)
-            if entry.name in {"byj48_stepper_motor", "nema17_stepper_motor"}:
+            if entry.name in {"byj48_stepper_motor", "nema17_stepper_motor", "esp32_devkit_30pin", "esp32_expansion_30pin"}:
+                finishes = {}
                 for part in model.children:
-                    finish = PURCHASED_FINISHES[part.label]
-                    export_stl(part, OUT_DIR / f"{entry.name}_{finish}.stl", tolerance=0.02, angular_tolerance=0.4)
+                    finishes.setdefault(PURCHASED_FINISHES[part.label], []).append(part)
+                for finish, parts in finishes.items():
+                    shape = Compound(children=parts)
+                    BRepTools.Clean_s(shape.wrapped)
+                    export_stl(shape, OUT_DIR / f"{entry.name}_{finish}.stl", tolerance=0.02, angular_tolerance=0.4)
 
 
 if __name__ == "__main__":

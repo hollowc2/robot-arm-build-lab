@@ -16,7 +16,7 @@ async function openBuilder(page: Page, presetName: string, speed: number) {
   page.on("console", (message) => { if (message.type() === "error") errors.push(message.text()); });
   await page.goto("/");
   const hero = page.locator("#simulator");
-  await expect(hero).toHaveAttribute("data-meshes", "48", { timeout: 60_000 });
+  await expect(hero).toHaveAttribute("data-meshes", "54", { timeout: 60_000 });
   await hero.getByRole("radio", { name: new RegExp(presetName) }).click();
   await expect(hero).toHaveAttribute("data-build", "idle");
   await page.getByLabel("Simulation speed").fill(String(speed));
@@ -55,6 +55,6 @@ test("speed changes mid-grip and mid-carry keep the build on track", async ({ pa
     await expect(hero).toHaveAttribute("data-build", "running");
   }
   await expect(hero).toHaveAttribute("data-build", "complete", { timeout: 400_000 });
-  await expect(hero).toHaveAttribute("data-placed", "50");
+  await expect(hero).toHaveAttribute("data-placed", String(buildPresets[0].bricks.length));
   expect(errors).toEqual([]);
 });

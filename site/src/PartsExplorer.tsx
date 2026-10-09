@@ -1,5 +1,5 @@
 import { RoomEnvironment } from "three/examples/jsm/environments/RoomEnvironment.js";
-import { byj48Finishes, nema17Finishes, purchasedMaterials, prepareFinishGeometry } from "./purchasedMaterials";
+import { byj48Finishes, nema17Finishes, electronicsFinishes, purchasedMaterials, prepareFinishGeometry } from "./purchasedMaterials";
 import { useEffect, useMemo, useRef, useState } from "react";
 import * as THREE from "three";
 import { OrbitControls } from "three/examples/jsm/controls/OrbitControls.js";
@@ -103,7 +103,8 @@ function PartViewer({ part }: { part: CatalogPart }) {
           const size = box.getSize(new THREE.Vector3());
           const group = new THREE.Group();
           const kinds = target.name === "byj48_stepper_motor" ? byj48Finishes
-            : target.name === "nema17_stepper_motor" ? nema17Finishes : [];
+            : target.name === "nema17_stepper_motor" ? nema17Finishes
+            : ["esp32_devkit_30pin", "esp32_expansion_30pin"].includes(target.name) ? electronicsFinishes : [];
           if (kinds.length) {
             raw.dispose();
             const results = await Promise.allSettled(kinds.map((kind) => loader.loadAsync(

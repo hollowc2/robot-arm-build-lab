@@ -33,6 +33,8 @@ MODEL_REGISTRY: tuple[ModelEntry, ...] = (
     ModelEntry("models.nema17_stepper_motor", "nema17_stepper_motor", "NEMA 17 Stepper Motor", "reference", "reference", False),
     ModelEntry("models.transmission_components", "transmission_components", "Transmission Components", "drive", "prototype", True),
     ModelEntry("models.electronics_enclosure", "electronics_enclosure", "Electronics Enclosure", "safety", "prototype", True, hardware=("M3 screws", "guard interlock switch"), validation="fit-test-required"),
+    ModelEntry("models.esp32_devkit_30pin", "esp32_devkit_30pin", "ESP32 DevKit 30-pin", "reference", "reference", False, material="purchased electronics", print_orientation="not printable", validation="clone-dimensions-unverified"),
+    ModelEntry("models.esp32_expansion_30pin", "esp32_expansion_30pin", "ESP32 30P Expansion Board", "reference", "reference", False, material="purchased electronics", print_orientation="not printable", validation="photo-dimensioned-reference"),
     ModelEntry("models.master_assembly", "robot_arm_master_assembly", "Robot Arm Master Assembly", "assembly", "active", False),
 )
 

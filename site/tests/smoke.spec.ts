@@ -7,12 +7,12 @@ test("landing page runs the brick builder and part viewer", async ({ page }) => 
   await expect(page.getByRole("heading", { level: 1, name: /Robot Arm/ })).toBeVisible();
 
   const hero = page.locator("#simulator");
-  await expect(hero).toHaveAttribute("data-meshes", "48", { timeout: 30_000 });
+  await expect(hero).toHaveAttribute("data-meshes", "54", { timeout: 30_000 });
   await expect(hero).toHaveAttribute("data-mode", "autopilot");
   await expect(hero).toHaveAttribute("data-build", "running");
-  await expect(hero.locator(".build-headline")).toHaveText("Placing brick 1 of 50");
-  await expect(hero.getByRole("radio", { name: /Garden pavilion/ })).toHaveAttribute("aria-checked", "true");
-  await expect(hero.getByRole("radio")).toHaveCount(4);
+  await expect(hero.locator(".build-headline")).toHaveText("Placing brick 1 of 13");
+  await expect(hero.getByRole("radio", { name: /Little house/ })).toHaveAttribute("aria-checked", "true");
+  await expect(hero.getByRole("radio")).toHaveCount(8);
 
   // Manual takeover stops the automated build cleanly.
   const readouts = hero.locator("#dock-panel-joints .joint-readout");
@@ -27,8 +27,8 @@ test("landing page runs the brick builder and part viewer", async ({ page }) => 
 
   // Switching structures resets to the new build, ready to start.
   await hero.getByRole("tab", { name: "Build" }).click();
-  await hero.getByRole("radio", { name: /Terraced monument/ }).click();
-  await expect(hero).toHaveAttribute("data-preset", "terraces");
+  await hero.getByRole("radio", { name: /Small wall/ }).click();
+  await expect(hero).toHaveAttribute("data-preset", "wall");
   await expect(hero).toHaveAttribute("data-build", "idle");
   await expect(hero).toHaveAttribute("data-placed", "0");
   await expect(hero.locator(".build-headline")).toHaveText("Ready to build");
@@ -37,20 +37,20 @@ test("landing page runs the brick builder and part viewer", async ({ page }) => 
   await expect(hero).toHaveAttribute("data-speed", "4");
   await hero.getByRole("button", { name: "Start" }).click();
   await expect(hero).toHaveAttribute("data-mode", "autopilot");
-  await pauseOnPickup(hero, "tan 2×2");
-  await expect(hero).toHaveAttribute("data-held", "tan 2×2");
+  await pauseOnPickup(hero, "red 2×4");
+  await expect(hero).toHaveAttribute("data-held", "red 2×4");
 
   // Pause freezes the arm with the brick still in the jaws.
   await expect(hero).toHaveAttribute("data-paused", "true");
   const frozen = { stage: await hero.getAttribute("data-stage"), joints: await readouts.allTextContents() };
   await page.waitForTimeout(1500);
   expect({ stage: await hero.getAttribute("data-stage"), joints: await readouts.allTextContents() }).toEqual(frozen);
-  await expect(hero).toHaveAttribute("data-held", "tan 2×2");
+  await expect(hero).toHaveAttribute("data-held", "red 2×4");
   await hero.getByRole("button", { name: "Resume" }).click();
   await expect(hero).toHaveAttribute("data-placed", "1", { timeout: 60_000 });
 
   // Reset mid-build clears the structure and restores the supply.
-  await expect(hero).toHaveAttribute("data-held", "tan 2×2", { timeout: 60_000 });
+  await expect(hero).toHaveAttribute("data-held", "red 2×4", { timeout: 60_000 });
   await hero.getByRole("button", { name: "Reset" }).click();
   await expect(hero).toHaveAttribute("data-build", "idle");
   await expect(hero).toHaveAttribute("data-placed", "0");
@@ -58,15 +58,15 @@ test("landing page runs the brick builder and part viewer", async ({ page }) => 
 
   // Manual grip still stops on a held brick and opening drops it.
   await hero.getByRole("button", { name: "Start" }).click();
-  await pauseOnPickup(hero, "tan 2×2");
-  await expect(hero).toHaveAttribute("data-held", "tan 2×2");
+  await pauseOnPickup(hero, "red 2×4");
+  await expect(hero).toHaveAttribute("data-held", "red 2×4");
   await hero.getByRole("tab", { name: "Joints" }).click();
   // The build's own grip target is already closed, so squeeze to a different value to take over.
   await page.getByLabel("Grip", { exact: true }).fill("2");
   await expect(hero).toHaveAttribute("data-paused", "false");
   await expect(hero).toHaveAttribute("data-build", "stopped");
   await expect.poll(async () => Number.parseFloat(await readouts.nth(4).innerText())).toBeGreaterThan(5);
-  await expect(hero).toHaveAttribute("data-held", "tan 2×2");
+  await expect(hero).toHaveAttribute("data-held", "red 2×4");
   await page.getByLabel("Grip", { exact: true }).fill("40");
   await expect(hero).toHaveAttribute("data-held", "", { timeout: 10_000 });
 
@@ -79,6 +79,12 @@ test("landing page runs the brick builder and part viewer", async ({ page }) => 
   await parts.getByRole("button", { name: /SG90 Parallel Gripper/ }).click();
   await expect(parts.getByRole("heading", { name: "SG90 Parallel Gripper" })).toBeVisible();
   await expect(stage).toHaveAttribute("data-state", "stl", { timeout: 15_000 });
+  for (const name of ["ESP32 DevKit 30-pin", "ESP32 30P Expansion Board"]) {
+    await parts.getByRole("button", { name: new RegExp(name) }).click();
+    await expect(parts.getByRole("heading", { name, exact: true })).toBeVisible();
+    await expect(stage).toHaveAttribute("data-state", "stl", { timeout: 15_000 });
+    await expect.poll(() => countRenderedPixels(parts.locator("canvas"))).toBeGreaterThan(0);
+  }
 });
 
 test("mobile controls keep the build moving with the canvas off screen", async ({ page }, testInfo) => {
@@ -88,8 +94,8 @@ test("mobile controls keep the build moving with the canvas off screen", async (
   await page.route("**/*.woff2", (route) => route.abort());
   await page.goto("/");
   const hero = page.locator("#simulator");
-  await expect(hero).toHaveAttribute("data-meshes", "48", { timeout: 30_000 });
-  await hero.getByRole("radio", { name: /Terraced monument/ }).click();
+  await expect(hero).toHaveAttribute("data-meshes", "54", { timeout: 30_000 });
+  await hero.getByRole("radio", { name: /Small wall/ }).click();
   await page.getByLabel("Simulation speed").fill("4");
   await hero.getByRole("button", { name: "Start" }).click();
 
@@ -106,7 +112,7 @@ test("mobile controls keep the build moving with the canvas off screen", async (
   expect(bounds.canvasBottom).toBeLessThan(-120);
   expect(bounds.controlsBottom).toBeGreaterThan(0);
   expect(bounds.controlsTop).toBeLessThan(bounds.viewportHeight);
-  await expect(hero).toHaveAttribute("data-held", "tan 2×2", { timeout: 60_000 });
+  await expect(hero).toHaveAttribute("data-held", "red 2×4", { timeout: 60_000 });
 });
 
 test("old simulator URL lands on the main page", async ({ page }) => {

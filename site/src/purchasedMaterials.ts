@@ -3,7 +3,8 @@ import * as THREE from "three";
 export const nema17Finishes = ["motor_case", "motor_stack", "motor_connector", "steel"] as const;
 export const byj48Finishes = ["byj_can", "brass", "byj_blue", "wire_blue", "wire_pink", "wire_yellow", "wire_orange", "wire_red"] as const;
 export const sg90Finishes = ["servo_blue", "nylon", "servo_label", "wire_brown", "wire_red", "wire_orange"] as const;
-export type Finish = typeof nema17Finishes[number] | typeof byj48Finishes[number] | typeof sg90Finishes[number];
+export const electronicsFinishes = ["pcb_black", "electronics_black", "electronics_silver", "electronics_gold", "electronics_white", "electronics_red"] as const;
+export type Finish = typeof nema17Finishes[number] | typeof byj48Finishes[number] | typeof sg90Finishes[number] | typeof electronicsFinishes[number];
 
 export function purchasedMaterials(reflections: THREE.Texture): Record<Finish, THREE.MeshStandardMaterial> {
   const metal = (color: string, roughness: number, metalness = 1) => new THREE.MeshStandardMaterial({ color, roughness, metalness, envMap: reflections });
@@ -28,6 +29,12 @@ export function purchasedMaterials(reflections: THREE.Texture): Record<Finish, T
   const map = new THREE.CanvasTexture(label);
   map.colorSpace = THREE.SRGBColorSpace;
   return {
+    pcb_black: plastic("#202724", 0.65),
+    electronics_black: plastic("#101214", 0.5),
+    electronics_silver: metal("#c8cdd2", 0.3),
+    electronics_gold: metal("#c9a447", 0.28),
+    electronics_white: plastic("#e3e5d8", 0.65),
+    electronics_red: plastic("#b82820", 0.35),
     motor_case: Object.assign(metal("#1c1e21", 0.42, 0.6), { envMapIntensity: 0.7 }),
     motor_stack: metal("#aeb3b8", 0.36, 0.9),
     motor_connector: plastic("#eee8d8", 0.6),

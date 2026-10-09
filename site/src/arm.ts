@@ -13,7 +13,8 @@ export type JointName = keyof JointAngles;
 export const homePose: JointAngles = { base: 0, shoulder: 0, elbow: 0, wrist: 0, gripper: 0 };
 export const jointLimits: Record<JointName, [number, number]> = {
   base: [0, 360],
-  shoulder: [-130, 130],
+  // Populated azimuth electronics clear the elbow motor at these CAD-checked stops.
+  shoulder: [-125, 125],
   // CAD sweep: the wrist motor mount reaches the elbow belt near ±113°,
   // then the bicep near ±117°. ±108° leaves over 1 mm at both obstacles.
   elbow: [-108, 108],

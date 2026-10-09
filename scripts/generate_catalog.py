@@ -26,6 +26,8 @@ VIEWER_PARTS = (
     ("base_80T_drive_gear", [-42, -42, 20], [42, 42, 34], "active"),
     ("base_driver_pinion", [54, -16, 20], [86, 16, 34], "active"),
     ("base_azimuth_8mm_shaft", [-4, -4, 8], [4, 4, 50], "active"),
+    ("installed_esp32_expansion_30pin", [39.6, -35.398, 40.674], [52.6, 27.096, 116.294], "active"),
+    ("installed_esp32_devkit_30pin", [45.6, -22.951, 58.293], [57.8, 12.405, 114.725], "active"),
     ("azimuth_turntable_shoulder_cleat", [-48, -46, 28], [48, 46, 94], "active"),
     ("shoulder_nema17_stepper_motor", [-86, -22, 52], [-44, 22, 94], "active"),
     ("shoulder_nema17_driver_board_tray", [-38, -45, 47], [-33, -22, 85], "draft"),
@@ -114,6 +116,8 @@ def _matching_children(entry_name: str, children: list[dict[str, object]]) -> li
             if child["name"] == "sg90_gripper_base"
             or any(token in child["name"] for token in ("gripper_jaw", "servo_horn_adapter", "gripper_pushrod"))
         ]
+    if entry_name in {"esp32_devkit_30pin", "esp32_expansion_30pin"}:
+        return [child for child in children if child["name"] == f"installed_{entry_name}"]
     if entry_name == "byj48_stepper_motor":
         return [child for child in children if "28BYJ" in child["name"]]
     if entry_name == "nema17_stepper_motor":
