@@ -25,6 +25,7 @@ import {
 } from "./arm";
 import { brickColors, brickHeight, buildPresets, footprint, studHeight, studPitch, type BuildPreset, type PresetBrick } from "./bricks";
 import { followLine, openTravel, planBuild, supplyBatch, supplyBatchSize, type BuildPlan, type PlannedBrick } from "./buildPlan";
+import { planSort, radialPoint, sortColors, sortCount, sortZoneAngle } from "./sortPlan";
 import { ArmDriver, BuildSequencer, type BuildStatus } from "./buildRunner";
 import { brickGeometry, brickMaterial, ghostMaterial } from "./brickMesh";
 import { SimClock, speedRange } from "./simClock";
@@ -56,6 +57,9 @@ type Actions = {
   reset: () => void;
   selectPreset: (id: string) => void;
   setSpeed: (speed: number) => void;
+  enterSort: () => void;
+  jumbleSort: () => void;
+  enterBuild: () => void;
 };
 
 const jointControls: { name: JointName; id: string; label: string; unit: string }[] = [
@@ -86,6 +90,9 @@ const noActions: Actions = {
   reset: () => undefined,
   selectPreset: () => undefined,
   setSpeed: () => undefined,
+  enterSort: () => undefined,
+  jumbleSort: () => undefined,
+  enterBuild: () => undefined,
 };
 
 const formatSpeed = (speed: number) => `${Number(speed.toFixed(2))}×`;
@@ -106,7 +113,10 @@ export function Simulator({ children, facts }: { children: React.ReactNode; fact
   const [reach, setReach] = useState<number | null>(null);
   const [presetId, setPresetId] = useState(defaultPreset);
   const [speed, setSpeed] = useState(speedRange.initial);
-  const [tab, setTab] = useState<"build" | "joints">("build");
+  const [tab, setTab] = useState<"build" | "joints" | "sort">("build");
+  const [workspace, setWorkspace] = useState<"build" | "sort">("build");
+  const [round, setRound] = useState(0);
+  const [sortedCounts, setSortedCounts] = useState<number[]>([0, 0, 0, 0]);
   const [view, setView] = useState<BuildView>({
     status: "idle", paused: false, current: 0, total: 0, placed: 0, supply: 0, stage: null, failure: null,
   });
@@ -354,6 +364,27 @@ export function Simulator({ children, facts }: { children: React.ReactNode; fact
       // CAD contact travel for the pose it last sat in the mouth, reused while nothing moves.
       contact?: { position: THREE.Vector3; quaternion: THREE.Quaternion; travel: number | null };
     };
+    const sortZones = new THREE.Group();
+    sortZones.visible = false;
+    scene.add(sortZones);
+    sortColors.forEach((color, index) => {
+      const zone = new THREE.Mesh(new THREE.RingGeometry(25, 53, 48), new THREE.MeshBasicMaterial({ color: brickColors[color], transparent: true, opacity: 0.65, side: THREE.DoubleSide }));
+      zone.position.copy(radialPoint(sortZoneAngle(index), 300, 0.6));
+      sortZones.add(zone);
+      const labelCanvas = document.createElement("canvas");
+      labelCanvas.width = 256; labelCanvas.height = 64;
+      const context = labelCanvas.getContext("2d")!;
+      context.fillStyle = "#f4eee5";
+      context.font = "bold 30px monospace";
+      context.textAlign = "center";
+      context.fillText(color.toUpperCase(), 128, 43);
+      const texture = new THREE.CanvasTexture(labelCanvas);
+      const label = new THREE.Mesh(new THREE.PlaneGeometry(76, 19), new THREE.MeshBasicMaterial({ map: texture, transparent: true, side: THREE.DoubleSide, depthWrite: false }));
+      label.position.copy(radialPoint(sortZoneAngle(index), 372, 0.7));
+      sortZones.add(label);
+    });
+    let sorting = false;
+    let savedPreset = defaultPreset;
     const brickGroup = new THREE.Group();
     scene.add(brickGroup);
     const brickGeometries = new Map<string, THREE.BufferGeometry>();
@@ -549,6 +580,10 @@ export function Simulator({ children, facts }: { children: React.ReactNode; fact
     let shownMode: Mode = "loading";
     const publish = () => {
       if (loadedCount < meshCount || !sequencer || !plan) return;
+      if (sorting) {
+        const counts = sortColors.map((color) => bricks.filter((brick) => brick.placed && brick.plan.entry.color === color).length);
+        setSortedCounts((previous) => counts.every((count, index) => count === previous[index]) ? previous : counts);
+      }
       const status = sequencer.status;
       const running = status === "running";
       const { current, total } = sequencer.progress();
@@ -599,11 +634,33 @@ export function Simulator({ children, facts }: { children: React.ReactNode; fact
     };
     const selectPreset = (id: string) => {
       if (loadedCount < meshCount) return;
+      sorting = false;
+      sortZones.visible = false;
+      setWorkspace("build");
+      savedPreset = id;
       dropHeld();
       plan = planFor(id);
       createBricks(plan);
       setPresetId(plan.preset.id);
       resetBuild();
+    };
+    const jumbleSort = () => {
+      if (loadedCount < meshCount) return;
+      sequencer?.stop();
+      dropHeld();
+      driver.hold();
+      // Restore a safe open home pose before replacing objects underneath the arm.
+      Object.assign(driver.pose, homePose, { gripper: openTravel });
+      Object.assign(driver.targets, driver.pose);
+      sorting = true;
+      sortZones.visible = true;
+      setWorkspace("sort");
+      setRound((value) => value + 1);
+      plan = planSort(arm);
+      createBricks(plan);
+      sequencer = new BuildSequencer(plan);
+      startBuild();
+      publish();
     };
     const takeManual = () => {
       sequencer?.stop();
@@ -613,6 +670,9 @@ export function Simulator({ children, facts }: { children: React.ReactNode; fact
     };
     actionsRef.current = {
       takeManual,
+      enterSort: () => { if (!sorting) jumbleSort(); },
+      jumbleSort,
+      enterBuild: () => { if (sorting) selectPreset(savedPreset); },
       start: startBuild,
       togglePause: () => {
         if (sequencer?.status !== "running") return;
@@ -868,7 +928,8 @@ export function Simulator({ children, facts }: { children: React.ReactNode; fact
   const ready = loaded === meshCount;
   const preset = buildPresets.find((entry) => entry.id === presetId) ?? buildPresets[0];
   const running = view.status === "running";
-  const total = view.total || preset.bricks.length;
+  const sorting = workspace === "sort";
+  const total = view.total || (sorting ? sortCount : preset.bricks.length);
   const [headline, detail] = !ready
     ? ["Loading", `${preset.name} · ${preset.bricks.length} bricks`]
     : running && view.paused
@@ -893,7 +954,7 @@ export function Simulator({ children, facts }: { children: React.ReactNode; fact
           : view.status === "idle"
             ? "Ready to build"
             : "Manual control";
-  const modeLabel = !ready ? "Boot" : running ? (view.paused ? "Paused" : "Building") : view.status === "complete" ? "Done" : "Manual";
+  const modeLabel = !ready ? "Boot" : running ? (view.paused ? "Paused" : sorting ? "Sorting" : "Building") : view.status === "complete" ? "Done" : "Manual";
   const dot = !ready ? "loading" : running ? (view.paused ? "paused" : "autopilot") : "manual";
   const speedFill = ((speed - speedRange.min) / (speedRange.max - speedRange.min)) * 100;
 
@@ -911,6 +972,8 @@ export function Simulator({ children, facts }: { children: React.ReactNode; fact
       data-supply={view.supply}
       data-stage={view.stage ?? ""}
       data-speed={speed}
+      data-workspace={workspace}
+      data-sort-round={round}
     >
       <div className="hero-stage" ref={mountRef} aria-label="Interactive robot arm simulator" />
       {!ready && (
@@ -924,10 +987,10 @@ export function Simulator({ children, facts }: { children: React.ReactNode; fact
           <div className="dock-status" aria-live="polite">
             <span className={`dot dot-${dot}`} />
             <span className="dock-mode">{modeLabel}</span>
-            <span className="dock-message">{status}</span>
+            <span className="dock-message">{sorting && ready ? (view.status === "complete" ? "All colors organized" : view.status === "failed" ? view.failure : view.stage ?? "Ready to sort") : status}</span>
           </div>
           <div className="dock-tabs" role="tablist" aria-label="Control panel">
-            {(["build", "joints"] as const).map((name) => (
+            {(["build", "joints", "sort"] as const).map((name) => (
               <button
                 key={name}
                 className="dock-tab"
@@ -936,9 +999,14 @@ export function Simulator({ children, facts }: { children: React.ReactNode; fact
                 id={`dock-tab-${name}`}
                 aria-controls={`dock-panel-${name}`}
                 aria-selected={tab === name}
-                onClick={() => setTab(name)}
+                disabled={!ready}
+                onClick={() => {
+                  setTab(name);
+                  if (name === "sort") actionsRef.current.enterSort();
+                  if (name === "build") actionsRef.current.enterBuild();
+                }}
               >
-                {name === "build" ? "Build" : "Joints"}
+                {name === "build" ? "Build" : name === "sort" ? "Sort" : "Joints"}
               </button>
             ))}
           </div>
@@ -982,6 +1050,28 @@ export function Simulator({ children, facts }: { children: React.ReactNode; fact
                 {view.paused ? "Resume" : "Pause"}
               </button>
               <button className="button" type="button" disabled={!ready} onClick={() => actionsRef.current.reset()}>Reset</button>
+            </div>
+          </div>
+          <div className="dock-panel" id="dock-panel-sort" role="tabpanel" aria-labelledby="dock-tab-sort" hidden={tab !== "sort"}>
+            <div className="build-progress">
+              <p className="build-detail">COLOR SORTING · ROUND {round}</p>
+              <p className="sort-headline">{view.status === "complete" ? "Every color in its place" : view.status === "failed" ? "Sorting halted" : view.paused ? "Sorting paused" : `Sorting object ${view.current || 1} of ${sortCount}`}</p>
+              <p className="build-detail">Objects surround the arm. Watch it gather each color into its matching zone.</p>
+              <div className="sort-colors">
+                {sortColors.map((color, index) => (
+                  <div className="sort-color" key={color} data-color={color} data-sorted={sortedCounts[index]}>
+                    <span className="sort-swatch" style={{ background: brickColors[color] }} />
+                    <span>{color}</span><strong>{sortedCounts[index]} / 2</strong>
+                  </div>
+                ))}
+              </div>
+              <div className="build-bar" role="progressbar" aria-label="Objects sorted" aria-valuemin={0} aria-valuemax={sortCount} aria-valuenow={view.placed} style={{ "--progress": `${view.placed / sortCount * 100}%` } as React.CSSProperties} />
+              <p className="build-detail" aria-live="polite">{view.failure ?? (view.status === "complete" ? "Re-jumble to give the robot a fresh challenge." : view.stage)}</p>
+            </div>
+            <div className="dock-actions sort-actions">
+              <button className="button button-primary" type="button" disabled={!ready} onClick={() => actionsRef.current.jumbleSort()}>Re-jumble &amp; sort</button>
+              <button className="button" type="button" disabled={!running} onClick={() => actionsRef.current.togglePause()}>{view.paused ? "Resume" : "Pause"}</button>
+              {view.status === "stopped" && <button className="button" type="button" onClick={() => actionsRef.current.start()}>Start sorting</button>}
             </div>
           </div>
           <div className="dock-panel" id="dock-panel-joints" role="tabpanel" aria-labelledby="dock-tab-joints" hidden={tab !== "joints"}>
