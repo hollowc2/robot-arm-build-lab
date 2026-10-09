@@ -12,13 +12,18 @@ export const brickPlay = 0.1;
 // The jaws can only squeeze a brick across this many studs.
 export const maxGripStuds = 2;
 
-export type BrickType = "1x2" | "2x2" | "2x3" | "2x4";
+export type BrickType = "1x1" | "1x2" | "1x3" | "1x4" | "1x6" | "2x2" | "2x3" | "2x4" | "2x6";
 // Width (along the jaw axis) x length (along the build line) in studs at rotation 0.
 export const brickTypes: Record<BrickType, { width: number; length: number }> = {
+  "1x1": { width: 1, length: 1 },
   "1x2": { width: 1, length: 2 },
+  "1x3": { width: 1, length: 3 },
+  "1x4": { width: 1, length: 4 },
+  "1x6": { width: 1, length: 6 },
   "2x2": { width: 2, length: 2 },
   "2x3": { width: 2, length: 3 },
   "2x4": { width: 2, length: 4 },
+  "2x6": { width: 2, length: 6 },
 };
 
 export const brickColors = {
@@ -29,6 +34,9 @@ export const brickColors = {
   white: "#d9d8d2",
   orange: "#d2600f",
   tan: "#c2a66a",
+  gray: "#66717b",
+  brown: "#58331f",
+  glass: "#9cd7e8",
 } as const;
 export type BrickColor = keyof typeof brickColors;
 
@@ -39,6 +47,8 @@ export type PresetBrick = {
   cell: [u: number, v: number, layer: number];
   // Quarter turns about the vertical axis; 90 swaps width and length.
   rotation: 0 | 90;
+  // Roof wedges rise toward the centre of the building across the depth axis.
+  slope?: 1 | -1;
 };
 
 export type BuildPreset = {
@@ -49,38 +59,78 @@ export type BuildPreset = {
   bricks: PresetBrick[];
 };
 
-const brick = (type: BrickType, color: BrickColor, u: number, layer: number, rotation: 0 | 90 = 0, v = 0): PresetBrick => ({
-  type, color, cell: [u, v, layer], rotation,
-});
-
-// Open rows leave room for the real finger pads. Each column clutches the course
-// below; the baseplate ties the rows together. These are volumetric structures,
-// with depth as well as height, rather than longer versions of the small wall.
-function sculpture(id: string, name: string, blurb: string, heights: number[][], colors: BrickColor[]): BuildPreset {
+// Each course is a real plan in both horizontal axes. Empty interior cells remain
+// empty; floors and roof courses tie the four walls together by stud overlap.
+type BuildingStyle = { id: string; name: string; blurb: string; wall: BrickColor; roof: BrickColor; stories: number; pitched: boolean };
+function building(style: BuildingStyle): BuildPreset {
   const bricks: PresetBrick[] = [];
-  const layers = Math.max(...heights.flat());
-  for (let layer = 0; layer < layers; layer += 1) {
-    heights.forEach((row, v) => row.forEach((height, u) => {
-      if (layer < height) bricks.push(brick("2x2", colors[layer % colors.length], u * 2, layer, 0, (v - (heights.length - 1) / 2) * 4));
-    }));
+  const width = 10, depth = 8;
+  const eaves = 1 + style.stories * 4;
+  const roofLayers = style.pitched ? 4 : 2;
+  for (let layer = 0; layer < eaves + roofLayers; layer += 1) {
+    const cells = new Map<string, BrickColor>();
+    const set = (u: number, v: number, color: BrickColor) => cells.set(`${u},${v}`, color);
+    if (layer === 0 || (layer > 1 && layer < eaves && (layer - 1) % 4 === 0)) {
+      // Complete floor slabs, including the interior, in alternating bonded courses.
+      for (let v = 0; v < depth; v++) for (let u = 0; u < width; u++) set(u, v, layer === 0 ? "gray" : "tan");
+    } else if (layer < eaves) {
+      for (let v = 0; v < depth; v++) for (let u = 0; u < width; u++) {
+        if (u !== 0 && u !== width - 1 && v !== 0 && v !== depth - 1) continue;
+        const local = (layer - 1) % 4;
+        let color: BrickColor = local === 3 ? "white" : style.wall;
+        // Glazed windows on all four elevations, with solid piers and white sills.
+        const window = (v === 0 || v === depth - 1) ? (u === 2 || u === 3 || u === 6 || u === 7) : (v === 2 || v === 3 || v === 5);
+        if (window && (local === 1 || local === 2)) color = "glass";
+        if (window && local === 0) color = "white";
+        // Two-stud entrance, inset behind the front wall; white lintel above.
+        if (v === 0 && (u === 4 || u === 5) && layer <= 3) continue;
+        set(u, v, color);
+      }
+      if (layer <= 3) {
+        set(4, 1, "brown"); set(5, 1, layer === 3 ? "glass" : "brown");
+      }
+    } else {
+      const roofLevel = layer - eaves;
+      if (style.pitched) {
+        // The first course spans the room; successive roof courses recede to a ridge.
+        for (let v = roofLevel; v < depth - roofLevel; v++) for (let u = 0; u < width; u++) set(u, v, style.roof);
+      } else if (roofLevel === 0) {
+        for (let v = 0; v < depth; v++) for (let u = 0; u < width; u++) set(u, v, "gray");
+      } else {
+        for (let v = 0; v < depth; v++) for (let u = 0; u < width; u++) {
+          if (u === 0 || u === width - 1 || v === 0 || v === depth - 1) {
+            if (style.id !== "citadel" || (u + v) % 3 !== 1) set(u, v, style.roof);
+          }
+        }
+      }
+    }
+    // Pack same-colour cells into a varied inventory, shifting seams every course.
+    // Long pieces bridge the room from its supported side walls on the first roof course.
+    for (let v = 0; v < depth; v++) for (let u = 0; u < width;) {
+      const color = cells.get(`${u},${v}`);
+      if (!color) { u++; continue; }
+      const choices = (layer === 0 || layer === eaves || (layer > 1 && layer < eaves && (layer - 1) % 4 === 0)) ? [6, 4, 3, 2, 1] : (layer + v) % 2 ? [3, 1, 4, 2] : [4, 2, 3, 1];
+      const length = choices.find((n) => u + n <= width && Array.from({ length: n }, (_, i) => cells.get(`${u + i},${v}`)).every((c) => c === color))!;
+      const roofEdge = style.pitched && layer >= eaves && layer < eaves + roofLayers - 1 && (v === layer - eaves || v === depth - (layer - eaves) - 1);
+      const wide = !(layer % 2 === 1 && v === 0) && !roofEdge && (length > 1 || (layer + v) % 2 === 0) && v + 1 < depth && Array.from({ length }, (_, i) => cells.get(`${u + i},${v + 1}`)).every((c) => c === color);
+      const rotated = wide && length === 1;
+      const type = rotated ? "1x2" : `${wide ? 2 : 1}x${length}` as BrickType;
+      bricks.push({ type, color, cell: [u, v, layer], rotation: rotated ? 90 : 0, ...(roofEdge ? { slope: v < depth / 2 ? 1 as const : -1 as const } : {}) });
+      for (let i = 0; i < length; i++) {
+        cells.delete(`${u + i},${v}`);
+        if (wide) cells.delete(`${u + i},${v + 1}`);
+      }
+      u += length;
+    }
   }
-  return { id, name, blurb, bricks };
+  return { ...style, bricks };
 }
 
 export const buildPresets: BuildPreset[] = [
-  sculpture("pavilion", "Garden pavilion", "Two open colonnades · five courses", [
-    [5, 5, 5, 5, 5], [5, 5, 5, 5, 5],
-  ], ["white", "tan", "green"]),
-  sculpture("terraces", "Terraced monument", "Four stepped terraces with finger-clearance lanes", [
-    [4, 4, 5, 4, 4], [5, 6, 7, 6, 5], [5, 6, 7, 6, 5], [4, 4, 5, 4, 4],
-  ], ["tan", "yellow", "orange", "red"]),
-  sculpture("skyline", "City skyline", "Three streets of rising towers", [
-    [7, 9, 12, 9, 7], [10, 12, 18, 12, 10], [7, 9, 12, 9, 7],
-  ], ["blue", "white"]),
-  sculpture("citadel", "Grand citadel", "Five open avenues around a central keep", [
-    [10, 10, 10, 10, 10], [9, 10, 12, 10, 9], [8, 10, 14, 10, 8],
-    [9, 10, 12, 10, 9], [10, 10, 10, 10, 10],
-  ], ["white", "blue", "blue", "tan", "tan"]),
+  building({ id: "pavilion", name: "Garden pavilion", blurb: "Four glazed walls · recessed entrance · green pitched roof", wall: "tan", roof: "green", stories: 1, pitched: true }),
+  building({ id: "terraces", name: "Terraced monument", blurb: "Two-storey townhouse · ivory window frames · terracotta roof", wall: "yellow", roof: "orange", stories: 2, pitched: true }),
+  building({ id: "skyline", name: "City skyline", blurb: "Three-storey corner building · glazed windows · gold parapet", wall: "blue", roof: "yellow", stories: 3, pitched: false }),
+  building({ id: "citadel", name: "Grand citadel", blurb: "Stone gatehouse · inset oak door · four-sided battlements", wall: "white", roof: "tan", stories: 2, pitched: false }),
 ];
 
 // Studs along (u) and across (v) the build line once the rotation is applied.

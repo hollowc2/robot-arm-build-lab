@@ -29,7 +29,7 @@ export const carryClearance = 16;
 // Keep pickups and placements outside the inner reach excluded by the elbow stops.
 export const buildSite = { baseAngle: 222, start: 230 };
 // Supply bricks wait on two arcs in front of the arm, picked in assembly order.
-export const supplyLayout = { centerAngle: 138, radii: [240, 285], spacing: 42 };
+export const supplyLayout = { centerAngle: 138, radii: [235, 299], spacing: 75 };
 // Replenish this bounded tray between batches instead of wrapping hundreds of
 // simultaneously waiting bricks around the arm and through the build site.
 export const supplyBatchSize = 12;
@@ -174,7 +174,8 @@ function supplySlots(count: number) {
 export function planBuild(preset: BuildPreset, arm: ArmModel): BuildPlan {
   const problems = validateLayout(preset);
   const up = (point: THREE.Vector3, height: number) => point.clone().setZ(height);
-  const gripAt = (center: THREE.Vector3) => center.clone().add(new THREE.Vector3(0, 0, gripAboveCenter));
+  const gripOffset = gripAboveCenter;
+  const gripAt = (center: THREE.Vector3) => center.clone().add(new THREE.Vector3(0, 0, gripOffset));
   let previous: JointAngles = { ...homePose };
   const solve = (point: THREE.Vector3, gripper: number, what: string) => {
     // Most build moves use the same straight-down elbow branch. The exact IK
@@ -200,10 +201,11 @@ export function planBuild(preset: BuildPreset, arm: ArmModel): BuildPlan {
     const name = `${preset.name} brick ${index + 1} (${label})`;
     const studs = footprint(entry);
     const size = new THREE.Vector3(studs.v * studPitch - 2 * brickPlay, studs.u * studPitch - 2 * brickPlay, brickHeight);
+    if (size.x < 13) problems.push(`${name}: the brick is narrower than the plain gripper can close`);
     const target = targetPose(entry);
     const supplyCenter = slots[index];
     const top = Math.max(studHeight + brickHeight, ...placed.map((box) => box.center.z + box.half.z), target.position.z + brickHeight / 2 + studHeight);
-    const travel = top + carryClearance + brickHeight / 2 + gripAboveCenter;
+    const travel = top + carryClearance + brickHeight / 2 + gripOffset;
 
     const pick = gripAt(supplyCenter);
     const place = gripAt(target.position);
@@ -243,7 +245,7 @@ export function planBuild(preset: BuildPreset, arm: ArmModel): BuildPlan {
     // The studs beneath slot into the brick's hollow underside, so start the corridor above them.
     const corridor = brickBox(planned, target);
     const corridorBottom = target.position.z - brickHeight / 2 + studHeight;
-    const corridorTop = travel - gripAboveCenter + brickHeight / 2 + studHeight;
+    const corridorTop = travel - gripOffset + brickHeight / 2 + studHeight;
     corridor.center.z = (corridorBottom + corridorTop) / 2;
     corridor.half.z = (corridorTop - corridorBottom) / 2;
     const placeBlockers = placed.filter((box) => boxesOverlap(box, corridor)

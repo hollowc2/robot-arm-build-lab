@@ -23,8 +23,11 @@ import {
   type JointAngles,
   type JointName,
 } from "./arm";
+import { plainGripperPresets } from "./plainGripperPresets";
 import { brickColors, brickHeight, buildPresets, footprint, studHeight, studPitch, type BuildPreset, type PresetBrick } from "./bricks";
 import { followLine, openTravel, planBuild, supplyBatch, supplyBatchSize, type BuildPlan, type PlannedBrick } from "./buildPlan";
+
+const playablePresets = [...plainGripperPresets, ...buildPresets];
 import { ArmDriver, BuildSequencer, type BuildStatus } from "./buildRunner";
 import { brickGeometry, brickMaterial, ghostMaterial } from "./brickMesh";
 import { SimClock, speedRange } from "./simClock";
@@ -54,6 +57,7 @@ type Actions = {
   start: () => void;
   togglePause: () => void;
   reset: () => void;
+  inspect: () => void;
   selectPreset: (id: string) => void;
   setSpeed: (speed: number) => void;
 };
@@ -74,7 +78,7 @@ const palette = {
   gripper: "#5fb3a9",
 };
 // Purchased-part finishes exported beside each rigid link as `${link}_${finish}.stl`.
-const defaultPreset = "pavilion";
+const defaultPreset = "house";
 const brickMass = 0.03;
 // How close a released brick must be to its studs to click into place.
 const snapDistance = 2;
@@ -84,6 +88,7 @@ const noActions: Actions = {
   start: () => undefined,
   togglePause: () => undefined,
   reset: () => undefined,
+  inspect: () => undefined,
   selectPreset: () => undefined,
   setSpeed: () => undefined,
 };
@@ -104,6 +109,8 @@ export function Simulator({ children, facts }: { children: React.ReactNode; fact
   const [mode, setMode] = useState<Mode>("loading");
   const [heldName, setHeldName] = useState<string | null>(null);
   const [reach, setReach] = useState<number | null>(null);
+  const [viewingBuilding, setViewingBuilding] = useState(false);
+  const [buildProblem, setBuildProblem] = useState<string | null>(null);
   const [presetId, setPresetId] = useState(defaultPreset);
   const [speed, setSpeed] = useState(speedRange.initial);
   const [tab, setTab] = useState<"build" | "joints">("build");
@@ -362,6 +369,7 @@ export function Simulator({ children, facts }: { children: React.ReactNode; fact
       if (!map.has(key)) map.set(key, make());
       return map.get(key)!;
     };
+    let inspecting = false;
     let bricks: SimBrick[] = [];
     const plans = new Map<string, BuildPlan>();
     let plan: BuildPlan | null = null;
@@ -424,7 +432,7 @@ export function Simulator({ children, facts }: { children: React.ReactNode; fact
       bricks.forEach((brick) => world.removeBody(brick.body));
       brickGroup.clear();
       bricks = next.bricks.map((planned) => {
-        const geometry = cached(brickGeometries, `${planned.studs.u}x${planned.studs.v}`, () => brickGeometry(planned.size, planned.studs));
+        const geometry = cached(brickGeometries, `${planned.studs.u}x${planned.studs.v}:${planned.entry.slope ?? 0}`, () => brickGeometry(planned.size, planned.studs, planned.entry.slope));
         const color = brickColors[planned.entry.color];
         const mesh = new THREE.Mesh(geometry, cached(brickMaterials, color, () => brickMaterial(color)));
         mesh.castShadow = true;
@@ -453,9 +461,8 @@ export function Simulator({ children, facts }: { children: React.ReactNode; fact
     };
     const planFor = (id: string) => {
       if (!plans.has(id)) {
-        const preset = buildPresets.find((entry) => entry.id === id) ?? buildPresets[0];
+        const preset = playablePresets.find((entry) => entry.id === id) ?? playablePresets[0];
         const next = planBuild(preset, arm);
-        if (next.problems.length) console.error(`Cannot build ${preset.name}:\n${next.problems.join("\n")}`);
         plans.set(id, next);
       }
       return plans.get(id)!;
@@ -504,6 +511,16 @@ export function Simulator({ children, facts }: { children: React.ReactNode; fact
       setHeldName(null);
     };
     const resetBricks = () => {
+      if (inspecting) {
+        inspecting = false;
+        setViewingBuilding(false);
+        controls.target.set(0, 0, 270);
+        camera.position.set(700, -720, 560).sub(controls.target).setLength(1600).add(controls.target);
+      }
+      bricks.forEach((brick) => {
+        const color = brickColors[brick.plan.entry.color];
+        brick.ghost.material = brickMaterials.get(`ghost ${color}`)!;
+      });
       dropHeld();
       bricks.forEach(stageSupply);
       refillSupply(0);
@@ -601,6 +618,7 @@ export function Simulator({ children, facts }: { children: React.ReactNode; fact
       if (loadedCount < meshCount) return;
       dropHeld();
       plan = planFor(id);
+      setBuildProblem(plan.problems.length ? "The plain gripper needs more clearance between these bricks. View the building or choose a smaller build." : null);
       createBricks(plan);
       setPresetId(plan.preset.id);
       resetBuild();
@@ -620,6 +638,32 @@ export function Simulator({ children, facts }: { children: React.ReactNode; fact
         publish();
       },
       reset: resetBuild,
+      inspect: () => {
+        if (inspecting) { resetBuild(); return; }
+        resetBuild();
+        inspecting = true;
+        setViewingBuilding(true);
+        bricks.forEach((brick) => {
+          brick.mesh.visible = false;
+          brick.ghost.material = brick.mesh.material;
+          brick.ghost.visible = true;
+        });
+        const bounds = new THREE.Box3();
+        for (const brick of bricks) {
+          const half = brick.plan.size.clone().multiplyScalar(0.5);
+          bounds.expandByPoint(brick.plan.target.position.clone().sub(half));
+          bounds.expandByPoint(brick.plan.target.position.clone().add(half));
+        }
+        const center = bounds.getCenter(new THREE.Vector3());
+        // Frame the finished building for close inspection from every side.
+        controls.target.copy(center);
+        camera.clearViewOffset();
+        if (mount.clientWidth >= 1000) camera.setViewOffset(mount.clientWidth, mount.clientHeight, -mount.clientWidth * 0.1, 0, mount.clientWidth, mount.clientHeight);
+        camera.position.copy(center).add(new THREE.Vector3(420, 90, 315));
+        camera.updateProjectionMatrix();
+        controls.update();
+        mount.parentElement?.scrollIntoView({ block: "start", behavior: "instant" });
+      },
       selectPreset,
       setSpeed: (value) => {
         clock.setSpeed(value);
@@ -719,13 +763,12 @@ export function Simulator({ children, facts }: { children: React.ReactNode; fact
       wrist.getWorldPosition(wristPosition);
       inverseWrist.copy(gripQuaternion).invert();
       if (held && pose.gripper >= releaseTravel(heldTravel, jointLimits.gripper[1])) release();
-      if (!held && driver.targets.gripper < previousPose.gripper && pose.gripper < previousPose.gripper) {
+      if (!held && !inspecting && driver.targets.gripper < previousPose.gripper && pose.gripper < previousPose.gripper) {
         for (const brick of bricks) {
           if (!brick.supplied) continue;
           if (brick.body.type !== CANNON.Body.DYNAMIC) continue;
           localPosition.set(brick.body.position.x, brick.body.position.y, brick.body.position.z)
             .sub(wristPosition).applyQuaternion(inverseWrist);
-          // Require the solid to be inside the mouth; proximity alone is not a grasp.
           if (Math.abs(localPosition.x) > 6 || Math.abs(localPosition.y - 124) > 18 || Math.abs(localPosition.z - 14) > 10) continue;
           localQuaternion.set(brick.body.quaternion.x, brick.body.quaternion.y, brick.body.quaternion.z, brick.body.quaternion.w)
             .premultiply(inverseWrist);
@@ -866,11 +909,15 @@ export function Simulator({ children, facts }: { children: React.ReactNode; fact
   };
 
   const ready = loaded === meshCount;
-  const preset = buildPresets.find((entry) => entry.id === presetId) ?? buildPresets[0];
+  const preset = playablePresets.find((entry) => entry.id === presetId) ?? playablePresets[0];
   const running = view.status === "running";
   const total = view.total || preset.bricks.length;
   const [headline, detail] = !ready
     ? ["Loading", `${preset.name} · ${preset.bricks.length} bricks`]
+    : viewingBuilding
+      ? [`${preset.name} preview`, "Drag to orbit · Scroll to zoom · Start assembles from scratch"]
+    : buildProblem
+      ? ["Preview only", buildProblem]
     : running && view.paused
       ? [`Paused at brick ${view.current} of ${total}`, view.stage ?? ""]
       : running
@@ -907,6 +954,7 @@ export function Simulator({ children, facts }: { children: React.ReactNode; fact
       data-build={view.status}
       data-paused={view.paused}
       data-preset={presetId}
+      data-preview={viewingBuilding}
       data-placed={view.placed}
       data-supply={view.supply}
       data-stage={view.stage ?? ""}
@@ -944,7 +992,7 @@ export function Simulator({ children, facts }: { children: React.ReactNode; fact
           </div>
           <div className="dock-panel" id="dock-panel-build" role="tabpanel" aria-labelledby="dock-tab-build" hidden={tab !== "build"}>
             <div className="preset-list" role="radiogroup" aria-label="Structure to build">
-              {buildPresets.map((entry) => (
+              {playablePresets.map((entry) => (
                 <button
                   key={entry.id}
                   className="preset"
@@ -975,13 +1023,14 @@ export function Simulator({ children, facts }: { children: React.ReactNode; fact
               />
             </div>
             <div className="dock-actions build-actions">
-              <button className="button button-primary" type="button" disabled={!ready || running} onClick={() => actionsRef.current.start()}>
+              <button className="button button-primary" type="button" disabled={!ready || running || !!buildProblem} onClick={() => actionsRef.current.start()}>
                 Start
               </button>
               <button className="button" type="button" disabled={!running} onClick={() => actionsRef.current.togglePause()}>
                 {view.paused ? "Resume" : "Pause"}
               </button>
               <button className="button" type="button" disabled={!ready} onClick={() => actionsRef.current.reset()}>Reset</button>
+              <button className="button" type="button" disabled={!ready} aria-pressed={viewingBuilding} onClick={() => actionsRef.current.inspect()}>{viewingBuilding ? "Return to build" : "View building"}</button>
             </div>
           </div>
           <div className="dock-panel" id="dock-panel-joints" role="tabpanel" aria-labelledby="dock-tab-joints" hidden={tab !== "joints"}>
@@ -1083,10 +1132,14 @@ function SculpturePreview({ preset }: { preset: BuildPreset }) {
   const corners = (entry: PresetBrick) => {
     const [u, v, z] = entry.cell;
     const size = footprint(entry);
-    return [z, z + 0.96].flatMap((height) => [
-      project(u, v, height), project(u + size.u - 0.04, v, height),
-      project(u + size.u - 0.04, v + size.v - 0.04, height), project(u, v + size.v - 0.04, height),
-    ]);
+    const nearTop = z + (entry.slope === 1 ? 0.12 : 0.96);
+    const farTop = z + (entry.slope === -1 ? 0.12 : 0.96);
+    return [
+      project(u, v, z), project(u + size.u - 0.04, v, z),
+      project(u + size.u - 0.04, v + size.v - 0.04, z), project(u, v + size.v - 0.04, z),
+      project(u, v, nearTop), project(u + size.u - 0.04, v, nearTop),
+      project(u + size.u - 0.04, v + size.v - 0.04, farTop), project(u, v + size.v - 0.04, farTop),
+    ];
   };
   const points = preset.bricks.flatMap(corners);
   const minX = Math.min(...points.map(([x]) => x));
