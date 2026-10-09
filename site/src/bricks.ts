@@ -59,78 +59,48 @@ export type BuildPreset = {
   bricks: PresetBrick[];
 };
 
-// Each course is a real plan in both horizontal axes. Empty interior cells remain
-// empty; floors and roof courses tie the four walls together by stud overlap.
-type BuildingStyle = { id: string; name: string; blurb: string; wall: BrickColor; roof: BrickColor; stories: number; pitched: boolean };
-function building(style: BuildingStyle): BuildPreset {
+// Three open bays preserve a deep silhouette while leaving 40 mm finger lanes.
+// All pickups present a two-stud face. Courses are assembled from the inside out
+// at each height, never descending beside an already finished tall wall.
+function architecture(id: string, name: string, blurb: string): BuildPreset {
   const bricks: PresetBrick[] = [];
-  const width = 10, depth = 8;
-  const eaves = 1 + style.stories * 4;
-  const roofLayers = style.pitched ? 4 : 2;
-  for (let layer = 0; layer < eaves + roofLayers; layer += 1) {
-    const cells = new Map<string, BrickColor>();
-    const set = (u: number, v: number, color: BrickColor) => cells.set(`${u},${v}`, color);
-    if (layer === 0 || (layer > 1 && layer < eaves && (layer - 1) % 4 === 0)) {
-      // Complete floor slabs, including the interior, in alternating bonded courses.
-      for (let v = 0; v < depth; v++) for (let u = 0; u < width; u++) set(u, v, layer === 0 ? "gray" : "tan");
-    } else if (layer < eaves) {
-      for (let v = 0; v < depth; v++) for (let u = 0; u < width; u++) {
-        if (u !== 0 && u !== width - 1 && v !== 0 && v !== depth - 1) continue;
-        const local = (layer - 1) % 4;
-        let color: BrickColor = local === 3 ? "white" : style.wall;
-        // Glazed windows on all four elevations, with solid piers and white sills.
-        const window = (v === 0 || v === depth - 1) ? (u === 2 || u === 3 || u === 6 || u === 7) : (v === 2 || v === 3 || v === 5);
-        if (window && (local === 1 || local === 2)) color = "glass";
-        if (window && local === 0) color = "white";
-        // Two-stud entrance, inset behind the front wall; white lintel above.
-        if (v === 0 && (u === 4 || u === 5) && layer <= 3) continue;
-        set(u, v, color);
-      }
-      if (layer <= 3) {
-        set(4, 1, "brown"); set(5, 1, layer === 3 ? "glass" : "brown");
-      }
+  const add = (u: number, v: number, layer: number, length: 2 | 3 | 4 | 6, color: BrickColor) =>
+    bricks.push({ type: `2x${length}` as BrickType, color, cell: [u, v, layer], rotation: 0 });
+  const lanes = [0, -6, 6];
+  const height = id === "skyline" ? 12 : id === "citadel" ? 9 : 8;
+  for (let layer = 0; layer < height; layer++) for (const v of lanes) {
+    if (id === "pavilion") {
+      if (layer === 0) { add(0, v, layer, 4, "gray"); add(4, v, layer, 6, "gray"); }
+      else if (layer < 4) { add(0, v, layer, 2, layer === 2 ? "glass" : "tan"); add(8, v, layer, 2, layer === 2 ? "glass" : "tan"); }
+      else if (layer === 4) { add(0, v, layer, 4, "white"); add(4, v, layer, 6, "white"); }
+      else { const inset = layer - 5; add(inset, v, layer, 4, "green"); add(inset + 4, v, layer, (layer === 7 ? 2 : 4), "green"); }
+    } else if (id === "terraces") {
+      const inset = Math.floor(layer / 2);
+      const color = layer % 2 ? "orange" : "tan";
+      if (inset === 0) { add(0, v, layer, 4, color); add(4, v, layer, 6, color); }
+      else if (inset === 1) { add(1, v, layer, 4, color); add(5, v, layer, 4, color); }
+      else if (inset === 2) { add(2, v, layer, 3, color); add(5, v, layer, 3, color); }
+      else add(3, v, layer, 4, "yellow");
+    } else if (id === "skyline") {
+      const towerHeight = v === 0 ? 12 : v < 0 ? 8 : 10;
+      if (layer >= towerHeight) continue;
+      const color = layer === towerHeight - 1 ? "yellow" : layer % 3 === 2 ? "white" : layer % 3 === 1 ? "glass" : "blue";
+      add(v === 0 ? 2 : 0, v, layer, 4, color);
+      if (v !== 0) add(6, v, layer, 4, color);
     } else {
-      const roofLevel = layer - eaves;
-      if (style.pitched) {
-        // The first course spans the room; successive roof courses recede to a ridge.
-        for (let v = roofLevel; v < depth - roofLevel; v++) for (let u = 0; u < width; u++) set(u, v, style.roof);
-      } else if (roofLevel === 0) {
-        for (let v = 0; v < depth; v++) for (let u = 0; u < width; u++) set(u, v, "gray");
-      } else {
-        for (let v = 0; v < depth; v++) for (let u = 0; u < width; u++) {
-          if (u === 0 || u === width - 1 || v === 0 || v === depth - 1) {
-            if (style.id !== "citadel" || (u + v) % 3 !== 1) set(u, v, style.roof);
-          }
-        }
-      }
-    }
-    // Pack same-colour cells into a varied inventory, shifting seams every course.
-    // Long pieces bridge the room from its supported side walls on the first roof course.
-    for (let v = 0; v < depth; v++) for (let u = 0; u < width;) {
-      const color = cells.get(`${u},${v}`);
-      if (!color) { u++; continue; }
-      const choices = (layer === 0 || layer === eaves || (layer > 1 && layer < eaves && (layer - 1) % 4 === 0)) ? [6, 4, 3, 2, 1] : (layer + v) % 2 ? [3, 1, 4, 2] : [4, 2, 3, 1];
-      const length = choices.find((n) => u + n <= width && Array.from({ length: n }, (_, i) => cells.get(`${u + i},${v}`)).every((c) => c === color))!;
-      const roofEdge = style.pitched && layer >= eaves && layer < eaves + roofLayers - 1 && (v === layer - eaves || v === depth - (layer - eaves) - 1);
-      const wide = !(layer % 2 === 1 && v === 0) && !roofEdge && (length > 1 || (layer + v) % 2 === 0) && v + 1 < depth && Array.from({ length }, (_, i) => cells.get(`${u + i},${v + 1}`)).every((c) => c === color);
-      const rotated = wide && length === 1;
-      const type = rotated ? "1x2" : `${wide ? 2 : 1}x${length}` as BrickType;
-      bricks.push({ type, color, cell: [u, v, layer], rotation: rotated ? 90 : 0, ...(roofEdge ? { slope: v < depth / 2 ? 1 as const : -1 as const } : {}) });
-      for (let i = 0; i < length; i++) {
-        cells.delete(`${u + i},${v}`);
-        if (wide) cells.delete(`${u + i},${v + 1}`);
-      }
-      u += length;
+      if (layer === 0 || layer === 4 || layer === 6) { add(0, v, layer, 4, layer === 0 ? "gray" : "tan"); add(4, v, layer, 6, "tan"); }
+      else if (layer < 7) { add(0, v, layer, 2, "white"); add(8, v, layer, 2, "white"); }
+      else { add(0, v, layer, 2, "tan"); add(4, v, layer, 2, "tan"); add(8, v, layer, 2, "tan"); }
     }
   }
-  return { ...style, bricks };
+  return { id, name, blurb, bricks };
 }
 
 export const buildPresets: BuildPreset[] = [
-  building({ id: "pavilion", name: "Garden pavilion", blurb: "Four glazed walls · recessed entrance · green pitched roof", wall: "tan", roof: "green", stories: 1, pitched: true }),
-  building({ id: "terraces", name: "Terraced monument", blurb: "Two-storey townhouse · ivory window frames · terracotta roof", wall: "yellow", roof: "orange", stories: 2, pitched: true }),
-  building({ id: "skyline", name: "City skyline", blurb: "Three-storey corner building · glazed windows · gold parapet", wall: "blue", roof: "yellow", stories: 3, pitched: false }),
-  building({ id: "citadel", name: "Grand citadel", blurb: "Stone gatehouse · inset oak door · four-sided battlements", wall: "white", roof: "tan", stories: 2, pitched: false }),
+  architecture("pavilion", "Garden pavilion", "Open glazed colonnade · ivory lintels · stepped green gables"),
+  architecture("terraces", "Terraced monument", "Four receding terraces · sandstone bands · terracotta steps"),
+  architecture("skyline", "City skyline", "Five staggered towers · glazed façades · gold crowns"),
+  architecture("citadel", "Grand citadel", "Triple gate arcade · stone towers · raised battlements"),
 ];
 
 // Studs along (u) and across (v) the build line once the rotation is applied.

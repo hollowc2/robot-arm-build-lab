@@ -55,6 +55,6 @@ test("speed changes mid-grip and mid-carry keep the build on track", async ({ pa
     await expect(hero).toHaveAttribute("data-build", "running");
   }
   await expect(hero).toHaveAttribute("data-build", "complete", { timeout: 400_000 });
-  await expect(hero).toHaveAttribute("data-placed", "50");
+  await expect(hero).toHaveAttribute("data-placed", String(buildPresets[0].bricks.length));
   expect(errors).toEqual([]);
 });

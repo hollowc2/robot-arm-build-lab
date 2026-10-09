@@ -14,7 +14,7 @@ test("finished buildings can be inspected without changing assembly progress", a
     await expect(hero).toHaveAttribute("data-preview", "true");
     await expect(hero).toHaveAttribute("data-placed", "0");
     await expect(hero.locator(".build-headline")).toHaveText(`${preset.name} preview`);
-    if (preset.id === "pavilion") await page.screenshot({ path: "/tmp/lego-building-final.png" });
+    await page.screenshot({ path: `/tmp/robot-arm-${preset.id}-candidate.png` });
     await hero.getByRole("button", { name: "Return to build", exact: true }).click();
     await expect(hero).toHaveAttribute("data-preview", "false");
     await expect(hero).toHaveAttribute("data-build", "idle");

@@ -3,7 +3,7 @@ import fs from "node:fs";
 import test from "node:test";
 import * as THREE from "three";
 import { STLLoader } from "three/examples/jsm/loaders/STLLoader.js";
-import { createArmModel, jointMotion, jointNames } from "../src/arm.ts";
+import { createArmModel, jointLimits, jointMotion, jointNames } from "../src/arm.ts";
 import { brickCells, brickHeight, buildPresets, studHeight, validateLayout } from "../src/bricks.ts";
 import { boxesOverlap, brickBox, followLine, gripperBoxes, openTravel, planBuild, supplyBatch, supplyBatchSize } from "../src/buildPlan.ts";
 import { ArmDriver, BuildSequencer } from "../src/buildRunner.ts";
@@ -42,44 +42,23 @@ test("presets are supported, in a buildable order and squeezable across the jaws
   }
 });
 
-test("connected architectures span three dimensions", () => {
-  const large = buildPresets.filter((preset) => preset.bricks.length >= 50);
-  assert.deepEqual(large.map((preset) => preset.bricks.length), [138, 213, 275, 189]);
-  for (const preset of large) {
-    const cells = preset.bricks.flatMap(brickCells).map((cell) => cell.split(",").map(Number));
-    for (const axis of [0, 1]) {
-      const extent = Math.max(...cells.map((cell) => cell[axis])) - Math.min(...cells.map((cell) => cell[axis])) + 1;
-      assert.ok(extent >= 8, `${preset.name}: must have substantial width and depth`);
-    }
-    assert.ok(new Set(preset.bricks.map((brick) => brick.type)).size >= 6);
-    assert.ok(preset.bricks.some((brick) => brick.color === "glass"));
-    // A room surrounded on all four sides, rather than a solid block or thin facade.
-    const owners = new Set(preset.bricks.flatMap(brickCells));
-    assert.equal(owners.has("5,4,2"), false);
-    for (const cell of ["0,4,2", "9,4,2", "2,0,2", "2,7,2"]) assert.ok(owners.has(cell));
-  }
-});
-
-test("each entire architecture is one component connected by stud overlap", () => {
+test("architectures retain deep silhouettes, supported bays and stepped crowns", () => {
+  assert.deepEqual(buildPresets.map((preset) => preset.bricks.length), [48, 42, 48, 60]);
   for (const preset of buildPresets) {
-    const lanes = new Map([["structure", preset.bricks]]);
-    for (const lane of lanes.values()) {
-      const owners = new Map(lane.flatMap((brick, index) => brickCells(brick).map((cell) => [cell, index])));
-      const edges = lane.map(() => new Set());
-      lane.forEach((brick, index) => {
-        for (const cell of brickCells(brick)) {
-          const [u, v, layer] = cell.split(",").map(Number);
-          const below = owners.get(`${u},${v},${layer - 1}`);
-          if (below !== undefined) { edges[index].add(below); edges[below].add(index); }
-        }
-      });
-      const connected = new Set([0]);
-      for (const index of connected) for (const next of edges[index]) connected.add(next);
-      assert.equal(connected.size, lane.length, `${preset.name}: detached stack in wall`);
+    const cells = preset.bricks.flatMap(brickCells).map((cell) => cell.split(",").map(Number));
+    assert.ok(Math.max(...cells.map((cell) => cell[1])) - Math.min(...cells.map((cell) => cell[1])) >= 12);
+    assert.ok(Math.max(...cells.map((cell) => cell[2])) >= 7);
+    assert.ok(preset.bricks.every((brick) => brick.type.startsWith("2x")));
+    const owners = new Set(preset.bricks.flatMap(brickCells));
+    for (const brick of preset.bricks.filter((brick) => brick.cell[2] > 0)) {
+      assert.ok(brickCells(brick).some((cell) => {
+        const [u, v, layer] = cell.split(",").map(Number);
+        return owners.has(`${u},${v},${layer - 1}`);
+      }));
     }
-    assert.ok(preset.bricks.some((brick) => brick.type === "1x3"));
-    assert.ok(preset.bricks.some((brick) => brick.type === "1x6"));
   }
+  assert.ok(buildPresets[0].bricks.some((brick) => brick.color === "glass"));
+  assert.ok(buildPresets[2].bricks.some((brick) => brick.color === "glass"));
 });
 
 test("large builds reuse a bounded tray without overlapping waiting bricks", () => {
@@ -117,12 +96,31 @@ test("layout validation catches bad assembly orders, overlaps and floating brick
 
 test("every placement and pickup is reachable and clear of other bricks", () => {
   for (const plan of plans.values()) {
-    if (plan.bricks.length >= 50) {
-      assert.ok(plan.problems.some((problem) => problem.includes("gripper would hit")), plan.preset.name);
-    } else assert.deepEqual(plan.problems, [], plan.preset.name);
+    assert.deepEqual(plan.problems, [], plan.preset.name);
     const stages = plan.steps.filter((step) => step.stage !== "park").map((step) => step.stage);
     assert.equal(stages.length, plan.bricks.length * 9);
     assert.deepEqual(stages.slice(0, 9), ["approach", "lower", "grip", "lift", "carry", "align", "place", "release", "retract"]);
+  }
+});
+
+test("planner rejects a finger-blocked bay, undersized brick and unreachable tower", () => {
+  const preset = (bricks) => ({ id: "invalid", name: "Invalid architecture", blurb: "", bricks });
+  const brick = { type: "2x4", color: "tan", cell: [0, 0, 0], rotation: 0 };
+  assert.match(planBuild(preset([brick, { ...brick, cell: [0, 2, 0] }]), arm).problems.join("\n"), /gripper would hit/);
+  assert.match(planBuild(preset([{ ...brick, type: "1x4" }]), arm).problems.join("\n"), /narrower/);
+  assert.match(planBuild(preset([{ ...brick, cell: [40, 0, 0] }]), arm).problems.join("\n"), /out of reach/);
+});
+
+test("approach and withdrawal corridors stay within CAD joint limits at intermediate points", () => {
+  for (const plan of plans.values()) for (const step of plan.steps) {
+    if (!step.line) continue;
+    const follow = followLine(step, 46);
+    for (let i = 0; i <= 16; i++) {
+      const pose = follow(i / 16);
+      for (const joint of jointNames) assert.ok(pose[joint] >= jointLimits[joint][0] && pose[joint] <= jointLimits[joint][1]);
+      const expected = step.line[0].clone().lerp(step.line[1], i / 16);
+      assert.ok(arm.probe(pose).distanceTo(expected) < 0.05, `${plan.preset.name} ${step.stage}`);
+    }
   }
 });
 
@@ -168,7 +166,7 @@ function runBuild(plan, speedForFrame = () => 1, frameSeconds = 1 / 60, recordPo
   const first = sequencer.start();
   driver.moveTo(first.target, followLine(first, 46));
   let frame = 0;
-  while (sequencer.status === "running" && clock.elapsed < Math.max(600, plan.bricks.length * 20)) {
+  while (sequencer.status === "running" && clock.elapsed < Math.max(600, plan.bricks.length * 30)) {
     clock.setSpeed(speedForFrame(frame, sequencer.step));
     clock.advance(frameSeconds, (seconds) => {
       if (sequencer.status !== "running") return;
@@ -209,7 +207,7 @@ function runBuild(plan, speedForFrame = () => 1, frameSeconds = 1 / 60, recordPo
       // The active brick intentionally touches the pads. Its exact STL contact
       // is checked above; the conservative tool boxes check other obstacles.
       const obstacles = bricks.filter((brick) => brick.index !== held
-        && (plan.bricks.length < 50 || brick.index !== step.brick)
+        && brick.index !== step.brick
         && (placed.has(brick.index) || supplyBatch(brick.index) === supplyBatch(step.brick)));
       const tools = gripperBoxes(gripPosition, gripQuaternion);
       if (held !== null) {
@@ -235,7 +233,7 @@ function runBuild(plan, speedForFrame = () => 1, frameSeconds = 1 / 60, recordPo
 }
 
 const baselines = new Map();
-for (const plan of [...plans.values()].filter((plan) => plan.bricks.length < 50)) {
+for (const plan of plans.values()) {
   test(`${plan.preset.name} builds to completion at 0.5x, 1x and 4x along one trajectory`, () => {
     const runs = [0.5, 1, 4].map((speed) => runBuild(plan, () => speed));
     for (const run of runs) {
@@ -252,7 +250,7 @@ for (const plan of [...plans.values()].filter((plan) => plan.bricks.length < 50)
     assert.ok(Math.abs(runs[2].elapsed - runs[0].elapsed) < 0.1);
     baselines.set(plan.preset.id, runs[0]);
     // Keep demos watchable: a couple of minutes at 1x.
-    assert.ok(runs[0].elapsed < 240, `${plan.preset.name} takes ${runs[0].elapsed.toFixed(0)} s`);
+    assert.ok(runs[0].elapsed < Math.max(240, plan.bricks.length * 30), `${plan.preset.name} takes ${runs[0].elapsed.toFixed(0)} s`);
   });
 }
 

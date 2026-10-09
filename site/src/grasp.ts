@@ -19,7 +19,7 @@ export function graspTravel(
   const box = "halfExtents" in shape
     ? new THREE.Box3(shape.halfExtents.clone().negate(), shape.halfExtents)
     : null;
-  const intersects = (travel: number) => jaws.some(({ geometry, side }) => {
+  const intersects = (travel: number, surfaces = jaws) => surfaces.some(({ geometry, side }) => {
     const transform = jawMatrix(travel, side);
     const vertices = geometry.getAttribute("position");
     const indices = geometry.index;
@@ -35,14 +35,23 @@ export function graspTravel(
     }
     return false;
   });
-  if (intersects(maximum)) return null; // The object cannot fit between fully open jaws.
-  if (!intersects(0)) return null; // It is outside the finger contact area.
-  let closed = 0;
-  let open = maximum;
-  for (let iteration = 0; iteration < 12; iteration += 1) {
-    const middle = (closed + open) / 2;
-    if (intersects(middle)) closed = middle;
-    else open = middle;
-  }
-  return open + 0.05;
+  // A pinch needs opposing fingers. A single-sided hit cannot hold a brick.
+  if (jaws.length !== 2 || new Set(jaws.map((jaw) => jaw.side)).size !== 2) return null;
+  if (intersects(maximum)) return null;
+  const contacts = jaws.map((jaw) => {
+    if (!intersects(0, [jaw])) return null;
+    let closed = 0;
+    let open = maximum;
+    for (let iteration = 0; iteration < 12; iteration += 1) {
+      const middle = (closed + open) / 2;
+      if (intersects(middle, [jaw])) closed = middle;
+      else open = middle;
+    }
+    return open + 0.05;
+  });
+  if (contacts.some((contact) => contact === null)) return null;
+  const [left, right] = contacts as number[];
+  // Reject off-centre poses instead of treating one finger as a hidden grip.
+  if (Math.abs(left - right) > 0.75) return null;
+  return Math.max(left, right);
 }

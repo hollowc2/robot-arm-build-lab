@@ -25,7 +25,7 @@ import {
 } from "./arm";
 import { plainGripperPresets } from "./plainGripperPresets";
 import { brickColors, brickHeight, buildPresets, footprint, studHeight, studPitch, type BuildPreset, type PresetBrick } from "./bricks";
-import { followLine, openTravel, planBuild, supplyBatch, supplyBatchSize, type BuildPlan, type PlannedBrick } from "./buildPlan";
+import { boxesOverlap, brickBox, gripperBoxes, followLine, openTravel, planBuild, supplyBatch, supplyBatchSize, type BuildPlan, type PlannedBrick } from "./buildPlan";
 
 const playablePresets = [...plainGripperPresets, ...buildPresets];
 import { ArmDriver, BuildSequencer, type BuildStatus } from "./buildRunner";
@@ -802,6 +802,38 @@ export function Simulator({ children, facts }: { children: React.ReactNode; fact
         carriedQuaternion.copy(gripQuaternion).multiply(heldQuaternion);
         setBodyPose(held.body, carriedPosition, carriedQuaternion);
         held.body.velocity.set(gripVelocity.x, gripVelocity.y, gripVelocity.z);
+      }
+      // Kinematic robot motion must also stop against settled/static bricks;
+      // Cannon does not resolve static-versus-kinematic contact pairs.
+      if (sequencer?.status === "running") {
+        const tools = gripperBoxes(gripPosition, gripQuaternion);
+        if (held) {
+          const solid = brickBox(held.plan, { position: carriedPosition, quaternion: carriedQuaternion });
+          // Studs of the supporting course enter the brick's hollow underside.
+          solid.center.z += studHeight / 2;
+          solid.half.z -= studHeight / 2;
+          tools.push(solid);
+        }
+        const obstacle = bricks.find((brick) => {
+          if (!brick.supplied || brick === held || brick.plan.index === sequencer!.step.brick) return false;
+          const box = brickBox(brick.plan, {
+            position: new THREE.Vector3(brick.body.position.x, brick.body.position.y, brick.body.position.z),
+            quaternion: new THREE.Quaternion(brick.body.quaternion.x, brick.body.quaternion.y, brick.body.quaternion.z, brick.body.quaternion.w),
+          });
+          return tools.some((tool) => boxesOverlap(tool, box));
+        });
+        if (obstacle) {
+          Object.assign(pose, previousPose);
+          driver.hold();
+          applyPose(pose);
+          if (held) {
+            carriedPosition.copy(held.previousPosition);
+            carriedQuaternion.copy(held.previousQuaternion);
+            setBodyPose(held.body, carriedPosition, carriedQuaternion);
+            held.body.velocity.setZero();
+          }
+          sequencer.fail(`Stopped before hitting brick ${obstacle.plan.index + 1} (${obstacle.plan.label})`);
+        }
       }
       robotColliders.forEach(({ marker, body }) => {
         marker.getWorldPosition(markerPosition);

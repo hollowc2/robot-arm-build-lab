@@ -1,6 +1,6 @@
 import { expect, test } from "@playwright/test";
 
-test("dense architectures stay previewable with the plain gripper", async ({ page }, info) => {
+test("architectures stay playable with the plain gripper", async ({ page }, info) => {
   test.skip(info.project.name !== "desktop", "One browser validates the shared supply physics");
   test.setTimeout(240_000);
   const errors: string[] = [];
@@ -9,7 +9,7 @@ test("dense architectures stay previewable with the plain gripper", async ({ pag
   await page.goto("/");
   const hero = page.locator("#simulator");
   await expect(hero).toHaveAttribute("data-meshes", "54", { timeout: 60_000 });
-  for (const [name, count] of [["Grand citadel", 189], ["City skyline", 275], ["Terraced monument", 213], ["Garden pavilion", 138]] as const) {
+  for (const [name, count] of [["Grand citadel", 60], ["City skyline", 48], ["Terraced monument", 42], ["Garden pavilion", 48]] as const) {
     await hero.getByRole("radio", { name: new RegExp(name) }).click();
     await expect(hero.getByRole("progressbar")).toHaveAttribute("aria-valuemax", String(count));
     await expect(hero).toHaveAttribute("data-build", "idle");
@@ -25,7 +25,7 @@ test("dense architectures stay previewable with the plain gripper", async ({ pag
   await page.screenshot({ path: "/tmp/lego-building-preview.png" });
   await hero.getByRole("button", { name: "Return to build" }).click();
   await expect(hero).toHaveAttribute("data-preview", "false");
-  await expect(hero.getByRole("button", { name: "Start", exact: true })).toBeDisabled();
-  await expect(hero.locator(".build-headline")).toHaveText("Preview only");
+  await expect(hero.getByRole("button", { name: "Start", exact: true })).toBeEnabled();
+  await expect(hero.locator(".build-headline")).toHaveText("Ready to build");
   expect(errors).toEqual([]);
 });
