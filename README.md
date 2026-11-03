@@ -48,7 +48,6 @@ cd site && npm run build
 
 The export also creates the rigid-link `simulator_*` meshes used by the simulator at the top of `/robot-arm/`. The old `/robot-arm/simulator/` URL redirects there.
 
-The simulator builds 50–250-brick architectural models. Presets are plain data in `site/src/bricks.ts` (brick type, color, grid cell, rotation, listed in assembly order); `site/src/buildPlan.ts` turns one into supply positions and arm waypoints and rejects layouts that are unsupported, out of reach, or would put the gripper through another brick. `npm run test:motion` (in `site/`) checks every architectural preset to completion at 4× and mixed-size regression fixtures at 0.5×, 1× and 4×; `BUILD_MATRIX=1 npx playwright test tests/build.spec.ts --project=desktop` runs the same builds in a GPU-backed browser.
 
 ## Current CAD Notes
 
@@ -61,9 +60,7 @@ The simulator builds 50–250-brick architectural models. Presets are plain data
 
 The default demo is the **Sorting factory**: six stud-free, 24 mm foam-block proxies wait at fixed, spaced pickup slots. The arm delivers two blocks each to red, blue, and yellow receiving trays. Factory controls show per-bin counts and batch progress, pause/resume, and shuffle-and-restart. Manual joint control stops the automatic sequence. Reduced-motion preferences leave the factory idle until Start sorting is selected. Colors and pickup poses are predefined simulator data; this demo does not use camera recognition. Physical grip force, foam compression, and repeated transfer reliability still require bench validation before choosing final block dimensions. No firmware or physical gripper changes are included.
 
-The optional Build tab retains the experimental virtual LEGO presets; physical LEGO handling is not validated with this gripper.
 
-The simulator offers four architectural builds: Garden pavilion (50 bricks), Terraced monument (100), City skyline (150), and Grand citadel (250). These structures extend across the baseplate as well as upward. Open lanes between rows leave room for the physical gripper; each column clutches the bricks below it. The supply tray automatically replenishes every 12 bricks, keeping all pickups within reach. Reset restores only the first batch. The existing speed control applies to the entire build, including refills; larger builds take longer to complete.
 - `models/master_assembly.py` supports `mechanical` and `service` configurations. The default remains `mechanical`.
 - The electronics enclosure is a prototype until physical fit, temperature, and interlock tests are recorded.
 

@@ -1,9 +1,11 @@
 import * as THREE from "three";
 import { downTilt, homePose, solveStraightDown, type ArmModel, type JointAngles } from "./arm.ts";
 import type { BuildPreset, PresetBrick } from "./bricks.ts";
-import { gripAboveCenter, openTravel, stageVerbs, type BuildPlan, type BuildStage, type BuildStep, type PlannedBrick } from "./buildPlan.ts";
+import type { BuildPlan, BuildStage, BuildStep, PlannedBrick } from "./buildPlan.ts";
+import { gripAboveCenter, openTravel, stageVerbs } from "./waypoints.ts";
 
 export const sortColors = ["red", "blue", "yellow"] as const;
+export const sortPalette: Record<string, string> = { red: "#8f1209", blue: "#0f4f9e", yellow: "#e8b412" };
 export const sortBlockSize = 24;
 export const sortCount = sortColors.length * 2;
 export const sortZoneAngle = (color: number) => 60 + color * 120;

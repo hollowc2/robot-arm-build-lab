@@ -31,10 +31,8 @@ test("factory opens by default, sorts six foam blocks, reshuffles, and supports 
   await expect(hero).toHaveAttribute("data-build", "stopped");
   await hero.getByRole("tab", { name: "Factory", exact: true }).click();
   await expect(hero.getByRole("button", { name: "Start sorting" })).toBeVisible();
-  await hero.getByRole("tab", { name: "Build", exact: true }).click();
-  await expect(hero).toHaveAttribute("data-workspace", "build");
-  await expect(hero).toHaveAttribute("data-preset", "pavilion");
-  await expect(hero).toHaveAttribute("data-build", "idle");
+  await expect(hero.getByRole("tab")).toHaveText(["Factory", "Joints"]);
+  await expect(hero.getByRole("radio")).toHaveCount(0);
   expect(errors).toEqual([]);
 });
 

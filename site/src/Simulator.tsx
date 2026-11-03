@@ -23,11 +23,10 @@ import {
   type JointAngles,
   type JointName,
 } from "./arm";
-import { brickColors, brickHeight, buildPresets, footprint, studHeight, studPitch, type BuildPreset, type PresetBrick } from "./bricks";
-import { followLine, openTravel, planBuild, supplyBatch, supplyBatchSize, type BuildPlan, type PlannedBrick } from "./buildPlan";
-import { insideSortBin, planSort, radialPoint, sortColors, sortCount, sortZoneAngle } from "./sortPlan";
+import type { BuildPlan, PlannedBrick } from "./buildPlan";
+import { followLine, openTravel } from "./waypoints";
+import { insideSortBin, planSort, sortPalette, radialPoint, sortColors, sortCount, sortZoneAngle } from "./sortPlan";
 import { ArmDriver, BuildSequencer, type BuildStatus } from "./buildRunner";
-import { brickGeometry, brickMaterial, ghostMaterial } from "./brickMesh";
 import { SimClock, speedRange } from "./simClock";
 import {
   disposeObject,
@@ -54,12 +53,8 @@ type Actions = {
   takeManual: () => void;
   start: () => void;
   togglePause: () => void;
-  reset: () => void;
-  selectPreset: (id: string) => void;
   setSpeed: (speed: number) => void;
-  enterSort: () => void;
   jumbleSort: () => void;
-  enterBuild: () => void;
 };
 
 const jointControls: { name: JointName; id: string; label: string; unit: string }[] = [
@@ -78,21 +73,13 @@ const palette = {
   gripper: "#5fb3a9",
 };
 // Purchased-part finishes exported beside each rigid link as `${link}_${finish}.stl`.
-const defaultPreset = "pavilion";
-const brickMass = 0.03;
-// How close a released brick must be to its studs to click into place.
-const snapDistance = 2;
-const snapAngle = THREE.MathUtils.degToRad(3);
+const blockMass = 0.002;
 const noActions: Actions = {
   takeManual: () => undefined,
   start: () => undefined,
   togglePause: () => undefined,
-  reset: () => undefined,
-  selectPreset: () => undefined,
   setSpeed: () => undefined,
-  enterSort: () => undefined,
   jumbleSort: () => undefined,
-  enterBuild: () => undefined,
 };
 
 const formatSpeed = (speed: number) => `${Number(speed.toFixed(2))}×`;
@@ -111,10 +98,8 @@ export function Simulator({ children, facts }: { children: React.ReactNode; fact
   const [mode, setMode] = useState<Mode>("loading");
   const [heldName, setHeldName] = useState<string | null>(null);
   const [reach, setReach] = useState<number | null>(null);
-  const [presetId, setPresetId] = useState(defaultPreset);
   const [speed, setSpeed] = useState(speedRange.initial);
-  const [tab, setTab] = useState<"build" | "joints" | "sort">("sort");
-  const [workspace, setWorkspace] = useState<"build" | "sort">("sort");
+  const [tab, setTab] = useState<"joints" | "sort">("sort");
   const [round, setRound] = useState(0);
   const [sortedCounts, setSortedCounts] = useState<number[]>(sortColors.map(() => 0));
   const [view, setView] = useState<BuildView>({
@@ -373,7 +358,7 @@ export function Simulator({ children, facts }: { children: React.ReactNode; fact
       const bin = new THREE.Group();
       bin.position.copy(radialPoint(sortZoneAngle(index), 300, 0));
       bin.rotation.z = THREE.MathUtils.degToRad(sortZoneAngle(index));
-      const material = new THREE.MeshStandardMaterial({ color: brickColors[color], roughness: 0.85 });
+      const material = new THREE.MeshStandardMaterial({ color: sortPalette[color], roughness: 0.85 });
       const floor = new THREE.Mesh(new THREE.BoxGeometry(128, 68, 1), material);
       floor.position.z = -0.5;
       floor.receiveShadow = true;
@@ -408,8 +393,6 @@ export function Simulator({ children, facts }: { children: React.ReactNode; fact
       slot.rotation.z = -THREE.MathUtils.degToRad(index * 60) + Math.PI / 4;
       sortZones.add(slot);
     }
-    let sorting = false;
-    let savedPreset = defaultPreset;
     const brickGroup = new THREE.Group();
     scene.add(brickGroup);
     const brickGeometries = new Map<string, THREE.BufferGeometry>();
@@ -419,7 +402,6 @@ export function Simulator({ children, facts }: { children: React.ReactNode; fact
       return map.get(key)!;
     };
     let bricks: SimBrick[] = [];
-    const plans = new Map<string, BuildPlan>();
     let plan: BuildPlan | null = null;
     let sequencer: BuildSequencer | null = null;
     const clock = new SimClock();
@@ -440,7 +422,7 @@ export function Simulator({ children, facts }: { children: React.ReactNode; fact
       brick.mesh.visible = true;
       if (!world.bodies.includes(brick.body)) world.addBody(brick.body);
       brick.body.type = CANNON.Body.DYNAMIC;
-      brick.body.mass = sorting ? 0.002 : brickMass;
+      brick.body.mass = blockMass;
       brick.body.updateMassProperties();
       brick.body.collisionFilterMask = -1;
       setBodyPose(brick.body, brick.plan.supply.position, brick.plan.supply.quaternion);
@@ -452,46 +434,22 @@ export function Simulator({ children, facts }: { children: React.ReactNode; fact
       brick.ghost.visible = true;
       syncPrevious(brick);
     };
-    const stageSupply = (brick: SimBrick) => {
-      world.removeBody(brick.body);
-      brick.supplied = false;
-      brick.placed = false;
-      brick.mesh.visible = false;
-      brick.ghost.visible = true;
-      brick.contact = undefined;
-    };
-    const refillSupply = (index: number) => {
-      bricks.filter((brick) => !brick.supplied && supplyBatch(brick.plan.index) === supplyBatch(index)).forEach(toSupply);
-    };
-    // Clutch power: once on its studs a brick is locked to the structure.
-    const snapToStuds = (brick: SimBrick) => {
-      brick.body.type = CANNON.Body.STATIC;
-      brick.body.mass = 0;
-      brick.body.updateMassProperties();
-      brick.body.collisionFilterMask = -1;
-      setBodyPose(brick.body, brick.plan.target.position, brick.plan.target.quaternion);
-      brick.body.velocity.setZero();
-      brick.body.angularVelocity.setZero();
-      brick.body.aabbNeedsUpdate = true;
-      brick.placed = true;
-      brick.ghost.visible = false;
-    };
     const createBricks = (next: BuildPlan) => {
       bricks.forEach((brick) => world.removeBody(brick.body));
       brickGroup.clear();
       bricks = next.bricks.map((planned) => {
-        const geometry = cached(brickGeometries, `${planned.studs.u}x${planned.studs.v}:${planned.size.toArray().join(",")}`,
-          () => sorting ? new THREE.BoxGeometry(planned.size.x, planned.size.y, planned.size.z) : brickGeometry(planned.size, planned.studs));
-        const color = brickColors[planned.entry.color];
-        const mesh = new THREE.Mesh(geometry, cached(brickMaterials, color, () => brickMaterial(color)));
+        const geometry = cached(brickGeometries, planned.size.toArray().join(","),
+          () => new THREE.BoxGeometry(planned.size.x, planned.size.y, planned.size.z));
+        const color = sortPalette[planned.entry.color];
+        const mesh = new THREE.Mesh(geometry, cached(brickMaterials, color, () => new THREE.MeshStandardMaterial({ color, roughness: 0.72, metalness: 0 })));
         mesh.castShadow = true;
         mesh.receiveShadow = true;
-        const ghost = new THREE.Mesh(geometry, cached(brickMaterials, `ghost ${color}`, () => ghostMaterial(color)));
+        const ghost = new THREE.Mesh(geometry, cached(brickMaterials, `ghost ${color}`, () => new THREE.MeshBasicMaterial({ color, transparent: true, opacity: 0.13, depthWrite: false })));
         ghost.position.copy(planned.target.position);
         ghost.quaternion.copy(planned.target.quaternion);
         brickGroup.add(mesh, ghost);
         const half = planned.size.clone().multiplyScalar(0.5);
-        const body = new CANNON.Body({ mass: sorting ? 0.002 : brickMass, shape: new CANNON.Box(new CANNON.Vec3(half.x, half.y, half.z)) });
+        const body = new CANNON.Body({ mass: blockMass, shape: new CANNON.Box(new CANNON.Vec3(half.x, half.y, half.z)) });
         body.linearDamping = 0.08;
         body.angularDamping = 0.12;
         // The world is in millimetres, so the default 0.1 unit/s sleep threshold never trips and
@@ -503,21 +461,10 @@ export function Simulator({ children, facts }: { children: React.ReactNode; fact
           plan: planned, mesh, ghost, body, graspShape: { halfExtents: half }, placed: false, supplied: false,
           previousPosition: new THREE.Vector3(), previousQuaternion: new THREE.Quaternion(),
         };
-        if (supplyBatch(planned.index) === 0) toSupply(brick);
-        else stageSupply(brick);
+        toSupply(brick);
         return brick;
       });
     };
-    const planFor = (id: string) => {
-      if (!plans.has(id)) {
-        const preset = buildPresets.find((entry) => entry.id === id) ?? buildPresets[0];
-        const next = planBuild(preset, arm);
-        if (next.problems.length) console.error(`Cannot build ${preset.name}:\n${next.problems.join("\n")}`);
-        plans.set(id, next);
-      }
-      return plans.get(id)!;
-    };
-
     let held: SimBrick | null = null;
     let heldTravel = 0;
     const heldPosition = new THREE.Vector3();
@@ -544,19 +491,13 @@ export function Simulator({ children, facts }: { children: React.ReactNode; fact
       setHeldName(null);
       toVec3(brick.body.position, bodyPosition);
       toQuaternion(brick.body.quaternion, bodyQuaternion);
-      if (sorting
-        ? insideSortBin(brick.plan.entry.color, bodyPosition, bodyQuaternion, brick.plan.size)
-        : bodyPosition.distanceTo(brick.plan.target.position) < snapDistance && bodyQuaternion.angleTo(brick.plan.target.quaternion) < snapAngle) {
-        if (!sorting) {
-          snapToStuds(brick);
-          return;
-        }
+      if (insideSortBin(brick.plan.entry.color, bodyPosition, bodyQuaternion, brick.plan.size)) {
         brick.placed = true;
         brick.ghost.visible = false;
       }
       brick.body.collisionFilterMask = -1;
       brick.body.type = CANNON.Body.DYNAMIC;
-      brick.body.mass = sorting ? 0.002 : brickMass;
+      brick.body.mass = blockMass;
       brick.body.updateMassProperties();
       brick.body.velocity.set(gripVelocity.x, gripVelocity.y, gripVelocity.z);
       brick.body.wakeUp();
@@ -568,8 +509,7 @@ export function Simulator({ children, facts }: { children: React.ReactNode; fact
     };
     const resetBricks = () => {
       dropHeld();
-      bricks.forEach(stageSupply);
-      refillSupply(0);
+      bricks.forEach(toSupply);
       clock.settle();
     };
     let motionBlocked = false;
@@ -612,7 +552,7 @@ export function Simulator({ children, facts }: { children: React.ReactNode; fact
     let shownMode: Mode = "loading";
     const publish = () => {
       if (loadedCount < meshCount || !sequencer || !plan) return;
-      if (sorting) {
+      {
         const counts = sortColors.map((color) => bricks.filter((brick) => brick.placed && brick.plan.entry.color === color).length);
         setSortedCounts((previous) => counts.every((count, index) => count === previous[index]) ? previous : counts);
       }
@@ -653,30 +593,6 @@ export function Simulator({ children, facts }: { children: React.ReactNode; fact
       showTargets();
       publish();
     };
-    const resetBuild = () => {
-      if (!plan) return;
-      clock.paused = false;
-      resetBricks();
-      sequencer = new BuildSequencer(plan);
-      // A reset may replenish a brick directly beneath the current grip point.
-      // Open while parking so the closing jaws cannot pick it straight back up.
-      driver.moveTo({ ...homePose, gripper: openTravel });
-      showTargets();
-      publish();
-    };
-    const selectPreset = (id: string) => {
-      if (loadedCount < meshCount) return;
-      sorting = false;
-      sortZones.visible = false;
-      sortFixtures.forEach((body) => world.removeBody(body));
-      setWorkspace("build");
-      savedPreset = id;
-      dropHeld();
-      plan = planFor(id);
-      createBricks(plan);
-      setPresetId(plan.preset.id);
-      resetBuild();
-    };
     const jumbleSort = (autostart = true) => {
       if (loadedCount < meshCount) return;
       sequencer?.stop();
@@ -685,10 +601,8 @@ export function Simulator({ children, facts }: { children: React.ReactNode; fact
       // Restore a safe open home pose before replacing objects underneath the arm.
       Object.assign(driver.pose, homePose, { gripper: openTravel });
       Object.assign(driver.targets, driver.pose);
-      sorting = true;
       sortZones.visible = true;
       sortFixtures.forEach((body) => { if (!world.bodies.includes(body)) world.addBody(body); });
-      setWorkspace("sort");
       setRound((value) => value + 1);
       plan = planSort(arm);
       createBricks(plan);
@@ -704,17 +618,13 @@ export function Simulator({ children, facts }: { children: React.ReactNode; fact
     };
     actionsRef.current = {
       takeManual,
-      enterSort: () => { if (!sorting) jumbleSort(); },
       jumbleSort,
-      enterBuild: () => { if (sorting) selectPreset(savedPreset); },
       start: startBuild,
       togglePause: () => {
         if (sequencer?.status !== "running") return;
         clock.paused = !clock.paused;
         publish();
       },
-      reset: resetBuild,
-      selectPreset,
       setSpeed: (value) => {
         clock.setSpeed(value);
         setSpeed(clock.speed);
@@ -873,7 +783,6 @@ export function Simulator({ children, facts }: { children: React.ReactNode; fact
       if (sequencer) {
         const next = sequencer.update(seconds, driver.arrived(held ? heldTravel : null), held?.plan.index ?? null, (index) => bricks[index].placed);
         if (next) {
-          if (next.stage === "approach") refillSupply(next.brick);
           driver.moveTo(next.target, followLine(next, lift()));
           showTargets();
         }
@@ -959,35 +868,13 @@ export function Simulator({ children, facts }: { children: React.ReactNode; fact
   };
 
   const ready = loaded === meshCount;
-  const preset = buildPresets.find((entry) => entry.id === presetId) ?? buildPresets[0];
   const running = view.status === "running";
-  const sorting = workspace === "sort";
-  const total = view.total || (sorting ? sortCount : preset.bricks.length);
-  const [headline, detail] = !ready
-    ? ["Loading", `${preset.name} · ${preset.bricks.length} bricks`]
-    : running && view.paused
-      ? [`Paused at brick ${view.current} of ${total}`, view.stage ?? ""]
-      : running
-        ? [`Placing brick ${view.current} of ${total}`, view.stage ?? ""]
-        : view.status === "complete"
-          ? [`${preset.name} complete`, `All ${total} bricks placed`]
-          : view.status === "failed"
-            ? ["Build halted", view.failure ?? ""]
-            : view.status === "stopped"
-              ? [`Stopped at brick ${view.current} of ${total}`, "Manual control took over · Start rebuilds"]
-              : ["Ready to build", `${preset.name} · ${total} bricks`];
-  const status = !ready
-    ? `Loading CAD meshes ${loaded}/${meshCount}`
-    : running
-      ? (view.paused ? `Paused · ${view.stage ?? ""}` : view.stage ?? "Building")
-      : heldName
-        ? `Holding the ${heldName}`
-        : view.status === "complete"
-          ? `${preset.name} complete`
-          : view.status === "idle"
-            ? "Ready to build"
-            : "Manual control";
-  const modeLabel = !ready ? "Boot" : running ? (view.paused ? "Paused" : sorting ? "Sorting" : "Building") : view.status === "complete" ? "Done" : "Manual";
+  const status = !ready ? `Loading CAD meshes ${loaded}/${meshCount}`
+    : view.status === "complete" ? "All colors organized"
+    : view.status === "failed" ? view.failure
+    : heldName && !running ? `Holding the ${heldName}`
+    : view.stage ?? "Ready to sort";
+  const modeLabel = !ready ? "Boot" : running ? (view.paused ? "Paused" : "Sorting") : view.status === "complete" ? "Done" : "Manual";
   const dot = !ready ? "loading" : running ? (view.paused ? "paused" : "autopilot") : "manual";
   const speedFill = ((speed - speedRange.min) / (speedRange.max - speedRange.min)) * 100;
 
@@ -1000,12 +887,11 @@ export function Simulator({ children, facts }: { children: React.ReactNode; fact
       data-held={heldName ?? ""}
       data-build={view.status}
       data-paused={view.paused}
-      data-preset={presetId}
       data-placed={view.placed}
       data-supply={view.supply}
       data-stage={view.stage ?? ""}
       data-speed={speed}
-      data-workspace={workspace}
+      data-workspace="sort"
       data-sort-round={round}
     >
       <div className="hero-stage" ref={mountRef} aria-label="Interactive robot arm simulator" />
@@ -1020,10 +906,10 @@ export function Simulator({ children, facts }: { children: React.ReactNode; fact
           <div className="dock-status" aria-live="polite">
             <span className={`dot dot-${dot}`} />
             <span className="dock-mode">{modeLabel}</span>
-            <span className="dock-message">{sorting && ready ? (view.status === "complete" ? "All colors organized" : view.status === "failed" ? view.failure : view.stage ?? "Ready to sort") : status}</span>
+            <span className="dock-message">{status}</span>
           </div>
           <div className="dock-tabs" role="tablist" aria-label="Control panel">
-            {(["sort", "joints", "build"] as const).map((name) => (
+            {(["sort", "joints"] as const).map((name) => (
               <button
                 key={name}
                 className="dock-tab"
@@ -1035,56 +921,11 @@ export function Simulator({ children, facts }: { children: React.ReactNode; fact
                 disabled={!ready}
                 onClick={() => {
                   setTab(name);
-                  if (name === "sort") actionsRef.current.enterSort();
-                  if (name === "build") actionsRef.current.enterBuild();
                 }}
               >
-                {name === "build" ? "Build" : name === "sort" ? "Factory" : "Joints"}
+                {name === "sort" ? "Factory" : "Joints"}
               </button>
             ))}
-          </div>
-          <div className="dock-panel" id="dock-panel-build" role="tabpanel" aria-labelledby="dock-tab-build" hidden={tab !== "build"}>
-            <div className="preset-list" role="radiogroup" aria-label="Structure to build">
-              {buildPresets.map((entry) => (
-                <button
-                  key={entry.id}
-                  className="preset"
-                  type="button"
-                  role="radio"
-                  aria-checked={presetId === entry.id}
-                  disabled={!ready}
-                  onClick={() => actionsRef.current.selectPreset(entry.id)}
-                >
-                  <PresetPreview preset={entry} />
-                  <span className="preset-name">{entry.name}</span>
-                  <span className="preset-count">{entry.bricks.length} bricks</span>
-                </button>
-              ))}
-            </div>
-            <div className="build-progress">
-              <p className="build-detail">Experimental virtual builds · LEGO handling is not validated on the physical gripper.</p>
-              <p className="build-detail">{preset.blurb}{total > supplyBatchSize ? ` · Tray refills every ${supplyBatchSize} bricks` : ""}</p>
-              <p className="build-headline">{headline}</p>
-              <p className="build-detail">{detail}</p>
-              <div
-                className="build-bar"
-                role="progressbar"
-                aria-label="Bricks placed"
-                aria-valuemin={0}
-                aria-valuemax={total}
-                aria-valuenow={view.placed}
-                style={{ "--progress": `${(view.placed / total) * 100}%` } as React.CSSProperties}
-              />
-            </div>
-            <div className="dock-actions build-actions">
-              <button className="button button-primary" type="button" disabled={!ready || running} onClick={() => actionsRef.current.start()}>
-                Start
-              </button>
-              <button className="button" type="button" disabled={!running} onClick={() => actionsRef.current.togglePause()}>
-                {view.paused ? "Resume" : "Pause"}
-              </button>
-              <button className="button" type="button" disabled={!ready} onClick={() => actionsRef.current.reset()}>Reset</button>
-            </div>
           </div>
           <div className="dock-panel" id="dock-panel-sort" role="tabpanel" aria-labelledby="dock-tab-sort" hidden={tab !== "sort"}>
             <div className="build-progress">
@@ -1094,7 +935,7 @@ export function Simulator({ children, facts }: { children: React.ReactNode; fact
               <div className="sort-colors">
                 {sortColors.map((color, index) => (
                   <div className="sort-color" key={color} data-color={color} data-sorted={sortedCounts[index]}>
-                    <span className="sort-swatch" style={{ background: brickColors[color] }} />
+                    <span className="sort-swatch" style={{ background: sortPalette[color] }} />
                     <span>{color}</span><strong>{sortedCounts[index]} / 2</strong>
                   </div>
                 ))}
@@ -1172,62 +1013,5 @@ export function Simulator({ children, facts }: { children: React.ReactNode; fact
         ))}
       </dl>
     </section>
-  );
-}
-
-// Front elevation drawn straight from the preset data, bottom course first.
-function PresetPreview({ preset }: { preset: BuildPreset }) {
-  if (new Set(preset.bricks.map((entry) => entry.cell[1])).size > 1) return <SculpturePreview preset={preset} />;
-  const width = Math.max(...preset.bricks.map((entry) => entry.cell[0] + footprint(entry).u)) * studPitch;
-  const layers = Math.max(...preset.bricks.map((entry) => entry.cell[2])) + 1;
-  const height = layers * brickHeight + studHeight;
-  return (
-    <svg className="preset-preview" viewBox={`-1 -1 ${width + 2} ${height + 2}`} aria-hidden="true" preserveAspectRatio="xMidYMax meet">
-      {preset.bricks.map((entry, index) => {
-        const { u } = footprint(entry);
-        const x = entry.cell[0] * studPitch;
-        const y = height - (entry.cell[2] + 1) * brickHeight;
-        const color = brickColors[entry.color];
-        return (
-          <g key={index} fill={color}>
-            {Array.from({ length: u }, (_, stud) => (
-              <rect key={stud} x={x + stud * studPitch + 2.5} y={y - studHeight} width={5} height={studHeight + 0.5} />
-            ))}
-            <rect x={x + 0.4} y={y} width={u * studPitch - 0.8} height={brickHeight - 0.4} rx={0.8} />
-          </g>
-        );
-      })}
-    </svg>
-  );
-}
-
-// Isometric silhouettes show the depth of the larger architectural presets.
-function SculpturePreview({ preset }: { preset: BuildPreset }) {
-  const project = (u: number, v: number, z: number) => [(u - v) * 6, (u + v) * 2.8 - z * 10];
-  const corners = (entry: PresetBrick) => {
-    const [u, v, z] = entry.cell;
-    const size = footprint(entry);
-    return [z, z + 0.96].flatMap((height) => [
-      project(u, v, height), project(u + size.u - 0.04, v, height),
-      project(u + size.u - 0.04, v + size.v - 0.04, height), project(u, v + size.v - 0.04, height),
-    ]);
-  };
-  const points = preset.bricks.flatMap(corners);
-  const minX = Math.min(...points.map(([x]) => x));
-  const minY = Math.min(...points.map(([, y]) => y));
-  const width = Math.max(...points.map(([x]) => x)) - minX;
-  const height = Math.max(...points.map(([, y]) => y)) - minY;
-  return (
-    <svg className="preset-preview" viewBox={`${minX - 2} ${minY - 2} ${width + 4} ${height + 4}`} aria-hidden="true">
-      {[...preset.bricks].sort((a, b) => (a.cell[0] + a.cell[1]) - (b.cell[0] + b.cell[1]) || a.cell[2] - b.cell[2]).map((entry, index) => {
-        const points = corners(entry);
-        const face = (indices: number[]) => indices.map((i) => points[i].join(",")).join(" ");
-        return <g key={index} fill={brickColors[entry.color]}>
-          <polygon points={face([1, 2, 6, 5])} />
-          <polygon points={face([2, 3, 7, 6])} style={{ filter: "brightness(0.7)" }} />
-          <polygon points={face([4, 5, 6, 7])} style={{ filter: "brightness(1.2)" }} />
-        </g>;
-      })}
-    </svg>
   );
 }

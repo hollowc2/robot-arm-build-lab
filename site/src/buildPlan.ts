@@ -13,11 +13,9 @@ import {
   type PresetBrick,
 } from "./bricks.ts";
 
-// The grip point (centre of the finger pads) sits this far above a held brick's centre, so the
-// fingertips stay above the brick's lower edge and clear of the studs on the layer beneath.
-export const gripAboveCenter = 9;
-// Jaw travel used while approaching and releasing: 3 mm of air either side of a 20 mm brick.
-export const openTravel = 30;
+import { gripAboveCenter, openTravel, stageVerbs } from "./waypoints.ts";
+export { gripAboveCenter, openTravel, stageVerbs, followLine } from "./waypoints.ts";
+
 // The brick hovers this far above its studs before the final press.
 export const alignHeight = 5;
 // Carry the held brick at least this far above everything already built.
@@ -36,19 +34,6 @@ export const supplyBatchSize = 12;
 export const supplyBatch = (index: number) => Math.floor(index / supplyBatchSize);
 
 export type BuildStage = "approach" | "lower" | "grip" | "lift" | "carry" | "align" | "place" | "release" | "retract" | "park";
-export const stageVerbs: Record<BuildStage, string> = {
-  approach: "Approaching",
-  lower: "Lowering onto",
-  grip: "Gripping",
-  lift: "Lifting",
-  carry: "Carrying",
-  align: "Aligning",
-  place: "Placing",
-  release: "Releasing",
-  retract: "Retracting from",
-  park: "Returning home",
-};
-
 export type BrickPose = { position: THREE.Vector3; quaternion: THREE.Quaternion };
 export type PlannedBrick = {
   index: number;
@@ -266,16 +251,4 @@ export function planBuild(preset: BuildPreset, arm: ArmModel): BuildPlan {
 
   steps.push({ brick: preset.bricks.length - 1, stage: "park", label: stageVerbs.park, target: { ...homePose, gripper: 0 }, dwell: 0 });
   return { preset, bricks, steps, problems };
-}
-
-// Joint poses along a step's straight line, for ArmDriver.moveTo. Closed-form IK keeps this cheap
-// enough to evaluate every fixed step.
-export function followLine(step: BuildStep, lift: number) {
-  if (!step.line) return undefined;
-  const [from, to] = step.line;
-  const point = new THREE.Vector3();
-  const elbowSign = Math.sign(step.target.elbow) || -1;
-  return (progress: number) => (progress >= 1
-    ? step.target
-    : solveStraightDown(point.lerpVectors(from, to, progress), step.target.gripper, lift, elbowSign) ?? step.target);
 }
