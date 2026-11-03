@@ -6,6 +6,10 @@ The E-stop must also interrupt 12 V motor power through rated external hardware.
 
 `main.cpp` implements slow, sequential, bounded homing for the three StepStick-driven NEMA 17 axes and the four-coil 28BYJ-48 wrist. Each axis approaches its normally-closed switch, backs off, and faults if the switch remains open or the maximum approach step count is exceeded. General point-to-point motion remains disabled until measured joint travel, direction, and steps-per-degree values are recorded.
 
+## Browser Demo Boundary
+
+The website's sorting factory runs entirely in the browser. Its six-block batches, joint sliders, Home control, and gamepad do not send commands to this firmware. The browser's 24 mm blocks, planned waypoints, and simulated transfers are not measured hardware calibration or physical grip validation. See [the factory guide](../docs/sorting-factory.md).
+
 Run the host safety-state test with:
 
 ```bash
