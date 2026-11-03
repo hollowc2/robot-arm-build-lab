@@ -12,6 +12,22 @@ export function radialPoint(angle: number, radius: number, z: number) {
   return new THREE.Vector3(-Math.sin(radians) * radius, Math.cos(radians) * radius, z);
 }
 
+// Delivery checks use the clear interior of the actual receiving tray, allowing
+// a loose block to settle at any yaw rather than requiring a LEGO stud alignment.
+export function insideSortBin(color: string, position: THREE.Vector3, quaternion: THREE.Quaternion, size: THREE.Vector3): boolean {
+  const index = sortColors.indexOf(color as typeof sortColors[number]);
+  if (index < 0) return false;
+  const inverse = new THREE.Quaternion().setFromAxisAngle(new THREE.Vector3(0, 0, 1), -THREE.MathUtils.degToRad(sortZoneAngle(index)));
+  const local = position.clone().sub(radialPoint(sortZoneAngle(index), 300, 0)).applyQuaternion(inverse);
+  const rotation = new THREE.Matrix4().makeRotationFromQuaternion(inverse.multiply(quaternion));
+  const e = rotation.elements;
+  const half = size.clone().multiplyScalar(0.5);
+  const extentX = Math.abs(e[0]) * half.x + Math.abs(e[4]) * half.y + Math.abs(e[8]) * half.z;
+  const extentY = Math.abs(e[1]) * half.x + Math.abs(e[5]) * half.y + Math.abs(e[9]) * half.z;
+  return Math.abs(local.x) + extentX <= 64 && Math.abs(local.y) + extentY <= 34
+    && local.z >= half.z - 2 && local.z <= half.z + 5;
+}
+
 // Shuffle colors between six fixed, evenly spaced pickup slots.
 // Keeping the objects upright lets the arm without wrist roll grasp them squarely.
 export function planSort(arm: ArmModel, random = Math.random): BuildPlan {

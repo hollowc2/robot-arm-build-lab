@@ -25,7 +25,7 @@ import {
 } from "./arm";
 import { brickColors, brickHeight, buildPresets, footprint, studHeight, studPitch, type BuildPreset, type PresetBrick } from "./bricks";
 import { followLine, openTravel, planBuild, supplyBatch, supplyBatchSize, type BuildPlan, type PlannedBrick } from "./buildPlan";
-import { planSort, radialPoint, sortColors, sortCount, sortZoneAngle } from "./sortPlan";
+import { insideSortBin, planSort, radialPoint, sortColors, sortCount, sortZoneAngle } from "./sortPlan";
 import { ArmDriver, BuildSequencer, type BuildStatus } from "./buildRunner";
 import { brickGeometry, brickMaterial, ghostMaterial } from "./brickMesh";
 import { SimClock, speedRange } from "./simClock";
@@ -372,7 +372,7 @@ export function Simulator({ children, facts }: { children: React.ReactNode; fact
       // Low, open-top receiving trays leave clearance below the finger pads.
       const bin = new THREE.Group();
       bin.position.copy(radialPoint(sortZoneAngle(index), 300, 0));
-      bin.rotation.z = -THREE.MathUtils.degToRad(sortZoneAngle(index));
+      bin.rotation.z = THREE.MathUtils.degToRad(sortZoneAngle(index));
       const material = new THREE.MeshStandardMaterial({ color: brickColors[color], roughness: 0.85 });
       const floor = new THREE.Mesh(new THREE.BoxGeometry(128, 68, 1), material);
       floor.position.z = -0.5;
@@ -544,7 +544,9 @@ export function Simulator({ children, facts }: { children: React.ReactNode; fact
       setHeldName(null);
       toVec3(brick.body.position, bodyPosition);
       toQuaternion(brick.body.quaternion, bodyQuaternion);
-      if (bodyPosition.distanceTo(brick.plan.target.position) < snapDistance && bodyQuaternion.angleTo(brick.plan.target.quaternion) < snapAngle) {
+      if (sorting
+        ? insideSortBin(brick.plan.entry.color, bodyPosition, bodyQuaternion, brick.plan.size)
+        : bodyPosition.distanceTo(brick.plan.target.position) < snapDistance && bodyQuaternion.angleTo(brick.plan.target.quaternion) < snapAngle) {
         if (!sorting) {
           snapToStuds(brick);
           return;

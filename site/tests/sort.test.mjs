@@ -5,7 +5,7 @@ import { STLLoader } from "three/examples/jsm/loaders/STLLoader.js";
 import { graspTravel } from "../src/grasp.ts";
 import * as THREE from "three";
 import { createArmModel } from "../src/arm.ts";
-import { planSort, sortColors } from "../src/sortPlan.ts";
+import { insideSortBin, planSort, sortColors } from "../src/sortPlan.ts";
 import { boxesOverlap, brickBox, gripperBoxes, openTravel } from "../src/buildPlan.ts";
 
 test("random sorting rounds remain reachable and separate every pickup and color destination", () => {
@@ -75,4 +75,20 @@ test("foam blocks fit the actual CAD fingers at pickup and release, with clear t
     }
   }
   jaws.forEach(({ geometry }) => geometry.dispose());
+});
+
+
+test("delivery accepts loose placement in the matching bin and rejects wrong or outside bins", () => {
+  const arm = createArmModel(46);
+  const plan = planSort(arm, () => 0.5);
+  for (const block of plan.bricks) {
+    const yaw = new THREE.Quaternion().setFromAxisAngle(new THREE.Vector3(0, 0, 1), 0.1);
+    const rotation = block.target.quaternion.clone().multiply(yaw);
+    const position = block.target.position.clone().add(new THREE.Vector3(3, 0, 0));
+    assert.equal(insideSortBin(block.entry.color, position, rotation, block.size), true);
+    assert.equal(insideSortBin(sortColors.find((color) => color !== block.entry.color), position, rotation, block.size), false);
+    assert.equal(insideSortBin(block.entry.color, block.supply.position, rotation, block.size), false);
+    assert.equal(insideSortBin(block.entry.color, position.clone().setZ(70), rotation, block.size), false);
+    assert.equal(insideSortBin(block.entry.color, position.clone().multiplyScalar(2), rotation, block.size), false);
+  }
 });

@@ -169,7 +169,7 @@ export class BuildSequencer {
       return null;
     }
     if (step.stage === "release" && !isPlaced(step.brick)) {
-      this.fail(`The ${brick.label} missed its studs`);
+      this.fail(`The ${brick.label} missed ${this.plan.preset.id === "sort" ? "its color bin" : "its studs"}`);
       return null;
     }
     this.index += 1;
