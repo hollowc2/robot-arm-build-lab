@@ -113,10 +113,10 @@ export function Simulator({ children, facts }: { children: React.ReactNode; fact
   const [reach, setReach] = useState<number | null>(null);
   const [presetId, setPresetId] = useState(defaultPreset);
   const [speed, setSpeed] = useState(speedRange.initial);
-  const [tab, setTab] = useState<"build" | "joints" | "sort">("build");
-  const [workspace, setWorkspace] = useState<"build" | "sort">("build");
+  const [tab, setTab] = useState<"build" | "joints" | "sort">("sort");
+  const [workspace, setWorkspace] = useState<"build" | "sort">("sort");
   const [round, setRound] = useState(0);
-  const [sortedCounts, setSortedCounts] = useState<number[]>([0, 0, 0, 0]);
+  const [sortedCounts, setSortedCounts] = useState<number[]>(sortColors.map(() => 0));
   const [view, setView] = useState<BuildView>({
     status: "idle", paused: false, current: 0, total: 0, placed: 0, supply: 0, stage: null, failure: null,
   });
@@ -364,13 +364,32 @@ export function Simulator({ children, facts }: { children: React.ReactNode; fact
       // CAD contact travel for the pose it last sat in the mouth, reused while nothing moves.
       contact?: { position: THREE.Vector3; quaternion: THREE.Quaternion; travel: number | null };
     };
+    const sortFixtures: CANNON.Body[] = [];
     const sortZones = new THREE.Group();
     sortZones.visible = false;
     scene.add(sortZones);
     sortColors.forEach((color, index) => {
-      const zone = new THREE.Mesh(new THREE.RingGeometry(25, 53, 48), new THREE.MeshBasicMaterial({ color: brickColors[color], transparent: true, opacity: 0.65, side: THREE.DoubleSide }));
-      zone.position.copy(radialPoint(sortZoneAngle(index), 300, 0.6));
-      sortZones.add(zone);
+      // Low, open-top receiving trays leave clearance below the finger pads.
+      const bin = new THREE.Group();
+      bin.position.copy(radialPoint(sortZoneAngle(index), 300, 0));
+      bin.rotation.z = -THREE.MathUtils.degToRad(sortZoneAngle(index));
+      const material = new THREE.MeshStandardMaterial({ color: brickColors[color], roughness: 0.85 });
+      const floor = new THREE.Mesh(new THREE.BoxGeometry(128, 68, 1), material);
+      floor.position.z = -0.5;
+      floor.receiveShadow = true;
+      bin.add(floor);
+      const fixture = new CANNON.Body({ mass: 0 });
+      fixture.position.set(bin.position.x, bin.position.y, 0);
+      fixture.quaternion.setFromAxisAngle(new CANNON.Vec3(0, 0, 1), bin.rotation.z);
+      for (const [x, y, width, depth] of [[-65, 0, 2, 72], [65, 0, 2, 72], [0, -35, 128, 2], [0, 35, 128, 2]]) {
+        const rim = new THREE.Mesh(new THREE.BoxGeometry(width, depth, 4), material);
+        rim.position.set(x, y, 2);
+        rim.castShadow = true;
+        bin.add(rim);
+        fixture.addShape(new CANNON.Box(new CANNON.Vec3(width / 2, depth / 2, 2)), new CANNON.Vec3(x, y, 2));
+      }
+      sortFixtures.push(fixture);
+      sortZones.add(bin);
       const labelCanvas = document.createElement("canvas");
       labelCanvas.width = 256; labelCanvas.height = 64;
       const context = labelCanvas.getContext("2d")!;
@@ -383,6 +402,12 @@ export function Simulator({ children, facts }: { children: React.ReactNode; fact
       label.position.copy(radialPoint(sortZoneAngle(index), 372, 0.7));
       sortZones.add(label);
     });
+    for (let index = 0; index < sortCount; index++) {
+      const slot = new THREE.Mesh(new THREE.RingGeometry(21, 23, 4), new THREE.MeshBasicMaterial({ color: "#a3aaa8", side: THREE.DoubleSide }));
+      slot.position.copy(radialPoint(index * 60, 240, 0.3));
+      slot.rotation.z = -THREE.MathUtils.degToRad(index * 60) + Math.PI / 4;
+      sortZones.add(slot);
+    }
     let sorting = false;
     let savedPreset = defaultPreset;
     const brickGroup = new THREE.Group();
@@ -415,7 +440,7 @@ export function Simulator({ children, facts }: { children: React.ReactNode; fact
       brick.mesh.visible = true;
       if (!world.bodies.includes(brick.body)) world.addBody(brick.body);
       brick.body.type = CANNON.Body.DYNAMIC;
-      brick.body.mass = brickMass;
+      brick.body.mass = sorting ? 0.002 : brickMass;
       brick.body.updateMassProperties();
       brick.body.collisionFilterMask = -1;
       setBodyPose(brick.body, brick.plan.supply.position, brick.plan.supply.quaternion);
@@ -455,7 +480,8 @@ export function Simulator({ children, facts }: { children: React.ReactNode; fact
       bricks.forEach((brick) => world.removeBody(brick.body));
       brickGroup.clear();
       bricks = next.bricks.map((planned) => {
-        const geometry = cached(brickGeometries, `${planned.studs.u}x${planned.studs.v}`, () => brickGeometry(planned.size, planned.studs));
+        const geometry = cached(brickGeometries, `${planned.studs.u}x${planned.studs.v}:${planned.size.toArray().join(",")}`,
+          () => sorting ? new THREE.BoxGeometry(planned.size.x, planned.size.y, planned.size.z) : brickGeometry(planned.size, planned.studs));
         const color = brickColors[planned.entry.color];
         const mesh = new THREE.Mesh(geometry, cached(brickMaterials, color, () => brickMaterial(color)));
         mesh.castShadow = true;
@@ -465,7 +491,7 @@ export function Simulator({ children, facts }: { children: React.ReactNode; fact
         ghost.quaternion.copy(planned.target.quaternion);
         brickGroup.add(mesh, ghost);
         const half = planned.size.clone().multiplyScalar(0.5);
-        const body = new CANNON.Body({ mass: brickMass, shape: new CANNON.Box(new CANNON.Vec3(half.x, half.y, half.z)) });
+        const body = new CANNON.Body({ mass: sorting ? 0.002 : brickMass, shape: new CANNON.Box(new CANNON.Vec3(half.x, half.y, half.z)) });
         body.linearDamping = 0.08;
         body.angularDamping = 0.12;
         // The world is in millimetres, so the default 0.1 unit/s sleep threshold never trips and
@@ -519,12 +545,16 @@ export function Simulator({ children, facts }: { children: React.ReactNode; fact
       toVec3(brick.body.position, bodyPosition);
       toQuaternion(brick.body.quaternion, bodyQuaternion);
       if (bodyPosition.distanceTo(brick.plan.target.position) < snapDistance && bodyQuaternion.angleTo(brick.plan.target.quaternion) < snapAngle) {
-        snapToStuds(brick);
-        return;
+        if (!sorting) {
+          snapToStuds(brick);
+          return;
+        }
+        brick.placed = true;
+        brick.ghost.visible = false;
       }
       brick.body.collisionFilterMask = -1;
       brick.body.type = CANNON.Body.DYNAMIC;
-      brick.body.mass = brickMass;
+      brick.body.mass = sorting ? 0.002 : brickMass;
       brick.body.updateMassProperties();
       brick.body.velocity.set(gripVelocity.x, gripVelocity.y, gripVelocity.z);
       brick.body.wakeUp();
@@ -636,6 +666,7 @@ export function Simulator({ children, facts }: { children: React.ReactNode; fact
       if (loadedCount < meshCount) return;
       sorting = false;
       sortZones.visible = false;
+      sortFixtures.forEach((body) => world.removeBody(body));
       setWorkspace("build");
       savedPreset = id;
       dropHeld();
@@ -644,7 +675,7 @@ export function Simulator({ children, facts }: { children: React.ReactNode; fact
       setPresetId(plan.preset.id);
       resetBuild();
     };
-    const jumbleSort = () => {
+    const jumbleSort = (autostart = true) => {
       if (loadedCount < meshCount) return;
       sequencer?.stop();
       dropHeld();
@@ -654,12 +685,13 @@ export function Simulator({ children, facts }: { children: React.ReactNode; fact
       Object.assign(driver.targets, driver.pose);
       sorting = true;
       sortZones.visible = true;
+      sortFixtures.forEach((body) => { if (!world.bodies.includes(body)) world.addBody(body); });
       setWorkspace("sort");
       setRound((value) => value + 1);
       plan = planSort(arm);
       createBricks(plan);
       sequencer = new BuildSequencer(plan);
-      startBuild();
+      if (autostart) startBuild();
       publish();
     };
     const takeManual = () => {
@@ -688,8 +720,7 @@ export function Simulator({ children, facts }: { children: React.ReactNode; fact
     };
     const onReady = () => {
       updateReach();
-      selectPreset(defaultPreset);
-      if (!prefersReducedMotion()) startBuild();
+      jumbleSort(!prefersReducedMotion());
       publish();
     };
 
@@ -990,7 +1021,7 @@ export function Simulator({ children, facts }: { children: React.ReactNode; fact
             <span className="dock-message">{sorting && ready ? (view.status === "complete" ? "All colors organized" : view.status === "failed" ? view.failure : view.stage ?? "Ready to sort") : status}</span>
           </div>
           <div className="dock-tabs" role="tablist" aria-label="Control panel">
-            {(["build", "joints", "sort"] as const).map((name) => (
+            {(["sort", "joints", "build"] as const).map((name) => (
               <button
                 key={name}
                 className="dock-tab"
@@ -1006,7 +1037,7 @@ export function Simulator({ children, facts }: { children: React.ReactNode; fact
                   if (name === "build") actionsRef.current.enterBuild();
                 }}
               >
-                {name === "build" ? "Build" : name === "sort" ? "Sort" : "Joints"}
+                {name === "build" ? "Build" : name === "sort" ? "Factory" : "Joints"}
               </button>
             ))}
           </div>
@@ -1029,6 +1060,7 @@ export function Simulator({ children, facts }: { children: React.ReactNode; fact
               ))}
             </div>
             <div className="build-progress">
+              <p className="build-detail">Experimental virtual builds · LEGO handling is not validated on the physical gripper.</p>
               <p className="build-detail">{preset.blurb}{total > supplyBatchSize ? ` · Tray refills every ${supplyBatchSize} bricks` : ""}</p>
               <p className="build-headline">{headline}</p>
               <p className="build-detail">{detail}</p>
@@ -1054,9 +1086,9 @@ export function Simulator({ children, facts }: { children: React.ReactNode; fact
           </div>
           <div className="dock-panel" id="dock-panel-sort" role="tabpanel" aria-labelledby="dock-tab-sort" hidden={tab !== "sort"}>
             <div className="build-progress">
-              <p className="build-detail">COLOR SORTING · ROUND {round}</p>
-              <p className="sort-headline">{view.status === "complete" ? "Every color in its place" : view.status === "failed" ? "Sorting halted" : view.paused ? "Sorting paused" : `Sorting object ${view.current || 1} of ${sortCount}`}</p>
-              <p className="build-detail">Objects surround the arm. Watch it gather each color into its matching zone.</p>
+              <p className="build-detail">SORTING FACTORY · BATCH {round}</p>
+              <p className="sort-headline">{view.status === "complete" ? "Batch complete" : view.status === "failed" ? "Sorting halted" : view.paused ? "Sorting paused" : view.status === "idle" || view.status === "stopped" ? "Ready to sort" : `Sorting block ${view.current || 1} of ${sortCount}`}</p>
+              <p className="build-detail">Six lightweight blocks. Fixed pickup slots. Three matching bins.</p>
               <div className="sort-colors">
                 {sortColors.map((color, index) => (
                   <div className="sort-color" key={color} data-color={color} data-sorted={sortedCounts[index]}>
@@ -1065,13 +1097,13 @@ export function Simulator({ children, facts }: { children: React.ReactNode; fact
                   </div>
                 ))}
               </div>
-              <div className="build-bar" role="progressbar" aria-label="Objects sorted" aria-valuemin={0} aria-valuemax={sortCount} aria-valuenow={view.placed} style={{ "--progress": `${view.placed / sortCount * 100}%` } as React.CSSProperties} />
-              <p className="build-detail" aria-live="polite">{view.failure ?? (view.status === "complete" ? "Re-jumble to give the robot a fresh challenge." : view.stage)}</p>
+              <div className="build-bar" role="progressbar" aria-label="Blocks sorted" aria-valuemin={0} aria-valuemax={sortCount} aria-valuenow={view.placed} style={{ "--progress": `${view.placed / sortCount * 100}%` } as React.CSSProperties} />
+              <p className="build-detail" aria-live="polite">{view.failure ?? (view.status === "complete" ? "All six blocks delivered. Shuffle for another batch." : view.stage)}</p>
             </div>
             <div className="dock-actions sort-actions">
-              <button className="button button-primary" type="button" disabled={!ready} onClick={() => actionsRef.current.jumbleSort()}>Re-jumble &amp; sort</button>
+              <button className="button button-primary" type="button" disabled={!ready} onClick={() => actionsRef.current.jumbleSort()}>Shuffle &amp; sort</button>
               <button className="button" type="button" disabled={!running} onClick={() => actionsRef.current.togglePause()}>{view.paused ? "Resume" : "Pause"}</button>
-              {view.status === "stopped" && <button className="button" type="button" onClick={() => actionsRef.current.start()}>Start sorting</button>}
+              {(view.status === "stopped" || view.status === "idle") && <button className="button" type="button" onClick={() => actionsRef.current.start()}>Start sorting</button>}
             </div>
           </div>
           <div className="dock-panel" id="dock-panel-joints" role="tabpanel" aria-labelledby="dock-tab-joints" hidden={tab !== "joints"}>

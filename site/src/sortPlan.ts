@@ -1,17 +1,18 @@
 import * as THREE from "three";
 import { downTilt, homePose, solveStraightDown, type ArmModel, type JointAngles } from "./arm.ts";
-import { brickHeight, type BuildPreset, type PresetBrick } from "./bricks.ts";
+import type { BuildPreset, PresetBrick } from "./bricks.ts";
 import { gripAboveCenter, openTravel, stageVerbs, type BuildPlan, type BuildStage, type BuildStep, type PlannedBrick } from "./buildPlan.ts";
 
-export const sortColors = ["red", "blue", "yellow", "green"] as const;
+export const sortColors = ["red", "blue", "yellow"] as const;
+export const sortBlockSize = 24;
 export const sortCount = sortColors.length * 2;
-export const sortZoneAngle = (color: number) => 45 + color * 90;
+export const sortZoneAngle = (color: number) => 60 + color * 120;
 export function radialPoint(angle: number, radius: number, z: number) {
   const radians = THREE.MathUtils.degToRad(angle);
   return new THREE.Vector3(-Math.sin(radians) * radius, Math.cos(radians) * radius, z);
 }
 
-// Shuffle colors between clear pickup slots; a little angular jitter changes each round.
+// Shuffle colors between six fixed, evenly spaced pickup slots.
 // Keeping the objects upright lets the arm without wrist roll grasp them squarely.
 export function planSort(arm: ArmModel, random = Math.random): BuildPlan {
   const colors = [...sortColors, ...sortColors];
@@ -20,7 +21,7 @@ export function planSort(arm: ArmModel, random = Math.random): BuildPlan {
     [colors[i], colors[j]] = [colors[j], colors[i]];
   }
   const entries: PresetBrick[] = colors.map((color, index) => ({ type: "2x2", color, cell: [index * 4, 0, 0], rotation: 0 }));
-  const preset: BuildPreset = { id: "sort", name: "Color sorting", blurb: "Eight scattered objects · four color zones", bricks: entries };
+  const preset: BuildPreset = { id: "sort", name: "Sorting factory", blurb: "Six foam blocks · three color bins", bricks: entries };
   const bricks: PlannedBrick[] = [];
   const steps: BuildStep[] = [];
   const problems: string[] = [];
@@ -30,12 +31,12 @@ export function planSort(arm: ArmModel, random = Math.random): BuildPlan {
     const colorIndex = sortColors.indexOf(entry.color as typeof sortColors[number]);
     const slot = counts.get(entry.color) ?? 0;
     counts.set(entry.color, slot + 1);
-    const supplyCenter = radialPoint(index * 45 + (random() - 0.5) * 8, 240, brickHeight / 2);
-    const targetCenter = radialPoint(sortZoneAngle(colorIndex) + (slot ? 8 : -8), 300, brickHeight / 2);
+    const supplyCenter = radialPoint(index * 60, 240, sortBlockSize / 2);
+    const targetCenter = radialPoint(sortZoneAngle(colorIndex) + (slot ? 8 : -8), 300, sortBlockSize / 2);
     const pick = supplyCenter.clone().add(new THREE.Vector3(0, 0, gripAboveCenter));
     const place = targetCenter.clone().add(new THREE.Vector3(0, 0, gripAboveCenter));
     let from: THREE.Vector3 | null = null;
-    const label = `${entry.color} object`;
+    const label = `${entry.color} foam block`;
     const add = (stage: BuildStage, point: THREE.Vector3, gripper: number, dwell = 0) => {
       const pose = solveStraightDown(point, gripper, arm.root.position.z, -1) ?? arm.solve(point, gripper, previous);
       if (arm.probe(pose).distanceTo(point) > 0.05 || Math.abs(downTilt(pose)) > 0.05) problems.push(`${label}: ${stage} is out of reach`);
@@ -57,7 +58,7 @@ export function planSort(arm: ArmModel, random = Math.random): BuildPlan {
     add("retract", high(place), openTravel);
     const targetQuaternion = new THREE.Quaternion().setFromAxisAngle(new THREE.Vector3(0, 0, 1), -THREE.MathUtils.degToRad(placePose.base));
     const supplyQuaternion = arm.gripQuaternion(pickPose).multiply(arm.gripQuaternion(placePose).invert()).multiply(targetQuaternion);
-    bricks.push({ index, entry, label, size: new THREE.Vector3(19.8, 19.8, brickHeight), studs: { u: 2, v: 2 },
+    bricks.push({ index, entry, label, size: new THREE.Vector3(sortBlockSize, sortBlockSize, sortBlockSize), studs: { u: 0, v: 0 },
       supply: { position: supplyCenter, quaternion: supplyQuaternion },
       target: { position: targetCenter, quaternion: targetQuaternion },
     });

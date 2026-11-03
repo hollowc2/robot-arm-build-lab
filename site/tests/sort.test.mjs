@@ -1,9 +1,12 @@
 import assert from "node:assert/strict";
 import test from "node:test";
+import fs from "node:fs";
+import { STLLoader } from "three/examples/jsm/loaders/STLLoader.js";
+import { graspTravel } from "../src/grasp.ts";
 import * as THREE from "three";
 import { createArmModel } from "../src/arm.ts";
 import { planSort, sortColors } from "../src/sortPlan.ts";
-import { boxesOverlap, brickBox } from "../src/buildPlan.ts";
+import { boxesOverlap, brickBox, gripperBoxes, openTravel } from "../src/buildPlan.ts";
 
 test("random sorting rounds remain reachable and separate every pickup and color destination", () => {
   const arm = createArmModel(46);
@@ -37,4 +40,39 @@ test("random sorting rounds remain reachable and separate every pickup and color
     }
   }
   assert.ok(layouts.size > 15);
+});
+
+
+test("foam blocks fit the actual CAD fingers at pickup and release, with clear tray access", () => {
+  const loader = new STLLoader();
+  const jaws = [-1, 1].map((side) => {
+    const bytes = fs.readFileSync(new URL(`../public/generated/models/simulator_gripper_${side < 0 ? "left" : "right"}.stl`, import.meta.url));
+    return { side, geometry: loader.parse(bytes.buffer.slice(bytes.byteOffset, bytes.byteOffset + bytes.byteLength)) };
+  });
+  const arm = createArmModel(46);
+  const plan = planSort(arm, () => 0.5);
+  const next = planSort(arm, () => 0.1);
+  assert.equal(plan.bricks.length, 6);
+  for (const block of plan.bricks) {
+    assert.deepEqual(block.studs, { u: 0, v: 0 });
+    assert.deepEqual(block.size.toArray(), [24, 24, 24]);
+    assert.ok(block.supply.position.distanceTo(next.bricks[block.index].supply.position) < 1e-9, "pickup slots stay fixed across shuffles");
+    for (const [stage, object] of [["grip", block.supply], ["place", block.target]]) {
+      const pose = plan.steps.find((step) => step.brick === block.index && step.stage === stage).target;
+      arm.probe(pose);
+      const wrist = arm.wrist.getWorldPosition(new THREE.Vector3());
+      const inverse = arm.wrist.getWorldQuaternion(new THREE.Quaternion()).invert();
+      const contact = graspTravel(jaws, object.position.clone().sub(wrist).applyQuaternion(inverse), object.quaternion.clone().premultiply(inverse), { halfExtents: block.size.clone().multiplyScalar(0.5) }, openTravel);
+      assert.ok(contact !== null && contact > 0 && contact < openTravel - 2, `${stage} contact for ${block.label}: ${contact}`);
+      // The low 4 mm tray rim remains below the fingers on final placement.
+      const envelopes = gripperBoxes(arm.probe(pose), arm.gripQuaternion(pose));
+      assert.ok(envelopes.every((box) => box.center.z - box.half.z > 4));
+      for (const other of plan.bricks.filter((other) => other.index !== block.index)) {
+        for (const otherPose of [other.supply, other.target]) {
+          assert.ok(envelopes.every((box) => !boxesOverlap(box, brickBox(other, otherPose))), `${stage} clears ${other.label}`);
+        }
+      }
+    }
+  }
+  jaws.forEach(({ geometry }) => geometry.dispose());
 });

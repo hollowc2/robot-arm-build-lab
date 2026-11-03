@@ -8,6 +8,8 @@ test("landing page runs the brick builder and part viewer", async ({ page }) => 
 
   const hero = page.locator("#simulator");
   await expect(hero).toHaveAttribute("data-meshes", "48", { timeout: 30_000 });
+  await hero.getByRole("tab", { name: "Build", exact: true }).click();
+  await hero.getByRole("button", { name: "Start", exact: true }).click();
   await expect(hero).toHaveAttribute("data-mode", "autopilot");
   await expect(hero).toHaveAttribute("data-build", "running");
   await expect(hero.locator(".build-headline")).toHaveText("Placing brick 1 of 50");
@@ -89,6 +91,7 @@ test("mobile controls keep the build moving with the canvas off screen", async (
   await page.goto("/");
   const hero = page.locator("#simulator");
   await expect(hero).toHaveAttribute("data-meshes", "48", { timeout: 30_000 });
+  await hero.getByRole("tab", { name: "Build", exact: true }).click();
   await hero.getByRole("radio", { name: /Terraced monument/ }).click();
   await page.getByLabel("Simulation speed").fill("4");
   await hero.getByRole("button", { name: "Start" }).click();

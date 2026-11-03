@@ -17,6 +17,7 @@ async function openBuilder(page: Page, presetName: string, speed: number) {
   await page.goto("/");
   const hero = page.locator("#simulator");
   await expect(hero).toHaveAttribute("data-meshes", "48", { timeout: 60_000 });
+  await hero.getByRole("tab", { name: "Build", exact: true }).click();
   await hero.getByRole("radio", { name: new RegExp(presetName) }).click();
   await expect(hero).toHaveAttribute("data-build", "idle");
   await page.getByLabel("Simulation speed").fill(String(speed));

@@ -104,7 +104,7 @@ function App() {
           </h1>
           <p className="lede">
             A desktop arm where every printed part is generated from code. This is the real CAD assembly running live.
-            Watch it build little brick models stud by stud, or grab a slider and take over.
+            A miniature sorting factory. Watch six foam blocks travel from pickup slots to matching color bins, or take over the controls.
           </p>
         </Simulator>
 
